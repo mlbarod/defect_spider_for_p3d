@@ -1,0 +1,464 @@
+:root {
+  font-family:
+    Inter, Pretendard, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #182026;
+  background: #f5f7f4;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button {
+  font: inherit;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.topBar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 1440px;
+  margin: 0 auto 22px;
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+  color: #5a6a64;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  color: #11181c;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 22px;
+  line-height: 1.18;
+}
+
+.summaryPills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.summaryPills span,
+.statusChip,
+.countBadge {
+  border: 1px solid #cbd7d0;
+  background: #ffffff;
+  color: #20302a;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(292px, 340px) minmax(0, 1fr);
+  gap: 18px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.sidePanel,
+.detailPanel {
+  border: 1px solid #d9e0dc;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(36, 51, 45, 0.08);
+}
+
+.sidePanel {
+  min-height: 680px;
+  padding: 18px;
+}
+
+.sideHeader,
+.detailHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.countBadge {
+  align-self: start;
+  min-width: 42px;
+  text-align: center;
+}
+
+.mainStepList {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.stepName {
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.stepTrend {
+  color: #426257;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.scoreBar {
+  grid-column: 1 / -1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e1e8e4;
+}
+
+.scoreBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2a7f62, #d0832f);
+}
+
+.mainStepGroup {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid #d7dfda;
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: #182026;
+  padding: 13px;
+}
+
+.mainStepToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mainStepToggle:focus-visible {
+  outline: 2px solid #1f6f5b;
+  outline-offset: 4px;
+}
+
+.mainStepGroup.selected {
+  border-color: #94b6a8;
+  background: #f8fbf9;
+}
+
+.mainStepTitle {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.chevron {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #536961;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.mainScore {
+  color: #4f655d;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.subStepButtons {
+  display: grid;
+  gap: 7px;
+}
+
+.subStepButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: rgba(231, 238, 233, 0.72);
+  color: #26342f;
+  padding: 7px 9px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.subStepButton:hover {
+  border-color: #8ba096;
+  background: #f4f8f5;
+}
+
+.subStepButton.active {
+  border-color: #1f6f5b;
+  background: #e8f6ee;
+  color: #12352b;
+}
+
+.subStepButton span {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.subStepButton strong {
+  color: #1f6f5b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.detailPanel {
+  min-width: 0;
+  padding: 22px;
+}
+
+.detailHeader {
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.metric {
+  min-height: 74px;
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 13px;
+}
+
+.metric span {
+  display: block;
+  color: #687871;
+  font-size: 12px;
+  font-weight: 750;
+  margin-bottom: 9px;
+}
+
+.metric strong {
+  display: block;
+  color: #11181c;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.chartShell {
+  position: relative;
+  min-height: 336px;
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(246, 249, 247, 0.96)),
+    #ffffff;
+  overflow: hidden;
+}
+
+.chartTitle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 0;
+}
+
+.chartTitle div {
+  display: grid;
+  gap: 3px;
+}
+
+.chartTitle strong {
+  color: #11181c;
+  font-size: 15px;
+}
+
+.chartTitle span {
+  color: #63766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.scatterChart {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 284px;
+}
+
+.gridLine {
+  stroke: #dfe7e2;
+  stroke-width: 1;
+}
+
+.axisLine {
+  stroke: #9aa9a1;
+  stroke-width: 1.3;
+}
+
+.axisText {
+  fill: #62726b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.trendLine {
+  stroke: #bf5d2a;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.dataPoint {
+  fill: #1f6f5b;
+  stroke: #ffffff;
+  stroke-width: 1.2;
+  opacity: 0.82;
+  cursor: crosshair;
+}
+
+.tooltipPanel {
+  position: absolute;
+  right: 12px;
+  top: 48px;
+  display: grid;
+  gap: 4px;
+  min-width: 172px;
+  border: 1px solid #cad7d0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 12px;
+  color: #26322e;
+  box-shadow: 0 12px 32px rgba(23, 34, 30, 0.12);
+}
+
+.tooltipPanel strong {
+  font-size: 14px;
+}
+
+.tooltipPanel span {
+  color: #566962;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 980px) {
+  .app {
+    padding: 18px;
+  }
+
+  .topBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summaryPills {
+    justify-content: flex-start;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidePanel {
+    min-height: auto;
+  }
+
+  .mainStepList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metricsGrid,
+  .chartGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 24px;
+  }
+
+  .mainStepList,
+  .metricsGrid,
+  .chartGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .detailHeader {
+    flex-direction: column;
+  }
+
+  .statusChip {
+    width: 100%;
+    text-align: center;
+  }
+
+  .chartShell,
+  .scatterChart {
+    min-height: 320px;
+  }
+}
