@@ -55,7 +55,20 @@ const EMPTY_LOAD_STATE = {
 
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
-  const payload = await response.json();
+  const contentType = response.headers.get('content-type') ?? '';
+  const body = await response.text();
+  let payload;
+
+  if (!contentType.includes('application/json')) {
+    const preview = body.slice(0, 80).replace(/\s+/g, ' ');
+    throw new Error(`/api 응답이 JSON이 아닙니다. 정적 서버나 Vite preview가 HTML을 반환했습니다: ${preview}`);
+  }
+
+  try {
+    payload = JSON.parse(body);
+  } catch (error) {
+    throw new Error(`/api JSON 파싱 실패: ${error.message}`);
+  }
 
   if (!response.ok || payload.ok === false) {
     throw Object.assign(new Error(payload.error || `${url} 요청 실패`), { payload });
