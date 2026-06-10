@@ -47,7 +47,8 @@ button {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
   color: #11181c;
   letter-spacing: 0;
@@ -61,6 +62,18 @@ h1 {
 h2 {
   font-size: 22px;
   line-height: 1.18;
+}
+
+h3 {
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+code {
+  color: #24483e;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .summaryPills {
@@ -81,6 +94,51 @@ h2 {
   font-size: 13px;
   font-weight: 750;
   white-space: nowrap;
+}
+
+.sdwtBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 1440px;
+  margin: 0 auto 18px;
+  border: 1px solid #d9e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px 18px;
+  box-shadow: 0 18px 46px rgba(36, 51, 45, 0.08);
+}
+
+.segmentedControl {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.segmentedControl button {
+  min-height: 36px;
+  border: 1px solid #cbd7d0;
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: #20302a;
+  padding: 8px 13px;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.segmentedControl button:hover:not(:disabled),
+.segmentedControl button.active {
+  border-color: #1f6f5b;
+  background: #e8f6ee;
+  color: #12352b;
+}
+
+.segmentedControl button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .workspace {
@@ -121,6 +179,28 @@ h2 {
   display: grid;
   gap: 10px;
   margin-top: 18px;
+}
+
+.emptyPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 14px;
+}
+
+.emptyPanel strong {
+  color: #11181c;
+  font-size: 14px;
+}
+
+.emptyPanel span {
+  color: #5d6f68;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .stepName {
@@ -298,14 +378,123 @@ h2 {
 .metric strong {
   display: block;
   color: #11181c;
-  font-size: 22px;
-  line-height: 1;
+  font-size: clamp(13px, 1.45vw, 22px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .chartGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.chartGrid.single {
+  grid-template-columns: 1fr;
+}
+
+.logicGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.logicBlock {
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 15px;
+}
+
+.logicBlock p:not(.eyebrow) {
+  margin: 10px 0 0;
+  color: #4f625b;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.logicBlock dl {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.logicBlock dl div {
+  display: grid;
+  gap: 4px;
+}
+
+.logicBlock dt {
+  color: #687871;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.logicBlock dd {
+  margin: 0;
+  color: #1d2c27;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.tableShell {
+  width: 100%;
+  margin: 18px 0 0;
+  overflow-x: auto;
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.tableShell.compact {
+  margin-top: 18px;
+}
+
+table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #e3eae6;
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #f2f6f3;
+  color: #4d6159;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+td {
+  color: #26342f;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+td strong,
+td span {
+  display: block;
+}
+
+td span {
+  margin-top: 5px;
+  color: #65766f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+tr:last-child td {
+  border-bottom: 0;
 }
 
 .chartShell {
@@ -317,6 +506,38 @@ h2 {
     linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(246, 249, 247, 0.96)),
     #ffffff;
   overflow: hidden;
+}
+
+.emptyChart {
+  min-height: 250px;
+}
+
+.emptyChartBody {
+  display: grid;
+  gap: 14px;
+  padding: 30px 18px 18px;
+}
+
+.emptyChartBody p {
+  max-width: 780px;
+  margin: 0;
+  color: #4f625b;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.pathList {
+  display: grid;
+  gap: 8px;
+}
+
+.pathList code {
+  display: block;
+  border: 1px solid #d8e1dc;
+  border-radius: 7px;
+  background: #f7faf8;
+  padding: 10px;
 }
 
 .chartTitle {
@@ -415,7 +636,16 @@ h2 {
     flex-direction: column;
   }
 
+  .sdwtBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .summaryPills {
+    justify-content: flex-start;
+  }
+
+  .segmentedControl {
     justify-content: flex-start;
   }
 
@@ -432,7 +662,8 @@ h2 {
   }
 
   .metricsGrid,
-  .chartGrid {
+  .chartGrid,
+  .logicGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -444,7 +675,8 @@ h2 {
 
   .mainStepList,
   .metricsGrid,
-  .chartGrid {
+  .chartGrid,
+  .logicGrid {
     grid-template-columns: 1fr;
   }
 

@@ -1,261 +1,135 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-const MAIN_STEPS = [
+const CONFIG = {
+  lineName: 'P3D (D1c)_EQP MAIN',
+  selectLine: 'PFB3',
+  device: 'D1c',
+  eadsRoot: '/appdata/hadoop/code/eads',
+  pmCodePath: '/appdata/abnormal_trend/pic/pm_code_info.parquet',
+};
+
+const isMainLine = CONFIG.lineName === CONFIG.lineName;
+const folderPath = `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}`;
+
+const DATA_SOURCES = [
   {
-    name: 'ETCH',
-    subSteps: ['ETCH-012-A', 'ETCH-012-B', 'ETCH-012-C', 'ETCH-012-D'],
+    key: 'spec',
+    label: 'Measure SPEC',
+    path: `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}_measure_spec.parquet`,
+    requiredColumns: ['step_seq', 'spec_high'],
   },
   {
-    name: 'PHOTO',
-    subSteps: ['PHOTO-027-A', 'PHOTO-027-B', 'PHOTO-027-C', 'PHOTO-027-D'],
+    key: 'fail',
+    label: '중심치 이상 목록',
+    path: `${folderPath}/${isMainLine ? 'main_fail_list.parquet' : 'fail_list.parquet'}`,
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
   },
   {
-    name: 'CVD',
-    subSteps: ['CVD-018-A', 'CVD-018-B', 'CVD-018-C', 'CVD-018-D'],
+    key: 'std',
+    label: '산포 이상 목록',
+    path: `${folderPath}/${isMainLine ? 'main_fail_list_std.parquet' : 'fail_list_std.parquet'}`,
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
   },
   {
-    name: 'CMP',
-    subSteps: ['CMP-004-A', 'CMP-004-B', 'CMP-004-C', 'CMP-004-D'],
+    key: 'met',
+    label: 'MET 매핑',
+    path: `${CONFIG.eadsRoot}/${CONFIG.selectLine}/met.txt`,
+    requiredColumns: ['device', 'main_step', 'met_step', 'step_desc', 'sdwt'],
+  },
+  {
+    key: 'pm',
+    label: 'PM 이력',
+    path: CONFIG.pmCodePath,
+    requiredColumns: ['asset', 'inprg_dt', 'work_type'],
   },
 ];
 
-const EQUIPMENT_UNITS = ['EQ-01', 'EQ-02', 'EQ-03', 'EQ-04', 'EQ-05', 'EQ-06'];
+// Browser-only React cannot read the parquet/txt files under /appdata directly.
+// Keep this empty until a file/API loader supplies rows parsed from temp.py's sources.
+const STEP_ROWS = [];
 
-const TREND_LABELS = {
-  stable: '정상',
-  upward: '상승 추세',
-  downward: '하락 추세',
-  volatile: '변동성 급증',
-  shift: '레벨 시프트',
-};
+function getSdwtTokens(value) {
+  if (!value || typeof value !== 'string') return [];
 
-function seededRandom(seed) {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
+  return value
+    .replaceAll('\u00a0', ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function buildSdwtOptions(rows) {
+  const seen = new Set();
+  const options = ['ALL'];
+
+  rows.forEach((row) => {
+    getSdwtTokens(row.sdwt).forEach((token) => {
+      if (!seen.has(token)) {
+        seen.add(token);
+        options.push(token);
+      }
+    });
+  });
+
+  return options;
+}
+
+function getMetStepDisplay(metStep) {
+  const match = String(metStep).match(/^(\d{6})_(.+)$/);
+  if (!match) return { metStepNo: metStep, metItem: '' };
+
+  return { metStepNo: match[1], metItem: match[2] };
+}
+
+function getChartMetStep(row) {
+  const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+  const metStep = metItem ? `${metStepNo}_${metItem}` : metStepNo;
+
+  return isMainLine ? `${metStep}_main` : metStep;
+}
+
+function getChartPaths(row, eqpId = '{eqp_id}') {
+  const chartMetStep = getChartMetStep(row);
+  const base = `${folderPath}/${row.mainStep}/${chartMetStep}/{latestDate}`;
+
+  return {
+    eqpId,
+    all: `${base}/${isMainLine ? 'main_all' : 'all'}_${row.mainStep}.parquet`,
+    fail: `${base}/${isMainLine ? 'main_fail' : 'fail'}_${row.mainStep}.parquet`,
+    pm: CONFIG.pmCodePath,
   };
 }
 
-function generateEquipmentSeries(mainStep, subStep, equipment, mainIndex, subIndex, equipmentIndex) {
-  const index = mainIndex * 24 + subIndex * 6 + equipmentIndex;
-  const random = seededRandom(7801 + index * 97);
-  const start = new Date('2026-05-01T00:00:00+09:00').getTime();
-  const points = [];
-  const anomalyPatterns = ['upward', 'volatile', 'shift', 'downward'];
-  const hasAnomaly = (mainIndex + subIndex + equipmentIndex) % 3 !== 1;
-  const pattern = hasAnomaly ? anomalyPatterns[(mainIndex + subIndex + equipmentIndex) % anomalyPatterns.length] : 'stable';
-  const base = 500 + mainIndex * 72 + subIndex * 24 + equipmentIndex * 8;
+function filterRowsBySdwt(rows, selectedSdwt) {
+  if (selectedSdwt === 'ALL') return rows;
 
-  for (let i = 0; i < 180; i += 1) {
-    const noise = Math.round((random() - 0.5) * 42);
-    let value = base + noise;
-
-    if (pattern === 'upward') value += Math.round(i * 0.95);
-    if (pattern === 'downward') value -= Math.round(i * 0.82);
-    if (pattern === 'volatile') value += Math.round((random() - 0.5) * (i > 90 ? 170 : 58));
-    if (pattern === 'shift') value += i > 92 ? 135 + Math.round((random() - 0.5) * 34) : 0;
-
-    points.push({
-      id: `${subStep}-${equipment}-${i}`,
-      mainStep,
-      subStep,
-      equipment,
-      value,
-      timestamp: new Date(start + i * 1000 * 60 * 72 + index * 1000 * 60 * 9).toISOString(),
-      lotId: `LOT-${String(index + 1).padStart(2, '0')}-${String(i + 1).padStart(3, '0')}`,
-    });
-  }
-
-  return points;
+  return rows.filter((row) => getSdwtTokens(row.sdwt).includes(selectedSdwt));
 }
 
-function createDataFrameLikeRows() {
-  return MAIN_STEPS.flatMap((mainStep, mainIndex) =>
-    mainStep.subSteps.flatMap((subStep, subIndex) =>
-      EQUIPMENT_UNITS.flatMap((equipment, equipmentIndex) =>
-        generateEquipmentSeries(mainStep.name, subStep, equipment, mainIndex, subIndex, equipmentIndex),
-      ),
-    ),
-  );
-}
+function groupRowsByMainStep(rows) {
+  const grouped = new Map();
 
-function linearRegression(points) {
-  const n = points.length;
-  const meanX = (n - 1) / 2;
-  const meanY = points.reduce((sum, point) => sum + point.value, 0) / n;
-  let numerator = 0;
-  let denominator = 0;
+  rows.forEach((row) => {
+    const current = grouped.get(row.mainStep) ?? {
+      mainStep: row.mainStep,
+      stepDesc: row.stepDesc,
+      sdwt: row.sdwt,
+      metSteps: [],
+      centerCount: 0,
+      stdCount: 0,
+      eqpCount: 0,
+    };
 
-  points.forEach((point, index) => {
-    numerator += (index - meanX) * (point.value - meanY);
-    denominator += (index - meanX) ** 2;
+    current.metSteps.push(row);
+    current.centerCount += row.centerCount ?? 0;
+    current.stdCount += row.stdCount ?? 0;
+    current.eqpCount += row.eqpIds?.length ?? 0;
+    grouped.set(row.mainStep, current);
   });
 
-  const slope = denominator === 0 ? 0 : numerator / denominator;
-  const residuals = points.map((point, index) => point.value - (meanY + slope * (index - meanX)));
-  const residualStd = Math.sqrt(residuals.reduce((sum, item) => sum + item ** 2, 0) / n);
-
-  return { slope, residualStd, meanY };
-}
-
-function detectAnomalousSteps(rows) {
-  const grouped = Map.groupBy(rows, (row) => `${row.mainStep}::${row.subStep}::${row.equipment}`);
-
-  return Array.from(grouped.entries())
-    .map(([, points]) => {
-      const ordered = points.toSorted((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      const { mainStep, subStep, equipment } = ordered[0];
-      const { slope, residualStd, meanY } = linearRegression(ordered);
-      const firstHalf = ordered.slice(0, Math.floor(ordered.length / 2));
-      const secondHalf = ordered.slice(Math.floor(ordered.length / 2));
-      const firstMean = firstHalf.reduce((sum, point) => sum + point.value, 0) / firstHalf.length;
-      const secondMean = secondHalf.reduce((sum, point) => sum + point.value, 0) / secondHalf.length;
-      const shift = secondMean - firstMean;
-      const volatilityRatio = residualStd / Math.max(1, Math.abs(meanY));
-      const trendScore = Math.abs(slope) * 100;
-      const shiftScore = Math.abs(shift) * 0.72;
-      const volatilityScore = volatilityRatio * 950;
-      const score = Math.min(100, Math.round(Math.max(trendScore, shiftScore, volatilityScore)));
-
-      let trendType = 'stable';
-      if (Math.abs(shift) > 75) trendType = 'shift';
-      if (Math.abs(slope) > 0.48) trendType = slope > 0 ? 'upward' : 'downward';
-      if (volatilityRatio > 0.08) trendType = 'volatile';
-
-      return {
-        mainStep,
-        subStep,
-        equipment,
-        points: ordered,
-        pointCount: ordered.length,
-        score,
-        slope,
-        shift,
-        volatilityRatio,
-        trendType,
-        isAnomaly: score >= 48,
-      };
-    })
-    .sort((a, b) => b.score - a.score);
-}
-
-function groupByStepHierarchy(analyses) {
-  return MAIN_STEPS.map((mainStep) => {
-    const subGroups = mainStep.subSteps
-      .map((subStep) => {
-        const equipmentAnalyses = analyses
-          .filter((analysis) => analysis.mainStep === mainStep.name && analysis.subStep === subStep && analysis.isAnomaly)
-          .sort((a, b) => EQUIPMENT_UNITS.indexOf(a.equipment) - EQUIPMENT_UNITS.indexOf(b.equipment));
-        const maxScore = equipmentAnalyses.reduce((max, analysis) => Math.max(max, analysis.score), 0);
-
-        return {
-          mainStep: mainStep.name,
-          subStep,
-          equipmentAnalyses,
-          maxScore,
-        };
-      })
-      .filter((group) => group.equipmentAnalyses.length > 0);
-    const maxScore = subGroups.reduce((max, group) => Math.max(max, group.maxScore), 0);
-    const anomalyEquipmentCount = subGroups.reduce((sum, group) => sum + group.equipmentAnalyses.length, 0);
-
-    return {
-      mainStep: mainStep.name,
-      subGroups,
-      anomalyEquipmentCount,
-      maxScore,
-    };
-  }).filter((group) => group.subGroups.length > 0);
-}
-
-function formatDate(value) {
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
-function ScatterChart({ stepAnalysis }) {
-  const [hovered, setHovered] = useState(null);
-  const width = 560;
-  const height = 300;
-  const padding = { top: 22, right: 24, bottom: 42, left: 54 };
-  const points = stepAnalysis.points;
-  const minValue = Math.min(...points.map((point) => point.value));
-  const maxValue = Math.max(...points.map((point) => point.value));
-  const yPadding = Math.max(20, (maxValue - minValue) * 0.12);
-  const yMin = minValue - yPadding;
-  const yMax = maxValue + yPadding;
-  const innerWidth = width - padding.left - padding.right;
-  const innerHeight = height - padding.top - padding.bottom;
-  const xScale = (index) => padding.left + (index / (points.length - 1)) * innerWidth;
-  const yScale = (value) => padding.top + (1 - (value - yMin) / (yMax - yMin)) * innerHeight;
-  const trendStartY = yScale(stepAnalysis.points[0].value);
-  const trendEndY = yScale(stepAnalysis.points[0].value + stepAnalysis.slope * (points.length - 1));
-  const yTicks = Array.from({ length: 5 }, (_, index) => yMin + ((yMax - yMin) / 4) * index);
-  const xTicks = [0, Math.floor(points.length / 3), Math.floor((points.length * 2) / 3), points.length - 1];
-
-  return (
-    <div className="chartShell">
-      <div className="chartTitle">
-        <div>
-          <strong>{stepAnalysis.equipment}</strong>
-          <span>
-            {stepAnalysis.subStep} · {TREND_LABELS[stepAnalysis.trendType]}
-          </span>
-        </div>
-        <span>score {stepAnalysis.score}</span>
-      </div>
-      <svg className="scatterChart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${stepAnalysis.subStep} 스캐터 차트`}>
-        <rect x="0" y="0" width={width} height={height} rx="0" fill="transparent" />
-        {yTicks.map((tick) => (
-          <g key={tick}>
-            <line x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} className="gridLine" />
-            <text x={padding.left - 12} y={yScale(tick) + 4} className="axisText" textAnchor="end">
-              {Math.round(tick)}
-            </text>
-          </g>
-        ))}
-        {xTicks.map((tick) => (
-          <text key={tick} x={xScale(tick)} y={height - 14} className="axisText" textAnchor="middle">
-            {formatDate(points[tick].timestamp)}
-          </text>
-        ))}
-        <line x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} className="axisLine" />
-        <line x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} className="axisLine" />
-        <line
-          x1={xScale(0)}
-          y1={trendStartY}
-          x2={xScale(points.length - 1)}
-          y2={trendEndY}
-          className="trendLine"
-        />
-        {points.map((point, index) => (
-          <circle
-            key={point.id}
-            cx={xScale(index)}
-            cy={yScale(point.value)}
-            r={hovered?.id === point.id ? 5.5 : 3.4}
-            className="dataPoint"
-            onMouseEnter={() => setHovered(point)}
-            onMouseLeave={() => setHovered(null)}
-          />
-        ))}
-      </svg>
-      {hovered && (
-        <div className="tooltipPanel">
-          <strong>{hovered.lotId}</strong>
-          <span>{formatDate(hovered.timestamp)}</span>
-          <span>{hovered.value.toLocaleString()} counts</span>
-        </div>
-      )}
-    </div>
-  );
+  return Array.from(grouped.values()).sort((a, b) => a.mainStep.localeCompare(b.mainStep));
 }
 
 function Metric({ label, value }) {
@@ -267,96 +141,222 @@ function Metric({ label, value }) {
   );
 }
 
-function StepTree({ groups, selectedSubStepKey, onSelect }) {
-  const selectedMainStep = selectedSubStepKey.split('::')[0];
-  const [openSteps, setOpenSteps] = useState(() => new Set([selectedMainStep]));
+function SdwtSelector({ options, selectedSdwt, onSelect, disabled }) {
+  return (
+    <section className="sdwtBar" aria-label="SDWT 선택">
+      <div>
+        <p className="eyebrow">SDWT Selection</p>
+        <h2>SDWT 선택</h2>
+      </div>
+      <div className="segmentedControl">
+        {options.map((option) => (
+          <button
+            key={option}
+            className={selectedSdwt === option ? 'active' : ''}
+            disabled={disabled && option !== 'ALL'}
+            onClick={() => onSelect(option)}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep }) {
+  const [openSteps, setOpenSteps] = useState(() => new Set());
+
+  useEffect(() => {
+    if (groups[0]?.mainStep) setOpenSteps(new Set([groups[0].mainStep]));
+    else setOpenSteps(new Set());
+  }, [groups]);
 
   const toggleMainStep = (mainStep) => {
     setOpenSteps((current) => {
       const next = new Set(current);
 
-      if (next.has(mainStep)) {
-        next.delete(mainStep);
-      } else {
-        next.add(mainStep);
-      }
+      if (next.has(mainStep)) next.delete(mainStep);
+      else next.add(mainStep);
 
       return next;
     });
   };
 
   return (
-    <aside className="sidePanel" aria-label="이상 감지 스텝 선택">
+    <aside className="sidePanel" aria-label="메인 스텝 선택">
       <div className="sideHeader">
         <div>
-          <p className="eyebrow">Detected Step Tree</p>
-          <h2>이상 트렌드</h2>
+          <p className="eyebrow">Main Step</p>
+          <h2>대상스탭</h2>
         </div>
         <span className="countBadge">{groups.length}</span>
       </div>
-      <div className="mainStepList">
-        {groups.map((group) => {
-          const isOpen = openSteps.has(group.mainStep);
-          const hasSelectedSubStep = group.subGroups.some((subGroup) => `${subGroup.mainStep}::${subGroup.subStep}` === selectedSubStepKey);
 
-          return (
-            <section key={group.mainStep} className={`mainStepGroup ${hasSelectedSubStep ? 'selected' : ''}`}>
-              <button
-                className="mainStepToggle"
-                onClick={() => toggleMainStep(group.mainStep)}
-                aria-expanded={isOpen}
-                aria-controls={`substeps-${group.mainStep}`}
-              >
-                <span className={`chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">
-                  ▸
-                </span>
-                <span className="mainStepTitle">
-                  <span className="stepName">{group.mainStep}</span>
-                  <span className="stepTrend">{group.anomalyEquipmentCount} equipment</span>
-                </span>
-                <span className="mainScore">score {group.maxScore}</span>
-              </button>
-              <span className="scoreBar" aria-hidden="true">
-                <span style={{ width: `${group.maxScore}%` }} />
-              </span>
-              {isOpen && (
-                <div className="subStepButtons" id={`substeps-${group.mainStep}`}>
-                  {group.subGroups.map((subGroup) => {
-                    const key = `${subGroup.mainStep}::${subGroup.subStep}`;
+      {groups.length === 0 ? (
+        <div className="emptyPanel">
+          <strong>표시할 main_step이 없습니다.</strong>
+          <span>원본 파일 확인 전에는 임의 데이터를 표시하지 않습니다.</span>
+          <code>{DATA_SOURCES[3].path}</code>
+        </div>
+      ) : (
+        <div className="mainStepList">
+          {groups.map((group) => {
+            const isOpen = openSteps.has(group.mainStep);
+            const hasSelectedMetStep = group.metSteps.some((metStep) => metStep.key === selectedMetStepKey);
 
-                    return (
-                      <button
-                        key={subGroup.subStep}
-                        className={`subStepButton ${selectedSubStepKey === key ? 'active' : ''}`}
-                        onClick={() => onSelect(key)}
-                      >
-                        <span>{subGroup.subStep}</span>
-                        <strong>{subGroup.equipmentAnalyses.length}호기</strong>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
+            return (
+              <section key={group.mainStep} className={`mainStepGroup ${hasSelectedMetStep ? 'selected' : ''}`}>
+                <button
+                  className="mainStepToggle"
+                  onClick={() => toggleMainStep(group.mainStep)}
+                  aria-expanded={isOpen}
+                  aria-controls={`metsteps-${group.mainStep}`}
+                >
+                  <span className={`chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">
+                    ▸
+                  </span>
+                  <span className="mainStepTitle">
+                    <span className="stepName">{group.mainStep}</span>
+                    <span className="stepTrend">{group.stepDesc || group.sdwt || 'step_desc 확인 필요'}</span>
+                  </span>
+                  <span className="mainScore">{group.metSteps.length} met</span>
+                </button>
+                <span className="scoreBar" aria-hidden="true">
+                  <span style={{ width: `${Math.min(100, group.centerCount + group.stdCount)}%` }} />
+                </span>
+                {isOpen && (
+                  <div className="subStepButtons" id={`metsteps-${group.mainStep}`}>
+                    {group.metSteps.map((row) => {
+                      const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+
+                      return (
+                        <button
+                          key={row.key}
+                          className={`subStepButton ${selectedMetStepKey === row.key ? 'active' : ''}`}
+                          onClick={() => onSelectMetStep(row)}
+                        >
+                          <span>
+                            {metStepNo}
+                            {metItem ? ` / ${metItem}` : ''}
+                          </span>
+                          <strong>{row.eqpIds?.length ?? 0} eqp</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
     </aside>
   );
 }
 
+function ChartPlaceholder({ row, eqpId }) {
+  const paths = getChartPaths(row, eqpId);
+
+  return (
+    <div className="chartShell emptyChart">
+      <div className="chartTitle">
+        <div>
+          <strong>{eqpId}</strong>
+          <span>
+            {row.mainStep} / {getChartMetStep(row)}
+          </span>
+        </div>
+        <span>source path</span>
+      </div>
+      <div className="emptyChartBody">
+        <p>선택한 met_step의 eqp별 차트가 이 위치에 그려집니다. 현재는 원본 parquet를 확인할 수 없어 경로만 표시합니다.</p>
+        <div className="pathList">
+          <code>{paths.all}</code>
+          <code>{paths.fail}</code>
+          <code>{paths.pm}</code>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyChartState({ selectedRow }) {
+  const paths = selectedRow ? getChartPaths(selectedRow) : null;
+
+  return (
+    <div className="chartShell emptyChart">
+      <div className="chartTitle">
+        <div>
+          <strong>eqp별 Chart</strong>
+          <span>{selectedRow ? `${selectedRow.mainStep} / ${getChartMetStep(selectedRow)}` : 'met_step 선택 필요'}</span>
+        </div>
+        <span>no mock data</span>
+      </div>
+      <div className="emptyChartBody">
+        <p>
+          {selectedRow
+            ? '선택한 met_step에 연결된 eqp_id 목록이 확인되면 eqp별 차트를 그립니다.'
+            : '좌측에서 main_step을 펼친 뒤 met_step을 선택하면 eqp별 차트 영역이 표시됩니다.'}
+        </p>
+        <div className="pathList">
+          {(paths ? [paths.all, paths.fail, paths.pm] : DATA_SOURCES.map((source) => source.path)).map((path) => (
+            <code key={path}>{path}</code>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataSourceTable() {
+  return (
+    <div className="tableShell compact">
+      <table>
+        <thead>
+          <tr>
+            <th>파일</th>
+            <th>원본 경로</th>
+            <th>필수 컬럼</th>
+          </tr>
+        </thead>
+        <tbody>
+          {DATA_SOURCES.map((source) => (
+            <tr key={source.key}>
+              <td>
+                <strong>{source.label}</strong>
+              </td>
+              <td>
+                <code>{source.path}</code>
+              </td>
+              <td>{source.requiredColumns.join(', ')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function App() {
-  const rows = useMemo(() => createDataFrameLikeRows(), []);
-  const analyses = useMemo(() => detectAnomalousSteps(rows), [rows]);
-  const anomalousSteps = analyses.filter((analysis) => analysis.isAnomaly);
-  const stepGroups = useMemo(() => groupByStepHierarchy(analyses), [analyses]);
-  const firstSubStepKey = `${stepGroups[0]?.mainStep}::${stepGroups[0]?.subGroups[0]?.subStep}`;
-  const [selectedSubStepKey, setSelectedSubStepKey] = useState(firstSubStepKey);
-  const selectedSubGroup =
-    stepGroups.flatMap((group) => group.subGroups).find((group) => `${group.mainStep}::${group.subStep}` === selectedSubStepKey) ??
-    stepGroups[0].subGroups[0];
-  const selectedEquipmentAnalyses = selectedSubGroup.equipmentAnalyses.slice(0, 4);
-  const maxScore = selectedEquipmentAnalyses.reduce((max, analysis) => Math.max(max, analysis.score), 0);
+  const rows = STEP_ROWS;
+  const sdwtOptions = useMemo(() => buildSdwtOptions(rows), [rows]);
+  const [selectedSdwt, setSelectedSdwt] = useState('ALL');
+  const filteredRows = useMemo(() => filterRowsBySdwt(rows, selectedSdwt), [rows, selectedSdwt]);
+  const mainStepGroups = useMemo(() => groupRowsByMainStep(filteredRows), [filteredRows]);
+  const [selectedMetStep, setSelectedMetStep] = useState(null);
+
+  useEffect(() => {
+    const firstMetStep = mainStepGroups[0]?.metSteps[0] ?? null;
+    setSelectedMetStep((current) => {
+      if (current && mainStepGroups.some((group) => group.metSteps.some((row) => row.key === current.key))) return current;
+      return firstMetStep;
+    });
+  }, [mainStepGroups]);
+
+  const selectedEqpIds = selectedMetStep?.eqpIds ?? [];
+  const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
+  const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
 
   return (
     <main className="app">
@@ -366,43 +366,43 @@ function App() {
           <h1>스텝별 시계열 이상 트렌드 감지</h1>
         </div>
         <div className="summaryPills">
-          <span>메인 스텝 {MAIN_STEPS.length}</span>
-          <span>하위 스텝 {MAIN_STEPS.reduce((sum, item) => sum + item.subSteps.length, 0)}</span>
-          <span>설비 호기 {analyses.length}</span>
-          <span>이상 호기 {anomalousSteps.length}</span>
-          <span>데이터 {rows.length.toLocaleString()}</span>
+          <span>감지 라인 {CONFIG.lineName}</span>
+          <span>선택 라인 {CONFIG.selectLine}</span>
+          <span>Device {CONFIG.device}</span>
+          <span>SDWT {selectedSdwt}</span>
         </div>
       </header>
 
+      <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0} />
+
       <section className="workspace">
-        <StepTree groups={stepGroups} selectedSubStepKey={selectedSubStepKey} onSelect={setSelectedSubStepKey} />
+        <MainStepTree groups={mainStepGroups} selectedMetStepKey={selectedMetStep?.key} onSelectMetStep={setSelectedMetStep} />
 
         <section className="detailPanel">
           <div className="detailHeader">
             <div>
-              <p className="eyebrow">Equipment Anomaly Charts</p>
-              <h2>
-                {selectedSubGroup.mainStep} / {selectedSubGroup.subStep}
-              </h2>
+              <p className="eyebrow">Equipment Charts</p>
+              <h2>{selectedMetStep ? `${selectedMetStep.mainStep} / ${getChartMetStep(selectedMetStep)}` : CONFIG.lineName}</h2>
             </div>
-            <div className="statusChip">Max anomaly score {maxScore}</div>
+            <div className="statusChip">파일 미확인 시 경로 표시</div>
           </div>
 
           <div className="metricsGrid">
-            <Metric label="이상 설비 호기" value={selectedEquipmentAnalyses.length.toLocaleString()} />
-            <Metric label="샘플 합계" value={selectedEquipmentAnalyses.reduce((sum, item) => sum + item.pointCount, 0).toLocaleString()} />
-            <Metric label="최대 점수" value={maxScore.toLocaleString()} />
-            <Metric
-              label="평균 변동성"
-              value={`${((selectedEquipmentAnalyses.reduce((sum, item) => sum + item.volatilityRatio, 0) / selectedEquipmentAnalyses.length) * 100).toFixed(1)}%`}
-            />
+            <Metric label="메인 스탭" value={mainStepGroups.length.toLocaleString()} />
+            <Metric label="MET 스탭" value={metStepCount.toLocaleString()} />
+            <Metric label="감지 Chamber" value={eqpCount.toLocaleString()} />
+            <Metric label="데이터 소스" value={DATA_SOURCES[1].path} />
           </div>
 
-          <div className="chartGrid">
-            {selectedEquipmentAnalyses.map((analysis) => (
-              <ScatterChart key={analysis.equipment} stepAnalysis={analysis} />
-            ))}
+          <div className={`chartGrid ${selectedEqpIds.length <= 1 ? 'single' : ''}`}>
+            {selectedMetStep && selectedEqpIds.length > 0 ? (
+              selectedEqpIds.map((eqpId) => <ChartPlaceholder key={eqpId} row={selectedMetStep} eqpId={eqpId} />)
+            ) : (
+              <EmptyChartState selectedRow={selectedMetStep} />
+            )}
           </div>
+
+          <DataSourceTable />
         </section>
       </section>
     </main>
