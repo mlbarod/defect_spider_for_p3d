@@ -110,6 +110,39 @@ code {
   box-shadow: 0 18px 46px rgba(36, 51, 45, 0.08);
 }
 
+.sourceBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 1440px;
+  margin: 0 auto 18px;
+  border: 1px solid #d9e0dc;
+  border-left: 5px solid #2a7f62;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 15px 18px;
+  box-shadow: 0 18px 46px rgba(36, 51, 45, 0.08);
+}
+
+.sourceBanner.error {
+  border-left-color: #bf5d2a;
+}
+
+.sourceBannerText {
+  display: grid;
+  gap: 5px;
+  max-width: 760px;
+  color: #4f625b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.sourceBannerText strong {
+  color: #873f20;
+}
+
 .segmentedControl {
   display: flex;
   flex-wrap: wrap;
@@ -571,6 +604,29 @@ tr:last-child td {
   min-height: 284px;
 }
 
+.chartMeta {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #e3eae6;
+  padding: 10px 12px 12px;
+}
+
+.chartMeta code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.emptyMiniState {
+  display: grid;
+  min-height: 250px;
+  place-items: center;
+  padding: 18px;
+  color: #4f625b;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: center;
+}
+
 .gridLine {
   stroke: #dfe7e2;
   stroke-width: 1;
@@ -599,6 +655,43 @@ tr:last-child td {
   stroke-width: 1.2;
   opacity: 0.82;
   cursor: crosshair;
+}
+
+.allPoint {
+  fill: #2f6759;
+  opacity: 0.16;
+}
+
+.okPoint {
+  fill: #2f6fc0;
+  stroke: #ffffff;
+  stroke-width: 1.2px;
+}
+
+.failPoint {
+  fill: #bf4f32;
+  stroke: #ffffff;
+  stroke-width: 1.2px;
+}
+
+.pmLine {
+  stroke: #23845d;
+  stroke-width: 1.3px;
+  stroke-dasharray: 4 4;
+}
+
+.pmText {
+  fill: #176246;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.readOk {
+  color: #176246;
+}
+
+.readFail {
+  color: #873f20;
 }
 
 .tooltipPanel {
@@ -637,6 +730,11 @@ tr:last-child td {
   }
 
   .sdwtBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sourceBanner {
     align-items: stretch;
     flex-direction: column;
   }

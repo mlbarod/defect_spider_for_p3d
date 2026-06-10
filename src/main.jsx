@@ -46,9 +46,23 @@ const DATA_SOURCES = [
   },
 ];
 
-// Browser-only React cannot read the parquet/txt files under /appdata directly.
-// Keep this empty until a file/API loader supplies rows parsed from temp.py's sources.
-const STEP_ROWS = [];
+const EMPTY_LOAD_STATE = {
+  loading: true,
+  error: '',
+  rows: [],
+  sources: DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
+};
+
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
+  const payload = await response.json();
+
+  if (!response.ok || payload.ok === false) {
+    throw Object.assign(new Error(payload.error || `${url} 요청 실패`), { payload });
+  }
+
+  return payload;
+}
 
 function getSdwtTokens(value) {
   if (!value || typeof value !== 'string') return [];
@@ -92,7 +106,8 @@ function getChartMetStep(row) {
 
 function getChartPaths(row, eqpId = '{eqp_id}') {
   const chartMetStep = getChartMetStep(row);
-  const base = `${folderPath}/${row.mainStep}/${chartMetStep}/{latestDate}`;
+  const latestDate = row.latestDate ?? '{latestDate}';
+  const base = `${folderPath}/${row.mainStep}/${chartMetStep}/${latestDate}`;
 
   return {
     eqpId,
@@ -141,6 +156,27 @@ function Metric({ label, value }) {
   );
 }
 
+function SourceStatusBanner({ loading, error, sources }) {
+  const missingSources = sources.filter((source) => !source.exists || !source.readable);
+
+  return (
+    <section className={`sourceBanner ${error ? 'error' : ''}`}>
+      <div>
+        <p className="eyebrow">File Loader</p>
+        <h2>{loading ? '원본 파일 읽는 중' : error ? '원본 파일 읽기 실패' : '원본 파일 연결됨'}</h2>
+      </div>
+      <div className="sourceBannerText">
+        {error ? <strong>{error}</strong> : <span>웹 UI가 Vite API를 통해 표시된 원본 경로의 파일을 읽습니다.</span>}
+        {missingSources.length > 0 && (
+          <span>
+            미확인 파일 {missingSources.length}개: {missingSources.map((source) => source.label).join(', ')}
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function SdwtSelector({ options, selectedSdwt, onSelect, disabled }) {
   return (
     <section className="sdwtBar" aria-label="SDWT 선택">
@@ -164,7 +200,7 @@ function SdwtSelector({ options, selectedSdwt, onSelect, disabled }) {
   );
 }
 
-function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep }) {
+function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, error }) {
   const [openSteps, setOpenSteps] = useState(() => new Set());
 
   useEffect(() => {
@@ -196,7 +232,11 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep }) {
       {groups.length === 0 ? (
         <div className="emptyPanel">
           <strong>표시할 main_step이 없습니다.</strong>
-          <span>원본 파일 확인 전에는 임의 데이터를 표시하지 않습니다.</span>
+          <span>
+            {loading
+              ? '원본 파일을 읽고 있습니다.'
+              : error || '원본 파일에서 표시할 이상 항목을 찾지 못했습니다.'}
+          </span>
           <code>{DATA_SOURCES[3].path}</code>
         </div>
       ) : (
@@ -255,11 +295,126 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep }) {
   );
 }
 
-function ChartPlaceholder({ row, eqpId }) {
-  const paths = getChartPaths(row, eqpId);
+function toNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toTime(value) {
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatShortDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:00`;
+}
+
+function ScatterChart({ allPoints, failPoints, pmEvents }) {
+  const width = 720;
+  const height = 278;
+  const padding = { left: 54, right: 18, top: 24, bottom: 42 };
+  const points = [...allPoints, ...failPoints]
+    .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+    .filter((point) => point.x !== null && point.y !== null);
+
+  if (points.length === 0) {
+    return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
+  }
+
+  const xValues = points.map((point) => point.x);
+  const yValues = points.map((point) => point.y);
+  const minX = Math.min(...xValues);
+  const maxX = Math.max(...xValues);
+  const minY = Math.min(...yValues);
+  const maxY = Math.max(...yValues);
+  const yPad = Math.max(1, (maxY - minY) * 0.12);
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const xScale = (value) => padding.left + ((value - minX) / Math.max(1, maxX - minX)) * plotWidth;
+  const yScale = (value) => padding.top + plotHeight - ((value - (minY - yPad)) / Math.max(1, maxY - minY + yPad * 2)) * plotHeight;
+  const xTicks = [minX, minX + (maxX - minX) / 2, maxX];
+  const yTicks = [minY, minY + (maxY - minY) / 2, maxY];
 
   return (
-    <div className="chartShell emptyChart">
+    <svg className="scatterChart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="eqp 시계열 차트">
+      {yTicks.map((tick) => (
+        <g key={tick}>
+          <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />
+          <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
+            {tick.toFixed(2)}
+          </text>
+        </g>
+      ))}
+      {xTicks.map((tick) => (
+        <text key={tick} className="axisText" x={xScale(tick)} y={height - 14} textAnchor="middle">
+          {formatShortDate(tick)}
+        </text>
+      ))}
+      <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
+      <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+      {pmEvents
+        .map((event) => ({ ...event, x: toTime(event.inprg_dt) }))
+        .filter((event) => event.x !== null && event.x >= minX && event.x <= maxX)
+        .map((event, index) => (
+          <g key={`${event.inprg_dt}-${index}`}>
+            <line className="pmLine" x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
+            <text className="pmText" x={xScale(event.x) + 4} y={padding.top + 12}>
+              {event.work_type}
+            </text>
+          </g>
+        ))}
+      {allPoints
+        .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+        .filter((point) => point.x !== null && point.y !== null)
+        .map((point, index) => (
+          <circle key={`all-${index}`} className="allPoint" cx={xScale(point.x)} cy={yScale(point.y)} r="2.2" />
+        ))}
+      {failPoints
+        .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+        .filter((point) => point.x !== null && point.y !== null)
+        .map((point, index) => (
+          <circle
+            key={`fail-${index}`}
+            className={point.final_decision === 'OK' ? 'okPoint' : 'failPoint'}
+            cx={xScale(point.x)}
+            cy={yScale(point.y)}
+            r="4.2"
+          >
+            <title>{`${point.lot_wf ?? ''} ${point.tkout_time ?? ''} ${point.eqp_ch ?? ''}`}</title>
+          </circle>
+        ))}
+    </svg>
+  );
+}
+
+function EquipmentChart({ row, eqpId }) {
+  const paths = getChartPaths(row, eqpId);
+  const [chartState, setChartState] = useState({ loading: true, error: '', data: null });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      mainStep: row.mainStep,
+      chartMetStep: getChartMetStep(row),
+      eqpId,
+    });
+
+    setChartState({ loading: true, error: '', data: null });
+    fetchJson(`/api/chart?${params.toString()}`, { signal: controller.signal })
+      .then((payload) => setChartState({ loading: false, error: '', data: payload }))
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setChartState({ loading: false, error: error.message, data: error.payload ?? null });
+      });
+
+    return () => controller.abort();
+  }, [eqpId, row]);
+
+  return (
+    <div className="chartShell">
       <div className="chartTitle">
         <div>
           <strong>{eqpId}</strong>
@@ -267,16 +422,34 @@ function ChartPlaceholder({ row, eqpId }) {
             {row.mainStep} / {getChartMetStep(row)}
           </span>
         </div>
-        <span>source path</span>
+        <span>{chartState.loading ? 'loading' : chartState.error ? 'read failed' : `date ${chartState.data.latestDate}`}</span>
       </div>
-      <div className="emptyChartBody">
-        <p>선택한 met_step의 eqp별 차트가 이 위치에 그려집니다. 현재는 원본 parquet를 확인할 수 없어 경로만 표시합니다.</p>
-        <div className="pathList">
-          <code>{paths.all}</code>
-          <code>{paths.fail}</code>
-          <code>{paths.pm}</code>
+      {chartState.loading ? (
+        <div className="emptyChartBody">
+          <p>차트 parquet 파일을 읽고 있습니다.</p>
         </div>
-      </div>
+      ) : chartState.error ? (
+        <div className="emptyChartBody">
+          <p>{chartState.error}</p>
+          <div className="pathList">
+            <code>{paths.all}</code>
+            <code>{paths.fail}</code>
+            <code>{paths.pm}</code>
+          </div>
+        </div>
+      ) : (
+        <>
+          <ScatterChart
+            allPoints={chartState.data.allPoints ?? []}
+            failPoints={chartState.data.failPoints ?? []}
+            pmEvents={chartState.data.pmEvents ?? []}
+          />
+          <div className="chartMeta">
+            <code>{chartState.data.paths.all}</code>
+            <code>{chartState.data.paths.fail}</code>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -309,7 +482,7 @@ function EmptyChartState({ selectedRow }) {
   );
 }
 
-function DataSourceTable() {
+function DataSourceTable({ sources }) {
   return (
     <div className="tableShell compact">
       <table>
@@ -318,10 +491,13 @@ function DataSourceTable() {
             <th>파일</th>
             <th>원본 경로</th>
             <th>필수 컬럼</th>
+            <th>상태</th>
           </tr>
         </thead>
         <tbody>
-          {DATA_SOURCES.map((source) => (
+          {DATA_SOURCES.map((source) => {
+            const status = sources.find((item) => item.key === source.key);
+            return (
             <tr key={source.key}>
               <td>
                 <strong>{source.label}</strong>
@@ -330,8 +506,14 @@ function DataSourceTable() {
                 <code>{source.path}</code>
               </td>
               <td>{source.requiredColumns.join(', ')}</td>
+              <td>
+                <span className={status?.exists && status?.readable ? 'readOk' : 'readFail'}>
+                  {status?.exists && status?.readable ? '읽기 가능' : status?.exists ? '권한 확인 필요' : '파일 없음'}
+                </span>
+              </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -339,12 +521,33 @@ function DataSourceTable() {
 }
 
 function App() {
-  const rows = STEP_ROWS;
+  const [loadState, setLoadState] = useState(EMPTY_LOAD_STATE);
+  const rows = loadState.rows;
   const sdwtOptions = useMemo(() => buildSdwtOptions(rows), [rows]);
   const [selectedSdwt, setSelectedSdwt] = useState('ALL');
   const filteredRows = useMemo(() => filterRowsBySdwt(rows, selectedSdwt), [rows, selectedSdwt]);
   const mainStepGroups = useMemo(() => groupRowsByMainStep(filteredRows), [filteredRows]);
   const [selectedMetStep, setSelectedMetStep] = useState(null);
+
+  useEffect(() => {
+    fetchJson('/api/summary')
+      .then((payload) => {
+        setLoadState({
+          loading: false,
+          error: '',
+          rows: payload.rows ?? [],
+          sources: payload.sources ?? EMPTY_LOAD_STATE.sources,
+        });
+      })
+      .catch((error) => {
+        setLoadState({
+          loading: false,
+          error: error.message,
+          rows: [],
+          sources: error.payload?.sources ?? EMPTY_LOAD_STATE.sources,
+        });
+      });
+  }, []);
 
   useEffect(() => {
     const firstMetStep = mainStepGroups[0]?.metSteps[0] ?? null;
@@ -373,10 +576,18 @@ function App() {
         </div>
       </header>
 
+      <SourceStatusBanner loading={loadState.loading} error={loadState.error} sources={loadState.sources} />
+
       <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0} />
 
       <section className="workspace">
-        <MainStepTree groups={mainStepGroups} selectedMetStepKey={selectedMetStep?.key} onSelectMetStep={setSelectedMetStep} />
+        <MainStepTree
+          groups={mainStepGroups}
+          selectedMetStepKey={selectedMetStep?.key}
+          onSelectMetStep={setSelectedMetStep}
+          loading={loadState.loading}
+          error={loadState.error}
+        />
 
         <section className="detailPanel">
           <div className="detailHeader">
@@ -384,25 +595,25 @@ function App() {
               <p className="eyebrow">Equipment Charts</p>
               <h2>{selectedMetStep ? `${selectedMetStep.mainStep} / ${getChartMetStep(selectedMetStep)}` : CONFIG.lineName}</h2>
             </div>
-            <div className="statusChip">파일 미확인 시 경로 표시</div>
+            <div className="statusChip">{loadState.error ? '파일 읽기 실패' : loadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
           </div>
 
           <div className="metricsGrid">
             <Metric label="메인 스탭" value={mainStepGroups.length.toLocaleString()} />
             <Metric label="MET 스탭" value={metStepCount.toLocaleString()} />
             <Metric label="감지 Chamber" value={eqpCount.toLocaleString()} />
-            <Metric label="데이터 소스" value={DATA_SOURCES[1].path} />
+            <Metric label="읽기 가능 소스" value={`${loadState.sources.filter((source) => source.exists && source.readable).length}/${DATA_SOURCES.length}`} />
           </div>
 
           <div className={`chartGrid ${selectedEqpIds.length <= 1 ? 'single' : ''}`}>
             {selectedMetStep && selectedEqpIds.length > 0 ? (
-              selectedEqpIds.map((eqpId) => <ChartPlaceholder key={eqpId} row={selectedMetStep} eqpId={eqpId} />)
+              selectedEqpIds.map((eqpId) => <EquipmentChart key={eqpId} row={selectedMetStep} eqpId={eqpId} />)
             ) : (
               <EmptyChartState selectedRow={selectedMetStep} />
             )}
           </div>
 
-          <DataSourceTable />
+          <DataSourceTable sources={loadState.sources} />
         </section>
       </section>
     </main>
