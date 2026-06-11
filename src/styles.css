@@ -25,7 +25,7 @@ button {
 
 .app {
   min-height: 100vh;
-  padding: 28px;
+  padding: 18px;
 }
 
 .topBar {
@@ -33,7 +33,8 @@ button {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  max-width: 1440px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto 22px;
 }
 
@@ -101,7 +102,8 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  max-width: 1440px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto 18px;
   border: 1px solid #d9e0dc;
   border-radius: 8px;
@@ -115,7 +117,8 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  max-width: 1440px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto 18px;
   border: 1px solid #d9e0dc;
   border-left: 5px solid #2a7f62;
@@ -176,9 +179,10 @@ code {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(292px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
   gap: 18px;
-  max-width: 1440px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
 }
 
@@ -191,8 +195,10 @@ code {
 }
 
 .sidePanel {
+  min-width: 0;
   min-height: 680px;
-  padding: 18px;
+  overflow: hidden;
+  padding: 16px;
 }
 
 .sideHeader,
@@ -237,15 +243,17 @@ code {
 }
 
 .stepName {
+  overflow-wrap: anywhere;
   font-size: 16px;
   font-weight: 850;
 }
 
 .stepTrend {
   color: #426257;
+  overflow-wrap: anywhere;
   font-size: 13px;
   font-weight: 800;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .scoreBar {
@@ -267,6 +275,7 @@ code {
   display: grid;
   gap: 10px;
   width: 100%;
+  min-width: 0;
   border: 1px solid #d7dfda;
   border-radius: 8px;
   background: #fbfcfa;
@@ -280,6 +289,7 @@ code {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -321,6 +331,7 @@ code {
 }
 
 .mainScore {
+  flex: 0 0 auto;
   color: #4f655d;
   font-size: 12px;
   font-weight: 800;
@@ -338,6 +349,7 @@ code {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
+  min-width: 0;
   min-height: 34px;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -364,12 +376,14 @@ code {
 }
 
 .subStepButton span {
+  min-width: 0;
   overflow-wrap: anywhere;
   font-size: 13px;
   font-weight: 850;
 }
 
 .subStepButton strong {
+  flex: 0 0 auto;
   color: #1f6f5b;
   font-size: 12px;
   white-space: nowrap;
@@ -418,7 +432,7 @@ code {
 
 .chartGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 14px;
 }
 
@@ -532,7 +546,7 @@ tr:last-child td {
 
 .chartShell {
   position: relative;
-  min-height: 336px;
+  min-height: 458px;
   border: 1px solid #dce4df;
   border-radius: 8px;
   background:
@@ -601,7 +615,45 @@ tr:last-child td {
   display: block;
   width: 100%;
   height: auto;
-  min-height: 284px;
+  min-height: 340px;
+}
+
+.chartCanvas {
+  display: grid;
+  gap: 8px;
+  padding: 8px 12px 0;
+}
+
+.chartControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.chartControls button {
+  min-height: 30px;
+  border: 1px solid #cbd7d0;
+  border-radius: 7px;
+  background: #fbfcfa;
+  color: #20302a;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.chartControls button:hover {
+  border-color: #1f6f5b;
+  background: #e8f6ee;
+}
+
+.chartControls span {
+  min-width: 36px;
+  color: #63766e;
+  font-size: 12px;
+  font-weight: 850;
+  text-align: right;
 }
 
 .chartMeta {
@@ -660,18 +712,21 @@ tr:last-child td {
 .allPoint {
   fill: #2f6759;
   opacity: 0.16;
+  cursor: crosshair;
 }
 
 .okPoint {
   fill: #2f6fc0;
   stroke: #ffffff;
   stroke-width: 1.2px;
+  cursor: crosshair;
 }
 
 .failPoint {
   fill: #bf4f32;
   stroke: #ffffff;
   stroke-width: 1.2px;
+  cursor: crosshair;
 }
 
 .pmLine {
@@ -721,7 +776,7 @@ tr:last-child td {
 
 @media (max-width: 980px) {
   .app {
-    padding: 18px;
+    padding: 14px;
   }
 
   .topBar {
@@ -756,13 +811,16 @@ tr:last-child td {
   }
 
   .mainStepList {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .metricsGrid,
-  .chartGrid,
   .logicGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chartGrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -789,6 +847,6 @@ tr:last-child td {
 
   .chartShell,
   .scatterChart {
-    min-height: 320px;
+    min-height: 340px;
   }
 }

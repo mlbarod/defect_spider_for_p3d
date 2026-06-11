@@ -357,10 +357,37 @@ function formatShortDate(value) {
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:00`;
 }
 
-function ScatterChart({ allPoints, failPoints, pmEvents }) {
+function splitLotWf(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return { lot: '', wf: '' };
+  const separator = text.includes('/') ? '/' : text.includes('|') ? '|' : text.includes(',') ? ',' : text.includes('_') ? '_' : '';
+  if (!separator) return { lot: text, wf: text };
+  const parts = text.split(separator).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return { lot: text, wf: text };
+  return { lot: parts.slice(0, -1).join(separator), wf: parts.at(-1) };
+}
+
+function getPointLabel(point, fallbackEqpId) {
+  const lotWfParts = splitLotWf(point.lot_wf);
+  const lot = point.lot ?? point.lot_id ?? point.lotId ?? lotWfParts.lot;
+  const wf = point.wf ?? point.wf_id ?? point.wafer ?? point.wafer_id ?? lotWfParts.wf;
+  const eqp = point.eqp_id ?? point.eqpid ?? point.eqp_ch ?? fallbackEqpId;
+  const time = point.tkout_time ?? point.time ?? '';
+
+  return [
+    `eqpid: ${eqp || '-'}`,
+    `lot: ${lot || '-'}`,
+    `wf: ${wf || '-'}`,
+    `time: ${time || '-'}`,
+  ].join('\n');
+}
+
+function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
+  const [zoom, setZoom] = useState(1);
   const width = 720;
-  const height = 278;
-  const padding = { left: 54, right: 18, top: 24, bottom: 42 };
+  const height = 340;
+  const padding = { left: 58, right: 20, top: 26, bottom: 48 };
+  const clipId = `plot-${String(eqpId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const points = [...allPoints, ...failPoints]
     .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
     .filter((point) => point.x !== null && point.y !== null);
@@ -378,60 +405,84 @@ function ScatterChart({ allPoints, failPoints, pmEvents }) {
   const yPad = Math.max(1, (maxY - minY) * 0.12);
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
-  const xScale = (value) => padding.left + ((value - minX) / Math.max(1, maxX - minX)) * plotWidth;
-  const yScale = (value) => padding.top + plotHeight - ((value - (minY - yPad)) / Math.max(1, maxY - minY + yPad * 2)) * plotHeight;
-  const xTicks = [minX, minX + (maxX - minX) / 2, maxX];
-  const yTicks = [minY, minY + (maxY - minY) / 2, maxY];
+  const xCenter = minX + (maxX - minX) / 2;
+  const yCenter = minY + (maxY - minY) / 2;
+  const xSpan = Math.max(1, maxX - minX) / zoom;
+  const ySpan = Math.max(1, maxY - minY + yPad * 2) / zoom;
+  const viewMinX = xCenter - xSpan / 2;
+  const viewMaxX = xCenter + xSpan / 2;
+  const viewMinY = yCenter - ySpan / 2;
+  const viewMaxY = yCenter + ySpan / 2;
+  const xScale = (value) => padding.left + ((value - viewMinX) / Math.max(1, viewMaxX - viewMinX)) * plotWidth;
+  const yScale = (value) => padding.top + plotHeight - ((value - viewMinY) / Math.max(1, viewMaxY - viewMinY)) * plotHeight;
+  const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
+  const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
+  const yTicks = [viewMinY, viewMinY + (viewMaxY - viewMinY) / 2, viewMaxY];
 
   return (
-    <svg className="scatterChart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="eqp 시계열 차트">
-      {yTicks.map((tick) => (
-        <g key={tick}>
-          <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />
-          <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
-            {tick.toFixed(2)}
-          </text>
-        </g>
-      ))}
-      {xTicks.map((tick) => (
-        <text key={tick} className="axisText" x={xScale(tick)} y={height - 14} textAnchor="middle">
-          {formatShortDate(tick)}
-        </text>
-      ))}
-      <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
-      <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
-      {pmEvents
-        .map((event) => ({ ...event, x: toTime(event.inprg_dt) }))
-        .filter((event) => event.x !== null && event.x >= minX && event.x <= maxX)
-        .map((event, index) => (
-          <g key={`${event.inprg_dt}-${index}`}>
-            <line className="pmLine" x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
-            <text className="pmText" x={xScale(event.x) + 4} y={padding.top + 12}>
-              {event.work_type}
+    <div className="chartCanvas">
+      <div className="chartControls" aria-label="차트 확대 축소">
+        <button onClick={() => setZoom((current) => Math.min(8, current * 1.5))}>확대</button>
+        <button onClick={() => setZoom((current) => Math.max(1, current / 1.5))}>축소</button>
+        <button onClick={() => setZoom(1)}>초기화</button>
+        <span>{zoom.toFixed(1)}x</span>
+      </div>
+      <svg className="scatterChart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="eqp 시계열 차트">
+        <clipPath id={clipId}>
+          <rect x={padding.left} y={padding.top} width={plotWidth} height={plotHeight} />
+        </clipPath>
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />
+            <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
+              {tick.toFixed(2)}
             </text>
           </g>
         ))}
-      {allPoints
-        .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
-        .filter((point) => point.x !== null && point.y !== null)
-        .map((point, index) => (
-          <circle key={`all-${index}`} className="allPoint" cx={xScale(point.x)} cy={yScale(point.y)} r="2.2" />
+        {xTicks.map((tick) => (
+          <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor="middle">
+            {formatShortDate(tick)}
+          </text>
         ))}
-      {failPoints
-        .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
-        .filter((point) => point.x !== null && point.y !== null)
-        .map((point, index) => (
-          <circle
-            key={`fail-${index}`}
-            className={point.final_decision === 'OK' ? 'okPoint' : 'failPoint'}
-            cx={xScale(point.x)}
-            cy={yScale(point.y)}
-            r="4.2"
-          >
-            <title>{`${point.lot_wf ?? ''} ${point.tkout_time ?? ''} ${point.eqp_ch ?? ''}`}</title>
-          </circle>
-        ))}
-    </svg>
+        <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
+        <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+        <g clipPath={`url(#${clipId})`}>
+          {pmEvents
+            .map((event) => ({ ...event, x: toTime(event.inprg_dt) }))
+            .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
+            .map((event, index) => (
+              <g key={`${event.inprg_dt}-${index}`}>
+                <line className="pmLine" x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
+                <text className="pmText" x={xScale(event.x) + 4} y={padding.top + 12}>
+                  {event.work_type}
+                </text>
+              </g>
+            ))}
+          {allPoints
+            .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+            .filter((point) => point.x !== null && point.y !== null && isVisible(point))
+            .map((point, index) => (
+              <circle key={`all-${index}`} className="allPoint" cx={xScale(point.x)} cy={yScale(point.y)} r="2.6">
+                <title>{getPointLabel(point, eqpId)}</title>
+              </circle>
+            ))}
+          {failPoints
+            .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+            .filter((point) => point.x !== null && point.y !== null && isVisible(point))
+            .map((point, index) => (
+              <circle
+                key={`fail-${index}`}
+                className={point.final_decision === 'OK' ? 'okPoint' : 'failPoint'}
+                cx={xScale(point.x)}
+                cy={yScale(point.y)}
+                r="4.7"
+              >
+                <title>{getPointLabel(point, eqpId)}</title>
+              </circle>
+            ))}
+        </g>
+      </svg>
+    </div>
   );
 }
 
@@ -498,6 +549,7 @@ function EquipmentChart({ row, eqpId }) {
             allPoints={chartState.data.allPoints ?? []}
             failPoints={chartState.data.failPoints ?? []}
             pmEvents={chartState.data.pmEvents ?? []}
+            eqpId={eqpId}
           />
           <div className="chartMeta">
             <code>{chartState.data.paths.all}</code>
@@ -670,7 +722,7 @@ function App() {
             <Metric label="읽기 가능 소스" value={`${loadState.sources.filter((source) => source.exists && source.readable).length}/${DATA_SOURCES.length}`} />
           </div>
 
-          <div className={`chartGrid ${selectedEqpIds.length <= 1 ? 'single' : ''}`}>
+          <div className="chartGrid">
             {selectedMetStep && selectedEqpIds.length > 0 ? (
               selectedEqpIds.map((eqpId) => <EquipmentChart key={eqpId} row={selectedMetStep} eqpId={eqpId} />)
             ) : (
