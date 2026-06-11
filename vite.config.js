@@ -36,29 +36,42 @@ function runLoader(args, res) {
   });
 }
 
+function installApiHandlers(middlewares) {
+  middlewares.use('/api/summary', (_req, res) => {
+    runLoader(['summary'], res);
+  });
+
+  middlewares.use('/api/chart', (req, res) => {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const mainStep = url.searchParams.get('mainStep');
+    const chartMetStep = url.searchParams.get('chartMetStep');
+    const eqpId = url.searchParams.get('eqpId');
+
+    if (!mainStep || !chartMetStep || !eqpId) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ ok: false, error: 'mainStep, chartMetStep, eqpId가 필요합니다.' }));
+      return;
+    }
+
+    runLoader(['chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
+  });
+
+  middlewares.use('/api', (req, res) => {
+    res.statusCode = 404;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify({ ok: false, error: `알 수 없는 API 경로입니다: /api${req.url ?? ''}` }));
+  });
+}
+
 function dataApiPlugin() {
   return {
     name: 'defect-spider-data-api',
     configureServer(server) {
-      server.middlewares.use('/api/summary', (_req, res) => {
-        runLoader(['summary'], res);
-      });
-
-      server.middlewares.use('/api/chart', (req, res) => {
-        const url = new URL(req.url ?? '', 'http://localhost');
-        const mainStep = url.searchParams.get('mainStep');
-        const chartMetStep = url.searchParams.get('chartMetStep');
-        const eqpId = url.searchParams.get('eqpId');
-
-        if (!mainStep || !chartMetStep || !eqpId) {
-          res.statusCode = 400;
-          res.setHeader('Content-Type', 'application/json; charset=utf-8');
-          res.end(JSON.stringify({ ok: false, error: 'mainStep, chartMetStep, eqpId가 필요합니다.' }));
-          return;
-        }
-
-        runLoader(['chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
-      });
+      installApiHandlers(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      installApiHandlers(server.middlewares);
     },
   };
 }

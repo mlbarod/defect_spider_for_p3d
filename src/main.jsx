@@ -54,7 +54,13 @@ const EMPTY_LOAD_STATE = {
 };
 
 async function fetchJson(url, options) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      ...(options?.headers ?? {}),
+    },
+  });
   const contentType = response.headers.get('content-type') ?? '';
   const body = await response.text();
   let payload;

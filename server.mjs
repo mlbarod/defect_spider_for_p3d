@@ -24,7 +24,10 @@ const mimeTypes = {
 };
 
 function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
   res.end(JSON.stringify(payload));
 }
 
@@ -45,6 +48,7 @@ function runLoader(args, res) {
   });
   child.on('close', (code) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
 
     if (stdout.trim()) {
       res.end(stdout);
@@ -110,7 +114,8 @@ async function serveStatic(req, res, url) {
   }
 
   const contentType = mimeTypes[extname(filePath)] ?? 'application/octet-stream';
-  res.writeHead(200, { 'Content-Type': contentType });
+  const cacheControl = extname(filePath) === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable';
+  res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': cacheControl });
   createReadStream(filePath).pipe(res);
 }
 
