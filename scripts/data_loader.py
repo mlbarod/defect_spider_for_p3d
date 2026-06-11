@@ -15,7 +15,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v2"
+LOADER_VERSION = "file-loader-v3"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 
@@ -289,8 +289,10 @@ def add_summary_rows(target, source_rows, count_key, by_main_step):
 
     added = 0
     for row in source_rows:
-        main_step = normalize_step(get_first(row, main_columns))
-        met_step = normalize_step(get_first(row, met_columns))
+        main_step_raw = str(get_first(row, main_columns) or "").strip()
+        met_step_raw = str(get_first(row, met_columns) or "").strip()
+        main_step = normalize_step(main_step_raw)
+        met_step = normalize_step(met_step_raw)
         if not main_step or not met_step:
             continue
 
@@ -307,7 +309,9 @@ def add_summary_rows(target, source_rows, count_key, by_main_step):
             {
                 "key": key,
                 "mainStep": main_step,
+                "mainStepPath": main_step_raw or main_step,
                 "metStep": met_step,
+                "metStepPath": met_step_raw or met_step,
                 "stepDesc": step_desc,
                 "sdwt": sdwt,
                 "centerCount": 0,
@@ -413,6 +417,141 @@ def latest_child_dir(path):
     return sorted(names)[-1]
 
 
+def unique_nonempty(values):
+    result = []
+    seen = set()
+    for value in values:
+        value = str(value or "").strip()
+        if value and value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
+def strip_main_suffix(value):
+    value = str(value or "").strip()
+    while value.endswith("_main"):
+        value = value[: -len("_main")]
+    return value
+
+
+def normalize_dir_key(value, is_met=False):
+    value = normalize_step(value).lower()
+    if is_met:
+        value = strip_main_suffix(value)
+    return value
+
+
+def chart_met_step_candidates(chart_met_step):
+    raw = normalize_step(chart_met_step)
+    base = strip_main_suffix(raw)
+    candidates = [raw, raw.replace("_main_main", "_main"), base]
+    if IS_MAIN_LINE:
+        candidates.append(f"{base}_main")
+    return unique_nonempty(candidates)
+
+
+def list_child_dirs(path):
+    if not os.path.isdir(path):
+        return []
+    return sorted(
+        name
+        for name in os.listdir(path)
+        if os.path.isdir(os.path.join(path, name))
+    )
+
+
+def resolve_child_dir(parent, candidates, label, is_met=False):
+    attempts = [os.path.join(parent, candidate) for candidate in candidates]
+    for attempt in attempts:
+        if os.path.isdir(attempt):
+            return attempt, os.path.basename(attempt), attempts
+
+    children = list_child_dirs(parent)
+    if not children:
+        raise FileNotFoundError(
+            f"{label} 디렉터리가 없습니다: {parent}. 시도한 경로: {', '.join(attempts[:5])}"
+        )
+
+    candidate_keys = {normalize_dir_key(candidate, is_met=is_met) for candidate in candidates}
+    for child in children:
+        if normalize_dir_key(child, is_met=is_met) in candidate_keys:
+            return os.path.join(parent, child), child, attempts
+
+    for child in children:
+        child_key = normalize_dir_key(child, is_met=is_met)
+        if any(key and (key in child_key or child_key in key) for key in candidate_keys):
+            return os.path.join(parent, child), child, attempts
+
+    raise FileNotFoundError(
+        f"{label} 디렉터리를 찾지 못했습니다. 시도: {', '.join(candidates[:6])}. "
+        f"사용 가능 예: {', '.join(children[:8])}"
+    )
+
+
+def resolve_parquet_file(data_dir, prefix, main_candidates):
+    exact_names = [f"{prefix}_{candidate}.parquet" for candidate in main_candidates]
+    for name in exact_names:
+        path = os.path.join(data_dir, name)
+        if os.path.isfile(path):
+            return path, exact_names
+
+    if not os.path.isdir(data_dir):
+        raise FileNotFoundError(f"날짜 데이터 디렉터리가 없습니다: {data_dir}")
+
+    parquet_files = sorted(
+        name
+        for name in os.listdir(data_dir)
+        if name.startswith(f"{prefix}_") and name.endswith(".parquet")
+    )
+    if parquet_files:
+        return os.path.join(data_dir, parquet_files[0]), exact_names
+
+    raise FileNotFoundError(
+        f"{prefix} parquet 파일을 찾지 못했습니다: {data_dir}. "
+        f"시도: {', '.join(exact_names[:5])}. 사용 가능 파일 예: {', '.join(sorted(os.listdir(data_dir))[:8])}"
+    )
+
+
+def resolve_chart_paths(main_step, chart_met_step):
+    main_candidates = unique_nonempty([main_step, normalize_step(main_step)])
+    main_dir, main_dir_name, main_attempts = resolve_child_dir(FOLDER_PATH, main_candidates, "main_step")
+
+    met_candidates = chart_met_step_candidates(chart_met_step)
+    met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, met_candidates, "met_step", is_met=True)
+
+    latest_date = latest_child_dir(met_dir)
+    data_dir = os.path.join(met_dir, latest_date)
+    main_file_candidates = unique_nonempty([main_dir_name, main_step, normalize_step(main_step)])
+    all_prefix = "main_all" if IS_MAIN_LINE else "all"
+    fail_prefix = "main_fail" if IS_MAIN_LINE else "fail"
+    all_path, all_attempts = resolve_parquet_file(data_dir, all_prefix, main_file_candidates)
+    fail_path, fail_attempts = resolve_parquet_file(data_dir, fail_prefix, main_file_candidates)
+
+    return {
+        "mainDir": main_dir,
+        "metDir": met_dir,
+        "dataDir": data_dir,
+        "latestDate": latest_date,
+        "allPath": all_path,
+        "failPath": fail_path,
+        "requested": {
+            "mainStep": main_step,
+            "chartMetStep": chart_met_step,
+        },
+        "resolved": {
+            "mainStep": main_dir_name,
+            "chartMetStep": met_dir_name,
+        },
+        "attempts": {
+            "mainDirs": main_attempts,
+            "metDirs": met_attempts,
+            "allFiles": all_attempts,
+            "failFiles": fail_attempts,
+        },
+    }
+
+
 def sample_records(dataframe, limit=900):
     height = frame_height(dataframe)
     if height <= limit:
@@ -438,11 +577,9 @@ def select_columns(dataframe):
 
 
 def command_chart(args):
-    chart_dir = os.path.join(FOLDER_PATH, args.main_step, args.chart_met_step)
-    latest_date = latest_child_dir(chart_dir)
-    data_dir = os.path.join(chart_dir, latest_date)
-    all_path = os.path.join(data_dir, f"{'main_all' if IS_MAIN_LINE else 'all'}_{args.main_step}.parquet")
-    fail_path = os.path.join(data_dir, f"{'main_fail' if IS_MAIN_LINE else 'fail'}_{args.main_step}.parquet")
+    resolved_paths = resolve_chart_paths(args.main_step, args.chart_met_step)
+    all_path = resolved_paths["allPath"]
+    fail_path = resolved_paths["failPath"]
 
     all_df = split_p3d_drawing_df(read_parquet(all_path))
     fail_df = split_p3d_drawing_df(read_parquet(fail_path))
@@ -469,13 +606,21 @@ def command_chart(args):
     write_json(
         {
             "ok": True,
-            "diagnostics": {"version": LOADER_VERSION},
+            "diagnostics": {
+                "version": LOADER_VERSION,
+                "resolvedPaths": resolved_paths,
+                "inputRows": {
+                    "all": frame_height(all_df),
+                    "fail": frame_height(fail_df),
+                    "failForEqp": frame_height(fail_for_eqp),
+                },
+            },
             "paths": {
                 "all": all_path,
                 "fail": fail_path,
                 "pm": CONFIG["pmCodePath"],
             },
-            "latestDate": latest_date,
+            "latestDate": resolved_paths["latestDate"],
             "allPoints": sample_records(select_columns(all_df)),
             "failPoints": sample_records(select_columns(fail_for_eqp), 500),
             "pmEvents": pm_events,

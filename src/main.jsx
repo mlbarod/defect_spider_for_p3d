@@ -123,8 +123,17 @@ function getMetStepDisplay(metStep) {
   return { metStepNo: match[1], metItem: match[2] };
 }
 
+function stripPercentPrefix(value) {
+  const text = String(value ?? '').trim();
+  return text.includes('%') ? text.split('%').pop() : text;
+}
+
 function getChartMetStep(row) {
-  const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+  let rawMetStep = stripPercentPrefix(row.metStepPath ?? row.metStep);
+  while (rawMetStep.endsWith('_main_main')) rawMetStep = rawMetStep.replace(/_main_main$/, '_main');
+  if (isMainLine && rawMetStep.endsWith('_main')) return rawMetStep;
+
+  const { metStepNo, metItem } = getMetStepDisplay(rawMetStep);
   const metStep = metItem ? `${metStepNo}_${metItem}` : metStepNo;
 
   return isMainLine ? `${metStep}_main` : metStep;
@@ -133,12 +142,13 @@ function getChartMetStep(row) {
 function getChartPaths(row, eqpId = '{eqp_id}') {
   const chartMetStep = getChartMetStep(row);
   const latestDate = row.latestDate ?? '{latestDate}';
-  const base = `${folderPath}/${row.mainStep}/${chartMetStep}/${latestDate}`;
+  const mainStepPath = row.mainStepPath ?? row.mainStep;
+  const base = `${folderPath}/${mainStepPath}/${chartMetStep}/${latestDate}`;
 
   return {
     eqpId,
-    all: `${base}/${isMainLine ? 'main_all' : 'all'}_${row.mainStep}.parquet`,
-    fail: `${base}/${isMainLine ? 'main_fail' : 'fail'}_${row.mainStep}.parquet`,
+    all: `${base}/${isMainLine ? 'main_all' : 'all'}_${mainStepPath}.parquet`,
+    fail: `${base}/${isMainLine ? 'main_fail' : 'fail'}_${mainStepPath}.parquet`,
     pm: CONFIG.pmCodePath,
   };
 }
@@ -432,7 +442,7 @@ function EquipmentChart({ row, eqpId }) {
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({
-      mainStep: row.mainStep,
+      mainStep: row.mainStepPath ?? row.mainStep,
       chartMetStep: getChartMetStep(row),
       eqpId,
     });
@@ -466,6 +476,16 @@ function EquipmentChart({ row, eqpId }) {
       ) : chartState.error ? (
         <div className="emptyChartBody">
           <p>{chartState.error}</p>
+          {chartState.data?.diagnostics?.resolvedPaths?.attempts && (
+            <div className="pathList">
+              {(chartState.data.diagnostics.resolvedPaths.attempts.mainDirs ?? []).slice(0, 3).map((path) => (
+                <code key={path}>{path}</code>
+              ))}
+              {(chartState.data.diagnostics.resolvedPaths.attempts.metDirs ?? []).slice(0, 3).map((path) => (
+                <code key={path}>{path}</code>
+              ))}
+            </div>
+          )}
           <div className="pathList">
             <code>{paths.all}</code>
             <code>{paths.fail}</code>
