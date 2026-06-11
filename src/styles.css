@@ -546,7 +546,7 @@ tr:last-child td {
 
 .chartShell {
   position: relative;
-  min-height: 458px;
+  min-height: 320px;
   border: 1px solid #dce4df;
   border-radius: 8px;
   background:
@@ -615,7 +615,9 @@ tr:last-child td {
   display: block;
   width: 100%;
   height: auto;
-  min-height: 340px;
+  min-height: 238px;
+  cursor: crosshair;
+  user-select: none;
 }
 
 .chartCanvas {
@@ -643,7 +645,8 @@ tr:last-child td {
   cursor: pointer;
 }
 
-.chartControls button:hover {
+.chartControls button:hover,
+.chartControls button.active {
   border-color: #1f6f5b;
   background: #e8f6ee;
 }
@@ -654,6 +657,14 @@ tr:last-child td {
   font-size: 12px;
   font-weight: 850;
   text-align: right;
+}
+
+.zoomSelection {
+  fill: rgba(31, 111, 91, 0.16);
+  stroke: #1f6f5b;
+  stroke-width: 1.4px;
+  stroke-dasharray: 5 4;
+  pointer-events: none;
 }
 
 .chartMeta {
@@ -847,6 +858,6 @@ tr:last-child td {
 
   .chartShell,
   .scatterChart {
-    min-height: 340px;
+    min-height: 260px;
   }
 }

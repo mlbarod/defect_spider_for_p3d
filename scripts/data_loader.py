@@ -15,9 +15,16 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v3"
+LOADER_VERSION = "file-loader-v4"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
+COMPACT_TIME_FORMATS = (
+    "%Y%m%d%H%M%S",
+    "%Y%m%d%H%M",
+    "%y%m%d%H%M%S",
+    "%y%m%d%H%M",
+    "%Y%m%d",
+)
 
 DATA_SOURCES = [
     {
@@ -63,6 +70,88 @@ def json_default(value):
     except Exception:
         pass
     return str(value)
+
+
+def epoch_datetime(value):
+    try:
+        return datetime.fromtimestamp(value / 1000 if abs(value) > 10_000_000_000 else value)
+    except Exception:
+        return None
+
+
+def parse_time_value(value):
+    if value is None:
+        return None
+    if hasattr(value, "to_pydatetime"):
+        value = value.to_pydatetime()
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+
+    text = ""
+    if isinstance(value, (int, float)) and value == value:
+        number = int(value)
+        text = str(number)
+        if text.isdigit():
+            for fmt in COMPACT_TIME_FORMATS:
+                if len(text) == len(datetime.now().strftime(fmt)):
+                    try:
+                        return datetime.strptime(text, fmt)
+                    except ValueError:
+                        pass
+        return epoch_datetime(value)
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    digits = text.split(".", 1)[0]
+    if digits.isdigit():
+        for fmt in COMPACT_TIME_FORMATS:
+            if len(digits) == len(datetime.now().strftime(fmt)):
+                try:
+                    return datetime.strptime(digits, fmt)
+                except ValueError:
+                    pass
+        number = int(digits)
+        if len(digits) in (10, 13) or number > 10_000_000_000:
+            return epoch_datetime(number)
+
+    normalized = text.replace("/", "-").replace("Z", "+00:00")
+    if "." in normalized:
+        head, tail = normalized.split(".", 1)
+        fraction = ""
+        suffix = ""
+        for char in tail:
+            if char.isdigit() and not suffix:
+                fraction += char
+            else:
+                suffix += char
+        if len(fraction) > 6:
+            normalized = f"{head}.{fraction[:6]}{suffix}"
+
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def time_text(value):
+    parsed = parse_time_value(value)
+    if parsed is not None:
+        return parsed.isoformat(sep=" ")
+    return "" if value is None else str(value)
+
+
+def time_ms(value):
+    parsed = parse_time_value(value)
+    if parsed is None:
+        return None
+    try:
+        return int(parsed.timestamp() * 1000)
+    except Exception:
+        return None
 
 
 def write_json(payload):
@@ -562,6 +651,14 @@ def sample_records(dataframe, limit=900):
     return records(dataframe.iloc[::step].head(limit))
 
 
+def add_time_fields(rows, column):
+    for row in rows:
+        value = row.get(column)
+        row[f"{column}_text"] = time_text(value)
+        row[f"{column}_ms"] = time_ms(value)
+    return rows
+
+
 def select_columns(dataframe):
     wanted = [
         "tkout_time",
@@ -574,6 +671,10 @@ def select_columns(dataframe):
         "final_decision",
     ]
     return select_frame_columns(dataframe, wanted)
+
+
+def chart_records(dataframe, limit=900):
+    return add_time_fields(sample_records(select_columns(dataframe), limit), "tkout_time")
 
 
 def command_chart(args):
@@ -596,12 +697,12 @@ def command_chart(args):
                 pl = load_polars()
                 pm_df = pm_df.with_columns(pl.col("asset").cast(pl.Utf8).str.replace_all("-", "_").alias("asset"))
                 pm_df = pm_df.filter(pl.col("asset").str.contains(str(args.eqp_id), literal=True))
-                pm_events = records(pm_df.select(["inprg_dt", "work_type"]).head(80))
+                pm_events = add_time_fields(records(pm_df.select(["inprg_dt", "work_type"]).head(80)), "inprg_dt")
             else:
                 pm_df = pm_df.copy()
                 pm_df["asset"] = pm_df["asset"].astype(str).str.replace("-", "_", regex=False)
                 pm_df = pm_df[pm_df["asset"].str.contains(str(args.eqp_id), regex=False, na=False)]
-                pm_events = records(pm_df[["inprg_dt", "work_type"]].head(80))
+                pm_events = add_time_fields(records(pm_df[["inprg_dt", "work_type"]].head(80)), "inprg_dt")
 
     write_json(
         {
@@ -621,8 +722,8 @@ def command_chart(args):
                 "pm": CONFIG["pmCodePath"],
             },
             "latestDate": resolved_paths["latestDate"],
-            "allPoints": sample_records(select_columns(all_df)),
-            "failPoints": sample_records(select_columns(fail_for_eqp), 500),
+            "allPoints": chart_records(all_df),
+            "failPoints": chart_records(fail_for_eqp, 500),
             "pmEvents": pm_events,
         }
     )

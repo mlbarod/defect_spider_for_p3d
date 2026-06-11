@@ -345,16 +345,27 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function toTime(value) {
+function toTime(value, point) {
+  const epoch = Number(point?.tkout_time_ms ?? point?.inprg_dt_ms);
+  if (Number.isFinite(epoch)) return epoch;
   const parsed = new Date(value).getTime();
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatShortDate(value) {
+function formatShortDate(value, points = []) {
   if (!value) return '';
+  const nearest = points.reduce((current, point) => {
+    if (!point.tkout_time_text || point.x === null) return current;
+    if (!current) return point;
+    return Math.abs(point.x - value) < Math.abs(current.x - value) ? point : current;
+  }, null);
+  if (nearest?.tkout_time_text) {
+    const text = String(nearest.tkout_time_text);
+    return text.includes('T') ? text.replace('T', ' ').slice(5, 16) : text.slice(5, 16);
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:00`;
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function splitLotWf(value) {
@@ -372,7 +383,7 @@ function getPointLabel(point, fallbackEqpId) {
   const lot = point.lot ?? point.lot_id ?? point.lotId ?? lotWfParts.lot;
   const wf = point.wf ?? point.wf_id ?? point.wafer ?? point.wafer_id ?? lotWfParts.wf;
   const eqp = point.eqp_id ?? point.eqpid ?? point.eqp_ch ?? fallbackEqpId;
-  const time = point.tkout_time ?? point.time ?? '';
+  const time = point.tkout_time_text ?? point.tkout_time ?? point.time ?? '';
 
   return [
     `eqpid: ${eqp || '-'}`,
@@ -383,51 +394,151 @@ function getPointLabel(point, fallbackEqpId) {
 }
 
 function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
-  const [zoom, setZoom] = useState(1);
+  const [mode, setMode] = useState('in');
+  const [viewDomain, setViewDomain] = useState(null);
+  const [dragRange, setDragRange] = useState(null);
   const width = 720;
-  const height = 340;
-  const padding = { left: 58, right: 20, top: 26, bottom: 48 };
+  const height = 238;
+  const padding = { left: 56, right: 18, top: 22, bottom: 42 };
   const clipId = `plot-${String(eqpId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const points = [...allPoints, ...failPoints]
-    .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+    .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
     .filter((point) => point.x !== null && point.y !== null);
+  const hasPoints = points.length > 0;
+  const xValues = points.map((point) => point.x);
+  const yValues = points.map((point) => point.y);
+  const minX = hasPoints ? Math.min(...xValues) : 0;
+  const maxX = hasPoints ? Math.max(...xValues) : 1;
+  const minY = hasPoints ? Math.min(...yValues) : 0;
+  const maxY = hasPoints ? Math.max(...yValues) : 1;
+  const yPad = Math.max(1, (maxY - minY) * 0.12);
+  const fullDomain = {
+    minX,
+    maxX,
+    minY: minY - yPad,
+    maxY: maxY + yPad,
+  };
 
-  if (points.length === 0) {
+  useEffect(() => {
+    setViewDomain(null);
+    setDragRange(null);
+  }, [allPoints, failPoints, eqpId]);
+
+  if (!hasPoints) {
     return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
   }
 
-  const xValues = points.map((point) => point.x);
-  const yValues = points.map((point) => point.y);
-  const minX = Math.min(...xValues);
-  const maxX = Math.max(...xValues);
-  const minY = Math.min(...yValues);
-  const maxY = Math.max(...yValues);
-  const yPad = Math.max(1, (maxY - minY) * 0.12);
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
-  const xCenter = minX + (maxX - minX) / 2;
-  const yCenter = minY + (maxY - minY) / 2;
-  const xSpan = Math.max(1, maxX - minX) / zoom;
-  const ySpan = Math.max(1, maxY - minY + yPad * 2) / zoom;
-  const viewMinX = xCenter - xSpan / 2;
-  const viewMaxX = xCenter + xSpan / 2;
-  const viewMinY = yCenter - ySpan / 2;
-  const viewMaxY = yCenter + ySpan / 2;
+  const domain = viewDomain ?? fullDomain;
+  const { minX: viewMinX, maxX: viewMaxX, minY: viewMinY, maxY: viewMaxY } = domain;
   const xScale = (value) => padding.left + ((value - viewMinX) / Math.max(1, viewMaxX - viewMinX)) * plotWidth;
   const yScale = (value) => padding.top + plotHeight - ((value - viewMinY) / Math.max(1, viewMaxY - viewMinY)) * plotHeight;
+  const xInvert = (value) => viewMinX + ((value - padding.left) / plotWidth) * Math.max(1, viewMaxX - viewMinX);
+  const yInvert = (value) => viewMaxY - ((value - padding.top) / plotHeight) * Math.max(1, viewMaxY - viewMinY);
+  const clampX = (value) => Math.min(width - padding.right, Math.max(padding.left, value));
+  const clampY = (value) => Math.min(height - padding.bottom, Math.max(padding.top, value));
+  const domainZoom = Math.max(1, (fullDomain.maxX - fullDomain.minX) / Math.max(1, viewMaxX - viewMinX));
   const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
   const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
   const yTicks = [viewMinY, viewMinY + (viewMaxY - viewMinY) / 2, viewMaxY];
+  const selection = dragRange
+    ? {
+        x: Math.min(dragRange.startX, dragRange.endX),
+        y: Math.min(dragRange.startY, dragRange.endY),
+        width: Math.abs(dragRange.endX - dragRange.startX),
+        height: Math.abs(dragRange.endY - dragRange.startY),
+      }
+    : null;
+  const clampDomain = (next) => {
+    const fullX = Math.max(1, fullDomain.maxX - fullDomain.minX);
+    const fullY = Math.max(1, fullDomain.maxY - fullDomain.minY);
+    const spanX = Math.min(fullX, Math.max(1, next.maxX - next.minX));
+    const spanY = Math.min(fullY, Math.max(1, next.maxY - next.minY));
+    let minDomainX = next.minX;
+    let minDomainY = next.minY;
+
+    if (minDomainX < fullDomain.minX) minDomainX = fullDomain.minX;
+    if (minDomainX + spanX > fullDomain.maxX) minDomainX = fullDomain.maxX - spanX;
+    if (minDomainY < fullDomain.minY) minDomainY = fullDomain.minY;
+    if (minDomainY + spanY > fullDomain.maxY) minDomainY = fullDomain.maxY - spanY;
+
+    return {
+      minX: minDomainX,
+      maxX: minDomainX + spanX,
+      minY: minDomainY,
+      maxY: minDomainY + spanY,
+    };
+  };
+  const getSvgPoint = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: clampX(((event.clientX - rect.left) / rect.width) * width),
+      y: clampY(((event.clientY - rect.top) / rect.height) * height),
+    };
+  };
+  const handleMouseDown = (event) => {
+    const point = getSvgPoint(event);
+    setDragRange({ startX: point.x, startY: point.y, endX: point.x, endY: point.y });
+  };
+  const handleMouseMove = (event) => {
+    if (!dragRange) return;
+    const point = getSvgPoint(event);
+    setDragRange((current) => current && { ...current, endX: point.x, endY: point.y });
+  };
+  const handleMouseUp = () => {
+    if (!dragRange) return;
+    const selectedWidth = Math.abs(dragRange.endX - dragRange.startX);
+    const selectedHeight = Math.abs(dragRange.endY - dragRange.startY);
+
+    if (selectedWidth >= 8 && selectedHeight >= 8) {
+      const selected = {
+        minX: xInvert(Math.min(dragRange.startX, dragRange.endX)),
+        maxX: xInvert(Math.max(dragRange.startX, dragRange.endX)),
+        minY: yInvert(Math.max(dragRange.startY, dragRange.endY)),
+        maxY: yInvert(Math.min(dragRange.startY, dragRange.endY)),
+      };
+
+      if (mode === 'in') {
+        setViewDomain(clampDomain(selected));
+      } else {
+        const currentSpanX = viewMaxX - viewMinX;
+        const currentSpanY = viewMaxY - viewMinY;
+        const factor = Math.min(6, Math.max(currentSpanX / Math.max(1, selected.maxX - selected.minX), currentSpanY / Math.max(1, selected.maxY - selected.minY)));
+        const centerX = (selected.minX + selected.maxX) / 2;
+        const centerY = (selected.minY + selected.maxY) / 2;
+        setViewDomain(
+          clampDomain({
+            minX: centerX - (currentSpanX * factor) / 2,
+            maxX: centerX + (currentSpanX * factor) / 2,
+            minY: centerY - (currentSpanY * factor) / 2,
+            maxY: centerY + (currentSpanY * factor) / 2,
+          }),
+        );
+      }
+    }
+
+    setDragRange(null);
+  };
 
   return (
     <div className="chartCanvas">
       <div className="chartControls" aria-label="차트 확대 축소">
-        <button onClick={() => setZoom((current) => Math.min(8, current * 1.5))}>확대</button>
-        <button onClick={() => setZoom((current) => Math.max(1, current / 1.5))}>축소</button>
-        <button onClick={() => setZoom(1)}>초기화</button>
-        <span>{zoom.toFixed(1)}x</span>
+        <button className={mode === 'in' ? 'active' : ''} onClick={() => setMode('in')}>영역 확대</button>
+        <button className={mode === 'out' ? 'active' : ''} onClick={() => setMode('out')}>영역 축소</button>
+        <button onClick={() => setViewDomain(null)}>초기화</button>
+        <span>{domainZoom.toFixed(1)}x</span>
       </div>
-      <svg className="scatterChart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="eqp 시계열 차트">
+      <svg
+        className="scatterChart"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="eqp 시계열 차트"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => setDragRange(null)}
+      >
         <clipPath id={clipId}>
           <rect x={padding.left} y={padding.top} width={plotWidth} height={plotHeight} />
         </clipPath>
@@ -441,14 +552,14 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
         ))}
         {xTicks.map((tick) => (
           <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor="middle">
-            {formatShortDate(tick)}
+            {formatShortDate(tick, points)}
           </text>
         ))}
         <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
         <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
         <g clipPath={`url(#${clipId})`}>
           {pmEvents
-            .map((event) => ({ ...event, x: toTime(event.inprg_dt) }))
+            .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
             .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
             .map((event, index) => (
               <g key={`${event.inprg_dt}-${index}`}>
@@ -459,7 +570,7 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
               </g>
             ))}
           {allPoints
-            .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+            .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
             .filter((point) => point.x !== null && point.y !== null && isVisible(point))
             .map((point, index) => (
               <circle key={`all-${index}`} className="allPoint" cx={xScale(point.x)} cy={yScale(point.y)} r="2.6">
@@ -467,7 +578,7 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
               </circle>
             ))}
           {failPoints
-            .map((point) => ({ ...point, x: toTime(point.tkout_time), y: toNumber(point.fab_value) }))
+            .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
             .filter((point) => point.x !== null && point.y !== null && isVisible(point))
             .map((point, index) => (
               <circle
@@ -481,6 +592,9 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
               </circle>
             ))}
         </g>
+        {selection && selection.width > 1 && selection.height > 1 && (
+          <rect className="zoomSelection" x={selection.x} y={selection.y} width={selection.width} height={selection.height} />
+        )}
       </svg>
     </div>
   );
