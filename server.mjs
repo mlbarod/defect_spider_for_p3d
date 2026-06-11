@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -10,6 +10,7 @@ const distDir = join(rootDir, 'dist');
 const loaderPath = join(rootDir, 'scripts', 'data_loader.py');
 const port = Number(process.env.PORT ?? 5173);
 const host = process.env.HOST ?? '0.0.0.0';
+const buildOnStart = process.env.BUILD_ON_START !== '0';
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -127,6 +128,22 @@ async function assertDistExists() {
   await readFile(join(distDir, 'index.html'), 'utf8');
 }
 
+function buildClient() {
+  if (!buildOnStart) return;
+
+  console.log('Building client before starting server...');
+  const result = spawnSync('npm', ['run', 'build'], {
+    cwd: rootDir,
+    stdio: 'inherit',
+    env: { ...process.env, BUILD_ON_START: '0' },
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`client build failed with code ${result.status}`);
+  }
+}
+
+buildClient();
 await assertDistExists();
 
 const server = createServer((req, res) => {
