@@ -394,12 +394,12 @@ function getPointLabel(point, fallbackEqpId) {
 }
 
 function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
-  const [mode, setMode] = useState('in');
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const width = 720;
   const height = 238;
   const padding = { left: 56, right: 18, top: 22, bottom: 42 };
+  const clipOverflow = 7;
   const clipId = `plot-${String(eqpId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const points = [...allPoints, ...failPoints]
     .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
@@ -438,7 +438,6 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
   const yInvert = (value) => viewMaxY - ((value - padding.top) / plotHeight) * Math.max(1, viewMaxY - viewMinY);
   const clampX = (value) => Math.min(width - padding.right, Math.max(padding.left, value));
   const clampY = (value) => Math.min(height - padding.bottom, Math.max(padding.top, value));
-  const domainZoom = Math.max(1, (fullDomain.maxX - fullDomain.minX) / Math.max(1, viewMaxX - viewMinX));
   const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
   const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
   const yTicks = [viewMinY, viewMinY + (viewMaxY - viewMinY) / 2, viewMaxY];
@@ -486,20 +485,24 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
     const point = getSvgPoint(event);
     setDragRange((current) => current && { ...current, endX: point.x, endY: point.y });
   };
-  const handleMouseUp = () => {
+  const handleMouseUp = (event) => {
     if (!dragRange) return;
-    const selectedWidth = Math.abs(dragRange.endX - dragRange.startX);
-    const selectedHeight = Math.abs(dragRange.endY - dragRange.startY);
+    const endPoint = getSvgPoint(event);
+    const range = { ...dragRange, endX: endPoint.x, endY: endPoint.y };
+    const selectedWidth = Math.abs(range.endX - range.startX);
+    const selectedHeight = Math.abs(range.endY - range.startY);
+    const isZoomInDrag = range.endX > range.startX && range.endY > range.startY;
+    const isZoomOutDrag = range.endX < range.startX && range.endY < range.startY;
 
-    if (selectedWidth >= 8 && selectedHeight >= 8) {
+    if (selectedWidth >= 8 && selectedHeight >= 8 && (isZoomInDrag || isZoomOutDrag)) {
       const selected = {
-        minX: xInvert(Math.min(dragRange.startX, dragRange.endX)),
-        maxX: xInvert(Math.max(dragRange.startX, dragRange.endX)),
-        minY: yInvert(Math.max(dragRange.startY, dragRange.endY)),
-        maxY: yInvert(Math.min(dragRange.startY, dragRange.endY)),
+        minX: xInvert(Math.min(range.startX, range.endX)),
+        maxX: xInvert(Math.max(range.startX, range.endX)),
+        minY: yInvert(Math.max(range.startY, range.endY)),
+        maxY: yInvert(Math.min(range.startY, range.endY)),
       };
 
-      if (mode === 'in') {
+      if (isZoomInDrag) {
         setViewDomain(clampDomain(selected));
       } else {
         const currentSpanX = viewMaxX - viewMinX;
@@ -523,12 +526,6 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
 
   return (
     <div className="chartCanvas">
-      <div className="chartControls" aria-label="차트 확대 축소">
-        <button className={mode === 'in' ? 'active' : ''} onClick={() => setMode('in')}>영역 확대</button>
-        <button className={mode === 'out' ? 'active' : ''} onClick={() => setMode('out')}>영역 축소</button>
-        <button onClick={() => setViewDomain(null)}>초기화</button>
-        <span>{domainZoom.toFixed(1)}x</span>
-      </div>
       <svg
         className="scatterChart"
         viewBox={`0 0 ${width} ${height}`}
@@ -538,9 +535,13 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={() => setDragRange(null)}
+        onDoubleClick={() => {
+          setViewDomain(null);
+          setDragRange(null);
+        }}
       >
         <clipPath id={clipId}>
-          <rect x={padding.left} y={padding.top} width={plotWidth} height={plotHeight} />
+          <rect x={padding.left - clipOverflow} y={padding.top - clipOverflow} width={plotWidth + clipOverflow * 2} height={plotHeight + clipOverflow * 2} />
         </clipPath>
         {yTicks.map((tick) => (
           <g key={tick}>
@@ -550,8 +551,8 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
             </text>
           </g>
         ))}
-        {xTicks.map((tick) => (
-          <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor="middle">
+        {xTicks.map((tick, index) => (
+          <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor={index === 0 ? 'start' : index === xTicks.length - 1 ? 'end' : 'middle'}>
             {formatShortDate(tick, points)}
           </text>
         ))}
