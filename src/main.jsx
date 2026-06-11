@@ -51,6 +51,13 @@ const EMPTY_LOAD_STATE = {
   error: '',
   rows: [],
   sources: DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
+  diagnostics: {
+    version: 'browser-init',
+    inputRows: {},
+    usedRows: {},
+    outputRows: 0,
+    warnings: [],
+  },
 };
 
 async function fetchJson(url, options) {
@@ -175,8 +182,9 @@ function Metric({ label, value }) {
   );
 }
 
-function SourceStatusBanner({ loading, error, sources }) {
+function SourceStatusBanner({ loading, error, sources, diagnostics }) {
   const missingSources = sources.filter((source) => !source.exists || !source.readable);
+  const warningCount = diagnostics?.warnings?.length ?? 0;
 
   return (
     <section className={`sourceBanner ${error ? 'error' : ''}`}>
@@ -186,11 +194,15 @@ function SourceStatusBanner({ loading, error, sources }) {
       </div>
       <div className="sourceBannerText">
         {error ? <strong>{error}</strong> : <span>웹 UI가 Vite API를 통해 표시된 원본 경로의 파일을 읽습니다.</span>}
+        <span>
+          loader {diagnostics?.version ?? 'unknown'} / 입력 {Object.values(diagnostics?.inputRows ?? {}).reduce((sum, value) => sum + Number(value || 0), 0).toLocaleString()}행 / 표시 {Number(diagnostics?.outputRows ?? 0).toLocaleString()}건
+        </span>
         {missingSources.length > 0 && (
           <span>
             미확인 파일 {missingSources.length}개: {missingSources.map((source) => source.label).join(', ')}
           </span>
         )}
+        {warningCount > 0 && <span>경고 {warningCount}개: {diagnostics.warnings.slice(0, 2).join(' / ')}</span>}
       </div>
     </section>
   );
@@ -219,7 +231,7 @@ function SdwtSelector({ options, selectedSdwt, onSelect, disabled }) {
   );
 }
 
-function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, error }) {
+function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, error, diagnostics }) {
   const [openSteps, setOpenSteps] = useState(() => new Set());
 
   useEffect(() => {
@@ -254,8 +266,12 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
           <span>
             {loading
               ? '원본 파일을 읽고 있습니다.'
-              : error || '원본 파일에서 표시할 이상 항목을 찾지 못했습니다.'}
+              : error ||
+                `파일 입력 ${Object.values(diagnostics?.inputRows ?? {}).reduce((sum, value) => sum + Number(value || 0), 0).toLocaleString()}행 중 화면에 표시할 대상이 0건입니다.`}
           </span>
+          {diagnostics?.warnings?.slice(0, 3).map((warning) => (
+            <span key={warning}>{warning}</span>
+          ))}
           <code>{DATA_SOURCES[3].path}</code>
         </div>
       ) : (
@@ -501,7 +517,7 @@ function EmptyChartState({ selectedRow }) {
   );
 }
 
-function DataSourceTable({ sources }) {
+function DataSourceTable({ sources, diagnostics }) {
   return (
     <div className="tableShell compact">
       <table>
@@ -510,6 +526,7 @@ function DataSourceTable({ sources }) {
             <th>파일</th>
             <th>원본 경로</th>
             <th>필수 컬럼</th>
+            <th>읽은 행</th>
             <th>상태</th>
           </tr>
         </thead>
@@ -525,6 +542,7 @@ function DataSourceTable({ sources }) {
                 <code>{source.path}</code>
               </td>
               <td>{source.requiredColumns.join(', ')}</td>
+              <td>{Number(diagnostics?.inputRows?.[source.key] ?? 0).toLocaleString()}</td>
               <td>
                 <span className={status?.exists && status?.readable ? 'readOk' : 'readFail'}>
                   {status?.exists && status?.readable ? '읽기 가능' : status?.exists ? '권한 확인 필요' : '파일 없음'}
@@ -549,13 +567,14 @@ function App() {
   const [selectedMetStep, setSelectedMetStep] = useState(null);
 
   useEffect(() => {
-    fetchJson('/api/summary')
+    fetchJson(`/api/summary?t=${Date.now()}`)
       .then((payload) => {
         setLoadState({
           loading: false,
           error: '',
           rows: payload.rows ?? [],
           sources: payload.sources ?? EMPTY_LOAD_STATE.sources,
+          diagnostics: payload.diagnostics ?? EMPTY_LOAD_STATE.diagnostics,
         });
       })
       .catch((error) => {
@@ -564,6 +583,7 @@ function App() {
           error: error.message,
           rows: [],
           sources: error.payload?.sources ?? EMPTY_LOAD_STATE.sources,
+          diagnostics: error.payload?.diagnostics ?? EMPTY_LOAD_STATE.diagnostics,
         });
       });
   }, []);
@@ -595,7 +615,12 @@ function App() {
         </div>
       </header>
 
-      <SourceStatusBanner loading={loadState.loading} error={loadState.error} sources={loadState.sources} />
+      <SourceStatusBanner
+        loading={loadState.loading}
+        error={loadState.error}
+        sources={loadState.sources}
+        diagnostics={loadState.diagnostics}
+      />
 
       <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0} />
 
@@ -606,6 +631,7 @@ function App() {
           onSelectMetStep={setSelectedMetStep}
           loading={loadState.loading}
           error={loadState.error}
+          diagnostics={loadState.diagnostics}
         />
 
         <section className="detailPanel">
@@ -632,7 +658,7 @@ function App() {
             )}
           </div>
 
-          <DataSourceTable sources={loadState.sources} />
+          <DataSourceTable sources={loadState.sources} diagnostics={loadState.diagnostics} />
         </section>
       </section>
     </main>
