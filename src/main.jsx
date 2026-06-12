@@ -416,7 +416,19 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     if (fallbackValues.length > 0) return { min: Math.min(...fallbackValues), max: Math.max(...fallbackValues) };
     return { min: 0, max: 1 };
   };
-  const padYRange = (range) => {
+  const getYDomain = (range, shouldPad = true) => {
+    if (range.max === range.min) {
+      return {
+        minY: range.min - 1,
+        maxY: range.max + 1,
+      };
+    }
+    if (!shouldPad) {
+      return {
+        minY: range.min,
+        maxY: range.max,
+      };
+    }
     const span = Math.max(0, range.max - range.min);
     const yPad = Math.max(1, span * 0.12);
     return {
@@ -431,12 +443,12 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   const fullDomain = {
     minX: normalizedXRange.min,
     maxX: normalizedXRange.max,
-    ...padYRange(yFullRange),
+    ...getYDomain(yFullRange),
   };
   const initialDomain = {
     minX: normalizedXRange.min,
     maxX: normalizedXRange.max,
-    ...padYRange(yInitialRange),
+    ...getYDomain(yInitialRange, useFullInitialDomain),
   };
 
   useEffect(() => {

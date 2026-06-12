@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v6"
+LOADER_VERSION = "file-loader-v7"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 COMPACT_TIME_FORMATS = (
@@ -788,6 +788,13 @@ def outlier_filtered_values(values):
     return filtered or values
 
 
+def outlier_display_domain(values):
+    filtered = outlier_filtered_values(values)
+    if not filtered:
+        return None
+    return {"min": min(filtered) - 2, "max": max(filtered) * 1.2}
+
+
 def time_domain(dataframe, column):
     values = [value for value in (time_ms(value) for value in column_values(dataframe, column)) if value is not None]
     if not values:
@@ -855,10 +862,10 @@ def command_chart(args):
             "domains": {
                 "x": time_domain(all_df, "tkout_time"),
                 "yFull": numeric_domain(chart_fab_values),
-                "yInitial": numeric_domain(outlier_filtered_values(chart_fab_values)),
+                "yInitial": outlier_display_domain(chart_fab_values),
                 "center": {
                     "yFull": numeric_domain(chart_fab_values_center),
-                    "yInitial": numeric_domain(outlier_filtered_values(chart_fab_values_center)),
+                    "yInitial": outlier_display_domain(chart_fab_values_center),
                 },
                 "std": {
                     "yFull": numeric_domain(chart_fab_values_std),
