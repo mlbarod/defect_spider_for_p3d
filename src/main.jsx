@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -143,6 +143,12 @@ function getChartMetStep(row) {
   return isMainLine ? `${metStep}_main` : metStep;
 }
 
+function getChartHeading(row) {
+  if (!row) return CONFIG.lineName;
+  const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+  return [row.stepDesc || 'step_desc 확인 필요', metStepNo, metItem].filter(Boolean).join(' / ');
+}
+
 function filterRowsBySdwt(rows, selectedSdwt) {
   if (selectedSdwt === 'ALL') return rows;
 
@@ -214,24 +220,18 @@ function SourceStatusBanner({ loading, error, sources, diagnostics }) {
 
 function SdwtSelector({ options, selectedSdwt, onSelect, disabled }) {
   return (
-    <section className="sdwtBar" aria-label="SDWT 선택">
-      <div>
-        <p className="eyebrow">SDWT Selection</p>
-        <h2>SDWT 선택</h2>
-      </div>
-      <div className="segmentedControl">
-        {options.map((option) => (
-          <button
-            key={option}
-            className={selectedSdwt === option ? 'active' : ''}
-            disabled={disabled && option !== 'ALL'}
-            onClick={() => onSelect(option)}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-    </section>
+    <div className="sdwtButtons" aria-label="SDWT 선택">
+      {options.map((option) => (
+        <button
+          key={option}
+          className={selectedSdwt === option ? 'active' : ''}
+          disabled={disabled && option !== 'ALL'}
+          onClick={() => onSelect(option)}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -373,18 +373,21 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
+  const canvasRef = useRef(null);
   const width = 720;
   const height = 238;
   const padding = { left: 56, right: 18, top: 22, bottom: 42 };
   const clipOverflow = 7;
   const clipId = `plot-${String(eqpId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-  const axisPoints = allPoints
-    .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
-    .filter((point) => point.x !== null);
-  const allScatterPoints = axisPoints.filter((point) => point.y !== null);
-  const scatterPoints = failPoints
-    .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
-    .filter((point) => point.x !== null && point.y !== null);
+  const axisPoints = useMemo(
+    () => allPoints.map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) })).filter((point) => point.x !== null),
+    [allPoints],
+  );
+  const allScatterPoints = useMemo(() => axisPoints.filter((point) => point.y !== null), [axisPoints]);
+  const scatterPoints = useMemo(
+    () => failPoints.map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) })).filter((point) => point.x !== null && point.y !== null),
+    [failPoints],
+  );
   const hasPoints = allScatterPoints.length > 0 || scatterPoints.length > 0;
   const fallbackXValues = (axisPoints.length > 0 ? axisPoints : scatterPoints).map((point) => point.x);
   const fallbackYValues = (allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y);
@@ -424,10 +427,6 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
     setTooltip(null);
   }, [allPoints, failPoints, eqpId]);
 
-  if (!hasPoints) {
-    return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
-  }
-
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
   const domain = viewDomain ?? initialDomain;
@@ -441,6 +440,24 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
   const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
   const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
   const yTicks = [viewMinY, viewMinY + (viewMaxY - viewMinY) / 2, viewMaxY];
+  const allHoverIndex = useMemo(() => {
+    const cellSize = 12;
+    const buckets = new Map();
+
+    allScatterPoints.forEach((point) => {
+      if (!isVisible(point)) return;
+      const sx = xScale(point.x);
+      const sy = yScale(point.y);
+      const key = `${Math.floor(sx / cellSize)}:${Math.floor(sy / cellSize)}`;
+      const item = { point, sx, sy };
+      const bucket = buckets.get(key);
+
+      if (bucket) bucket.push(item);
+      else buckets.set(key, [item]);
+    });
+
+    return { buckets, cellSize };
+  }, [allScatterPoints, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
   const selection = dragRange
     ? {
         x: Math.min(dragRange.startX, dragRange.endX),
@@ -492,14 +509,47 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
       ...getTooltipPosition(event),
     });
   };
+  const findCanvasPoint = (position) => {
+    const threshold = 6;
+    const thresholdSquared = threshold * threshold;
+    const cellX = Math.floor(position.x / allHoverIndex.cellSize);
+    const cellY = Math.floor(position.y / allHoverIndex.cellSize);
+    let nearest = null;
+    let nearestDistance = thresholdSquared;
+
+    for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
+      for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
+        const bucket = allHoverIndex.buckets.get(`${cellX + xOffset}:${cellY + yOffset}`);
+        if (!bucket) continue;
+
+        bucket.forEach((item) => {
+          const distance = (item.sx - position.x) ** 2 + (item.sy - position.y) ** 2;
+          if (distance <= nearestDistance) {
+            nearest = item.point;
+            nearestDistance = distance;
+          }
+        });
+      }
+    }
+
+    return nearest;
+  };
   const handleMouseDown = (event) => {
     const point = getSvgPoint(event);
+    setTooltip(null);
     setDragRange({ startX: point.x, startY: point.y, endX: point.x, endY: point.y });
   };
   const handleMouseMove = (event) => {
-    if (!dragRange) return;
     const point = getSvgPoint(event);
-    setDragRange((current) => current && { ...current, endX: point.x, endY: point.y });
+    if (dragRange) {
+      setDragRange((current) => current && { ...current, endX: point.x, endY: point.y });
+      return;
+    }
+
+    if (event.target?.closest?.('.failPoint, .okPoint')) return;
+    const canvasPoint = findCanvasPoint(point);
+    if (canvasPoint) showTooltip(event, canvasPoint);
+    else setTooltip(null);
   };
   const handleMouseUp = (event) => {
     if (!dragRange) return;
@@ -542,85 +592,111 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
     setDragRange(null);
   };
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, width, height);
+    context.save();
+    context.beginPath();
+    context.rect(padding.left - clipOverflow, padding.top - clipOverflow, plotWidth + clipOverflow * 2, plotHeight + clipOverflow * 2);
+    context.clip();
+    context.fillStyle = 'rgba(47, 103, 89, 0.16)';
+    context.beginPath();
+
+    allScatterPoints.forEach((point) => {
+      if (!isVisible(point)) return;
+      const x = xScale(point.x);
+      const y = yScale(point.y);
+      context.moveTo(x + 1.7, y);
+      context.arc(x, y, 1.7, 0, Math.PI * 2);
+    });
+
+    context.fill();
+    context.restore();
+  }, [allScatterPoints, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
+
+  if (!hasPoints) {
+    return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
+  }
+
   return (
     <div className="chartCanvas">
-      <svg
-        className="scatterChart"
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="eqp 시계열 차트"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => setDragRange(null)}
-        onDoubleClick={() => {
-          setViewDomain(null);
-          setDragRange(null);
-        }}
-      >
-        <clipPath id={clipId}>
-          <rect x={padding.left - clipOverflow} y={padding.top - clipOverflow} width={plotWidth + clipOverflow * 2} height={plotHeight + clipOverflow * 2} />
-        </clipPath>
-        {yTicks.map((tick) => (
-          <g key={tick}>
-            <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />
-            <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
-              {Math.round(tick).toLocaleString()}
+      <div className="chartPlot">
+        <canvas ref={canvasRef} className="scatterCanvas" aria-hidden="true" />
+        <svg
+          className="scatterChart"
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label="eqp 시계열 차트"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => {
+            setDragRange(null);
+            setTooltip(null);
+          }}
+          onDoubleClick={() => {
+            setViewDomain(null);
+            setDragRange(null);
+          }}
+        >
+          <clipPath id={clipId}>
+            <rect x={padding.left - clipOverflow} y={padding.top - clipOverflow} width={plotWidth + clipOverflow * 2} height={plotHeight + clipOverflow * 2} />
+          </clipPath>
+          {yTicks.map((tick) => (
+            <g key={tick}>
+              <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />
+              <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
+                {Math.round(tick).toLocaleString()}
+              </text>
+            </g>
+          ))}
+          {xTicks.map((tick, index) => (
+            <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor={index === 0 ? 'start' : index === xTicks.length - 1 ? 'end' : 'middle'}>
+              {formatShortDate(tick, axisPoints)}
             </text>
+          ))}
+          <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
+          <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+          <g clipPath={`url(#${clipId})`}>
+            {pmEvents
+              .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
+              .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
+              .map((event, index) => (
+                <g key={`${event.inprg_dt}-${index}`}>
+                  <line className="pmLine" x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
+                  <text className="pmText" x={xScale(event.x) + 4} y={padding.top + 12}>
+                    {event.work_type}
+                  </text>
+                </g>
+              ))}
+            {scatterPoints
+              .filter((point) => isVisible(point))
+              .map((point, index) => (
+                <circle
+                  key={`fail-${index}`}
+                  className={String(point.final_decision ?? '').trim().toUpperCase() === 'NG' ? 'failPoint' : 'okPoint'}
+                  cx={xScale(point.x)}
+                  cy={yScale(point.y)}
+                  r="4.7"
+                  onMouseEnter={(event) => showTooltip(event, point)}
+                  onMouseMove={(event) => showTooltip(event, point)}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              ))}
           </g>
-        ))}
-        {xTicks.map((tick, index) => (
-          <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor={index === 0 ? 'start' : index === xTicks.length - 1 ? 'end' : 'middle'}>
-            {formatShortDate(tick, axisPoints)}
-          </text>
-        ))}
-        <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
-        <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
-        <g clipPath={`url(#${clipId})`}>
-          {pmEvents
-            .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
-            .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
-            .map((event, index) => (
-              <g key={`${event.inprg_dt}-${index}`}>
-                <line className="pmLine" x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
-                <text className="pmText" x={xScale(event.x) + 4} y={padding.top + 12}>
-                  {event.work_type}
-                </text>
-              </g>
-            ))}
-          {allScatterPoints
-            .filter((point) => isVisible(point))
-            .map((point, index) => (
-              <circle
-                key={`all-${index}`}
-                className="allPoint"
-                cx={xScale(point.x)}
-                cy={yScale(point.y)}
-                r="2.7"
-                onMouseEnter={(event) => showTooltip(event, point)}
-                onMouseMove={(event) => showTooltip(event, point)}
-                onMouseLeave={() => setTooltip(null)}
-              />
-            ))}
-          {scatterPoints
-            .filter((point) => isVisible(point))
-            .map((point, index) => (
-              <circle
-                key={`fail-${index}`}
-                className={String(point.final_decision ?? '').trim().toUpperCase() === 'NG' ? 'failPoint' : 'okPoint'}
-                cx={xScale(point.x)}
-                cy={yScale(point.y)}
-                r="4.7"
-                onMouseEnter={(event) => showTooltip(event, point)}
-                onMouseMove={(event) => showTooltip(event, point)}
-                onMouseLeave={() => setTooltip(null)}
-              />
-            ))}
-        </g>
-        {selection && selection.width > 1 && selection.height > 1 && (
-          <rect className="zoomSelection" x={selection.x} y={selection.y} width={selection.width} height={selection.height} />
-        )}
-      </svg>
+          {selection && selection.width > 1 && selection.height > 1 && (
+            <rect className="zoomSelection" x={selection.x} y={selection.y} width={selection.width} height={selection.height} />
+          )}
+        </svg>
+      </div>
       {tooltip && (
         <div className="tooltipPanel" style={{ left: tooltip.x, top: tooltip.y }}>
           {tooltip.rows.map(([label, value]) => (
@@ -662,7 +738,7 @@ function EquipmentChart({ row, eqpId }) {
         <div>
           <strong>{eqpId}</strong>
           <span>
-            {row.mainStep} / {getChartMetStep(row)}
+            {getChartHeading(row)}
           </span>
         </div>
         <span>{chartState.loading ? 'loading' : chartState.error ? 'read failed' : `date ${chartState.data.latestDate}`}</span>
@@ -694,7 +770,7 @@ function EmptyChartState({ selectedRow }) {
       <div className="chartTitle">
         <div>
           <strong>eqp별 Chart</strong>
-          <span>{selectedRow ? `${selectedRow.mainStep} / ${getChartMetStep(selectedRow)}` : 'met_step 선택 필요'}</span>
+          <span>{selectedRow ? getChartHeading(selectedRow) : 'step 선택 필요'}</span>
         </div>
         <span>no mock data</span>
       </div>
@@ -705,42 +781,6 @@ function EmptyChartState({ selectedRow }) {
             : '좌측에서 main_step을 펼친 뒤 met_step을 선택하면 eqp별 차트 영역이 표시됩니다.'}
         </p>
       </div>
-    </div>
-  );
-}
-
-function DataSourceTable({ sources, diagnostics }) {
-  return (
-    <div className="tableShell compact">
-      <table>
-        <thead>
-          <tr>
-            <th>파일</th>
-            <th>필수 컬럼</th>
-            <th>읽은 행</th>
-            <th>상태</th>
-          </tr>
-        </thead>
-        <tbody>
-          {DATA_SOURCES.map((source) => {
-            const status = sources.find((item) => item.key === source.key);
-            return (
-            <tr key={source.key}>
-              <td>
-                <strong>{source.label}</strong>
-              </td>
-              <td>{source.requiredColumns.join(', ')}</td>
-              <td>{Number(diagnostics?.inputRows?.[source.key] ?? 0).toLocaleString()}</td>
-              <td>
-                <span className={status?.exists && status?.readable ? 'readOk' : 'readFail'}>
-                  {status?.exists && status?.readable ? '읽기 가능' : status?.exists ? '권한 확인 필요' : '파일 없음'}
-                </span>
-              </td>
-            </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -810,32 +850,32 @@ function App() {
         diagnostics={loadState.diagnostics}
       />
 
-      <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0} />
+      <div className="topMetrics">
+        <Metric label="메인 스탭" value={mainStepGroups.length.toLocaleString()} />
+        <Metric label="MET 스탭" value={metStepCount.toLocaleString()} />
+        <Metric label="감지 댓수" value={eqpCount.toLocaleString()} />
+      </div>
 
       <section className="workspace">
-        <MainStepTree
-          groups={mainStepGroups}
-          selectedMetStepKey={selectedMetStep?.key}
-          onSelectMetStep={setSelectedMetStep}
-          loading={loadState.loading}
-          error={loadState.error}
-          diagnostics={loadState.diagnostics}
-        />
+        <div className="leftRail">
+          <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0} />
+          <MainStepTree
+            groups={mainStepGroups}
+            selectedMetStepKey={selectedMetStep?.key}
+            onSelectMetStep={setSelectedMetStep}
+            loading={loadState.loading}
+            error={loadState.error}
+            diagnostics={loadState.diagnostics}
+          />
+        </div>
 
         <section className="detailPanel">
           <div className="detailHeader">
             <div>
               <p className="eyebrow">Equipment Charts</p>
-              <h2>{selectedMetStep ? `${selectedMetStep.mainStep} / ${getChartMetStep(selectedMetStep)}` : CONFIG.lineName}</h2>
+              <h2>{getChartHeading(selectedMetStep)}</h2>
             </div>
             <div className="statusChip">{loadState.error ? '파일 읽기 실패' : loadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
-          </div>
-
-          <div className="metricsGrid">
-            <Metric label="메인 스탭" value={mainStepGroups.length.toLocaleString()} />
-            <Metric label="MET 스탭" value={metStepCount.toLocaleString()} />
-            <Metric label="감지 Chamber" value={eqpCount.toLocaleString()} />
-            <Metric label="읽기 가능 소스" value={`${loadState.sources.filter((source) => source.exists && source.readable).length}/${DATA_SOURCES.length}`} />
           </div>
 
           <div className="chartGrid">
@@ -845,8 +885,6 @@ function App() {
               <EmptyChartState selectedRow={selectedMetStep} />
             )}
           </div>
-
-          <DataSourceTable sources={loadState.sources} diagnostics={loadState.diagnostics} />
         </section>
       </section>
       <button className="scrollTopButton" type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>

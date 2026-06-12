@@ -97,21 +97,6 @@ code {
   white-space: nowrap;
 }
 
-.sdwtBar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  width: 100%;
-  max-width: none;
-  margin: 0 auto 18px;
-  border: 1px solid #d9e0dc;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 16px 18px;
-  box-shadow: 0 18px 46px rgba(36, 51, 45, 0.08);
-}
-
 .sourceBanner {
   display: flex;
   align-items: center;
@@ -146,33 +131,55 @@ code {
   color: #873f20;
 }
 
-.segmentedControl {
+.topMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: none;
+  margin: 0 auto 18px;
+}
+
+.leftRail {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.sdwtButtons {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  align-items: center;
   gap: 7px;
+  min-width: 0;
 }
 
-.segmentedControl button {
-  min-height: 36px;
+.sdwtButtons button {
+  min-height: 34px;
   border: 1px solid #cbd7d0;
-  border-radius: 8px;
-  background: #fbfcfa;
+  border-radius: 7px;
+  background: #ffffff;
   color: #20302a;
-  padding: 8px 13px;
-  font-size: 13px;
+  padding: 7px 12px;
+  font-size: 12px;
   font-weight: 850;
   cursor: pointer;
+  box-shadow: 0 8px 20px rgba(36, 51, 45, 0.06);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
 }
 
-.segmentedControl button:hover:not(:disabled),
-.segmentedControl button.active {
+.sdwtButtons button:hover:not(:disabled),
+.sdwtButtons button.active {
   border-color: #1f6f5b;
-  background: #e8f6ee;
+  background: #dff4e8;
   color: #12352b;
 }
 
-.segmentedControl button:disabled {
+.sdwtButtons button:disabled {
   cursor: not-allowed;
   opacity: 0.56;
 }
@@ -404,13 +411,6 @@ code {
   margin-bottom: 18px;
 }
 
-.metricsGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
 .metric {
   min-height: 74px;
   border: 1px solid #dce4df;
@@ -604,6 +604,8 @@ tr:last-child td {
 }
 
 .scatterChart {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: auto;
@@ -618,6 +620,21 @@ tr:last-child td {
   width: 90%;
   margin: 0 auto;
   padding: 8px 12px 0;
+}
+
+.chartPlot {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 720 / 238;
+  min-height: 238px;
+}
+
+.scatterCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .zoomSelection {
@@ -666,14 +683,6 @@ tr:last-child td {
   stroke: #ffffff;
   stroke-width: 1.2;
   opacity: 0.82;
-  cursor: crosshair;
-}
-
-.allPoint {
-  fill: #2f6759;
-  stroke: #ffffff;
-  stroke-width: 0.8px;
-  opacity: 0.52;
   cursor: crosshair;
 }
 
@@ -769,11 +778,6 @@ tr:last-child td {
     flex-direction: column;
   }
 
-  .sdwtBar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .sourceBanner {
     align-items: stretch;
     flex-direction: column;
@@ -783,7 +787,7 @@ tr:last-child td {
     justify-content: flex-start;
   }
 
-  .segmentedControl {
+  .sdwtButtons {
     justify-content: flex-start;
   }
 
@@ -803,7 +807,7 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 
-  .metricsGrid,
+  .topMetrics,
   .logicGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -819,7 +823,7 @@ tr:last-child td {
   }
 
   .mainStepList,
-  .metricsGrid,
+  .topMetrics,
   .chartGrid,
   .logicGrid {
     grid-template-columns: 1fr;
