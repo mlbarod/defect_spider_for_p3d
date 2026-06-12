@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v7"
+LOADER_VERSION = "file-loader-v9"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 COMPACT_TIME_FORMATS = (
@@ -818,8 +818,9 @@ def command_chart(args):
     all_background = exclude_frame_eqp(all_df, args.eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
-    chart_fab_values_center = numeric_column_values(all_background, "fab_value") + numeric_column_values(fail_for_eqp, "fab_value")
-    chart_fab_values_std = numeric_column_values(all_background, "fab_value") + numeric_column_values(std_for_eqp, "fab_value")
+    main_all_fab_values = numeric_column_values(all_df, "fab_value")
+    chart_fab_values_center = main_all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
+    chart_fab_values_std = main_all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
 
     pm_events = []
@@ -862,14 +863,14 @@ def command_chart(args):
             "domains": {
                 "x": time_domain(all_df, "tkout_time"),
                 "yFull": numeric_domain(chart_fab_values),
-                "yInitial": outlier_display_domain(chart_fab_values),
+                "yInitial": outlier_display_domain(main_all_fab_values),
                 "center": {
                     "yFull": numeric_domain(chart_fab_values_center),
-                    "yInitial": outlier_display_domain(chart_fab_values_center),
+                    "yInitial": outlier_display_domain(main_all_fab_values),
                 },
                 "std": {
                     "yFull": numeric_domain(chart_fab_values_std),
-                    "yInitial": outlier_display_domain(chart_fab_values_std),
+                    "yInitial": outlier_display_domain(main_all_fab_values),
                 },
             },
             "allPoints": chart_records(all_background, None),
