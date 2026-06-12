@@ -165,6 +165,7 @@ function groupRowsByMainStep(rows) {
   rows.forEach((row) => {
     const current = grouped.get(row.mainStep) ?? {
       mainStep: row.mainStep,
+      stepSeq: row.stepSeq ?? row.mainStep,
       stepDesc: row.stepDesc,
       sdwt: row.sdwt,
       metSteps: [],
@@ -173,6 +174,7 @@ function groupRowsByMainStep(rows) {
       eqpCount: 0,
     };
 
+    if (row.stepSeq && !current.stepSeq) current.stepSeq = row.stepSeq;
     if (row.stepDesc && !current.stepDesc) current.stepDesc = row.stepDesc;
     if (row.sdwt && !current.sdwt) current.sdwt = row.sdwt;
     current.metSteps.push(row);
@@ -304,7 +306,10 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
                     ▸
                   </span>
                   <span className="mainStepTitle">
-                    <span className="stepName">{group.stepDesc || 'step_desc 확인 필요'}</span>
+                    <span className="stepNameRow">
+                      <span className="stepName">{group.stepDesc || 'step_desc 확인 필요'}</span>
+                      <span className="stepSeqBadge">{group.stepSeq || group.mainStep}</span>
+                    </span>
                     <span className="stepTrend">{group.mainStep}</span>
                   </span>
                   <span className="mainScore">{group.metSteps.length} met</span>
@@ -388,12 +393,13 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
   const axisPoints = allPoints
     .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
     .filter((point) => point.x !== null);
+  const allScatterPoints = axisPoints.filter((point) => point.y !== null);
   const scatterPoints = failPoints
     .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
     .filter((point) => point.x !== null && point.y !== null);
-  const hasPoints = scatterPoints.length > 0;
+  const hasPoints = allScatterPoints.length > 0 || scatterPoints.length > 0;
   const fallbackXValues = (axisPoints.length > 0 ? axisPoints : scatterPoints).map((point) => point.x);
-  const fallbackYValues = scatterPoints.map((point) => point.y);
+  const fallbackYValues = (allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y);
   const resolveRange = (range, fallbackValues) => {
     const minValue = toNumber(range?.min);
     const maxValue = toNumber(range?.max);
@@ -593,6 +599,20 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
                   {event.work_type}
                 </text>
               </g>
+            ))}
+          {allScatterPoints
+            .filter((point) => isVisible(point))
+            .map((point, index) => (
+              <circle
+                key={`all-${index}`}
+                className="allPoint"
+                cx={xScale(point.x)}
+                cy={yScale(point.y)}
+                r="2.7"
+                onMouseEnter={(event) => showTooltip(event, point)}
+                onMouseMove={(event) => showTooltip(event, point)}
+                onMouseLeave={() => setTooltip(null)}
+              />
             ))}
           {scatterPoints
             .filter((point) => isVisible(point))
@@ -874,6 +894,9 @@ function App() {
           <DataSourceTable sources={loadState.sources} diagnostics={loadState.diagnostics} />
         </section>
       </section>
+      <button className="scrollTopButton" type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+        TOP
+      </button>
     </main>
   );
 }

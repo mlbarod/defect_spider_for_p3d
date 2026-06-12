@@ -195,6 +195,8 @@ code {
 }
 
 .sidePanel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 680px;
   overflow: hidden;
@@ -218,6 +220,11 @@ code {
   display: grid;
   gap: 10px;
   margin-top: 18px;
+  min-height: 0;
+  max-height: min(620px, calc(100vh - 260px));
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .emptyPanel {
@@ -242,37 +249,58 @@ code {
   line-height: 1.45;
 }
 
+.stepNameRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
 .stepName {
+  min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 850;
+  line-height: 1.22;
 }
 
 .stepTrend {
   color: #426257;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
-  line-height: 1.35;
+  line-height: 1.2;
+}
+
+.stepSeqBadge {
+  flex: 0 0 auto;
+  border: 1px solid #c9d7d0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #315b50;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .mainStepGroup {
   display: grid;
-  gap: 10px;
+  gap: 7px;
   width: 100%;
   min-width: 0;
   border: 1px solid #d7dfda;
   border-radius: 8px;
   background: #fbfcfa;
   color: #182026;
-  padding: 13px;
+  padding: 10px;
 }
 
 .mainStepToggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -295,7 +323,7 @@ code {
 
 .mainStepTitle {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
   min-width: 0;
 }
@@ -318,7 +346,7 @@ code {
 .mainScore {
   flex: 0 0 auto;
   color: #4f655d;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -674,6 +702,14 @@ tr:last-child td {
   cursor: crosshair;
 }
 
+.allPoint {
+  fill: #2f6759;
+  stroke: #ffffff;
+  stroke-width: 0.8px;
+  opacity: 0.38;
+  cursor: crosshair;
+}
+
 .okPoint {
   fill: #2f6fc0;
   stroke: #ffffff;
@@ -734,6 +770,28 @@ tr:last-child td {
   font-weight: 700;
 }
 
+.scrollTopButton {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 20;
+  width: 48px;
+  height: 40px;
+  border: 1px solid #98aaa2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18342d;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 14px 34px rgba(23, 34, 30, 0.18);
+}
+
+.scrollTopButton:hover {
+  border-color: #1f6f5b;
+  background: #e8f6ee;
+}
+
 @media (max-width: 980px) {
   .app {
     padding: 14px;
@@ -768,6 +826,10 @@ tr:last-child td {
 
   .sidePanel {
     min-height: auto;
+  }
+
+  .mainStepList {
+    max-height: 360px;
   }
 
   .mainStepList {
