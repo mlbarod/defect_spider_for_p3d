@@ -367,60 +367,67 @@ function formatShortDate(value, points = []) {
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-function splitLotWf(value) {
-  const text = String(value ?? '').trim();
-  if (!text) return { lot: '', wf: '' };
-  const separator = text.includes('/') ? '/' : text.includes('|') ? '|' : text.includes(',') ? ',' : text.includes('_') ? '_' : '';
-  if (!separator) return { lot: text, wf: text };
-  const parts = text.split(separator).map((part) => part.trim()).filter(Boolean);
-  if (parts.length < 2) return { lot: text, wf: text };
-  return { lot: parts.slice(0, -1).join(separator), wf: parts.at(-1) };
-}
-
-function getPointLabel(point, fallbackEqpId) {
-  const lotWfParts = splitLotWf(point.lot_wf);
-  const lot = point.lot ?? point.lot_id ?? point.lotId ?? lotWfParts.lot;
-  const wf = point.wf ?? point.wf_id ?? point.wafer ?? point.wafer_id ?? lotWfParts.wf;
-  const eqp = point.eqp_id ?? point.eqpid ?? point.eqp_ch ?? fallbackEqpId;
-  const time = point.tkout_time_text ?? point.tkout_time ?? point.time ?? '';
-
+function getPointTooltipRows(point) {
   return [
-    `eqpid: ${eqp || '-'}`,
-    `lot: ${lot || '-'}`,
-    `wf: ${wf || '-'}`,
-    `time: ${time || '-'}`,
-  ].join('\n');
+    ['lot_wf', point.lot_wf],
+    ['tkout_time', point.tkout_time_text || point.tkout_time],
+    ['eqp_ch', point.eqp_ch],
+    ['step_seq', point.step_seq],
+  ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
-function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
+function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
+  const [tooltip, setTooltip] = useState(null);
   const width = 720;
   const height = 238;
   const padding = { left: 56, right: 18, top: 22, bottom: 42 };
   const clipOverflow = 7;
   const clipId = `plot-${String(eqpId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-  const points = [...allPoints, ...failPoints]
+  const axisPoints = allPoints
+    .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
+    .filter((point) => point.x !== null);
+  const scatterPoints = failPoints
     .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
     .filter((point) => point.x !== null && point.y !== null);
-  const hasPoints = points.length > 0;
-  const xValues = points.map((point) => point.x);
-  const yValues = points.map((point) => point.y);
-  const minX = hasPoints ? Math.min(...xValues) : 0;
-  const maxX = hasPoints ? Math.max(...xValues) : 1;
-  const minY = hasPoints ? Math.min(...yValues) : 0;
-  const maxY = hasPoints ? Math.max(...yValues) : 1;
-  const yPad = Math.max(1, (maxY - minY) * 0.12);
+  const hasPoints = scatterPoints.length > 0;
+  const fallbackXValues = (axisPoints.length > 0 ? axisPoints : scatterPoints).map((point) => point.x);
+  const fallbackYValues = scatterPoints.map((point) => point.y);
+  const resolveRange = (range, fallbackValues) => {
+    const minValue = toNumber(range?.min);
+    const maxValue = toNumber(range?.max);
+    if (minValue !== null && maxValue !== null) return { min: minValue, max: maxValue };
+    if (fallbackValues.length > 0) return { min: Math.min(...fallbackValues), max: Math.max(...fallbackValues) };
+    return { min: 0, max: 1 };
+  };
+  const padYRange = (range) => {
+    const span = Math.max(0, range.max - range.min);
+    const yPad = Math.max(1, span * 0.12);
+    return {
+      minY: range.min - yPad,
+      maxY: range.max + yPad,
+    };
+  };
+  const xRange = resolveRange(domains?.x, fallbackXValues);
+  const yFullRange = resolveRange(domains?.yFull, fallbackYValues);
+  const yInitialRange = resolveRange(domains?.yInitial, fallbackYValues);
+  const normalizedXRange = xRange.max === xRange.min ? { min: xRange.min, max: xRange.max + 1 } : xRange;
   const fullDomain = {
-    minX,
-    maxX,
-    minY: minY - yPad,
-    maxY: maxY + yPad,
+    minX: normalizedXRange.min,
+    maxX: normalizedXRange.max,
+    ...padYRange(yFullRange),
+  };
+  const initialDomain = {
+    minX: normalizedXRange.min,
+    maxX: normalizedXRange.max,
+    ...padYRange(yInitialRange),
   };
 
   useEffect(() => {
     setViewDomain(null);
     setDragRange(null);
+    setTooltip(null);
   }, [allPoints, failPoints, eqpId]);
 
   if (!hasPoints) {
@@ -429,7 +436,7 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
 
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
-  const domain = viewDomain ?? fullDomain;
+  const domain = viewDomain ?? initialDomain;
   const { minX: viewMinX, maxX: viewMaxX, minY: viewMinY, maxY: viewMaxY } = domain;
   const xScale = (value) => padding.left + ((value - viewMinX) / Math.max(1, viewMaxX - viewMinX)) * plotWidth;
   const yScale = (value) => padding.top + plotHeight - ((value - viewMinY) / Math.max(1, viewMaxY - viewMinY)) * plotHeight;
@@ -475,6 +482,22 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
       y: clampY(((event.clientY - rect.top) / rect.height) * height),
     };
   };
+  const getTooltipPosition = (event) => {
+    const container = event.currentTarget.ownerSVGElement?.parentElement;
+    const rect = container?.getBoundingClientRect();
+    if (!rect) return { x: 12, y: 12 };
+    const maxLeft = Math.max(8, rect.width - 196);
+    return {
+      x: Math.min(maxLeft, Math.max(8, event.clientX - rect.left + 12)),
+      y: Math.max(8, event.clientY - rect.top + 12),
+    };
+  };
+  const showTooltip = (event, point) => {
+    setTooltip({
+      rows: getPointTooltipRows(point),
+      ...getTooltipPosition(event),
+    });
+  };
   const handleMouseDown = (event) => {
     const point = getSvgPoint(event);
     setDragRange({ startX: point.x, startY: point.y, endX: point.x, endY: point.y });
@@ -503,6 +526,8 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
 
       if (isZoomInDrag) {
         setViewDomain(clampDomain(selected));
+      } else if (!viewDomain) {
+        setViewDomain(fullDomain);
       } else {
         const currentSpanX = viewMaxX - viewMinX;
         const currentSpanY = viewMaxY - viewMinY;
@@ -552,7 +577,7 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
         ))}
         {xTicks.map((tick, index) => (
           <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor={index === 0 ? 'start' : index === xTicks.length - 1 ? 'end' : 'middle'}>
-            {formatShortDate(tick, points)}
+            {formatShortDate(tick, axisPoints)}
           </text>
         ))}
         <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
@@ -569,33 +594,34 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
                 </text>
               </g>
             ))}
-          {allPoints
-            .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
-            .filter((point) => point.x !== null && point.y !== null && isVisible(point))
-            .map((point, index) => (
-              <circle key={`all-${index}`} className="allPoint" cx={xScale(point.x)} cy={yScale(point.y)} r="2.6">
-                <title>{getPointLabel(point, eqpId)}</title>
-              </circle>
-            ))}
-          {failPoints
-            .map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
-            .filter((point) => point.x !== null && point.y !== null && isVisible(point))
+          {scatterPoints
+            .filter((point) => isVisible(point))
             .map((point, index) => (
               <circle
                 key={`fail-${index}`}
-                className={point.final_decision === 'OK' ? 'okPoint' : 'failPoint'}
+                className={String(point.final_decision ?? '').trim().toUpperCase() === 'NG' ? 'failPoint' : 'okPoint'}
                 cx={xScale(point.x)}
                 cy={yScale(point.y)}
                 r="4.7"
-              >
-                <title>{getPointLabel(point, eqpId)}</title>
-              </circle>
+                onMouseEnter={(event) => showTooltip(event, point)}
+                onMouseMove={(event) => showTooltip(event, point)}
+                onMouseLeave={() => setTooltip(null)}
+              />
             ))}
         </g>
         {selection && selection.width > 1 && selection.height > 1 && (
           <rect className="zoomSelection" x={selection.x} y={selection.y} width={selection.width} height={selection.height} />
         )}
       </svg>
+      {tooltip && (
+        <div className="tooltipPanel" style={{ left: tooltip.x, top: tooltip.y }}>
+          {tooltip.rows.map(([label, value]) => (
+            <span key={label}>
+              <strong>{label}</strong> {value}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -663,6 +689,7 @@ function EquipmentChart({ row, eqpId }) {
             allPoints={chartState.data.allPoints ?? []}
             failPoints={chartState.data.failPoints ?? []}
             pmEvents={chartState.data.pmEvents ?? []}
+            domains={chartState.data.domains ?? null}
             eqpId={eqpId}
           />
           <div className="chartMeta">

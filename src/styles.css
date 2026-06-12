@@ -606,6 +606,7 @@ tr:last-child td {
 }
 
 .chartCanvas {
+  position: relative;
   display: grid;
   width: 90%;
   margin: 0 auto;
@@ -673,12 +674,6 @@ tr:last-child td {
   cursor: crosshair;
 }
 
-.allPoint {
-  fill: #2f6759;
-  opacity: 0.16;
-  cursor: crosshair;
-}
-
 .okPoint {
   fill: #2f6fc0;
   stroke: #ffffff;
@@ -715,21 +710,22 @@ tr:last-child td {
 
 .tooltipPanel {
   position: absolute;
-  right: 12px;
-  top: 48px;
+  z-index: 3;
   display: grid;
   gap: 4px;
-  min-width: 172px;
+  min-width: 184px;
   border: 1px solid #cad7d0;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
   padding: 12px;
   color: #26322e;
+  pointer-events: none;
   box-shadow: 0 12px 32px rgba(23, 34, 30, 0.12);
 }
 
 .tooltipPanel strong {
-  font-size: 14px;
+  margin-right: 6px;
+  font-size: 12px;
 }
 
 .tooltipPanel span {

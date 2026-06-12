@@ -2,6 +2,7 @@
 import argparse
 import ast
 import json
+import math
 import os
 import sys
 from datetime import date, datetime
@@ -15,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v4"
+LOADER_VERSION = "file-loader-v5"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 COMPACT_TIME_FORMATS = (
@@ -297,6 +298,14 @@ def split_p3d_drawing_df(dataframe):
 
 def records(dataframe):
     return frame_records(dataframe)
+
+
+def column_values(dataframe, column):
+    if column not in frame_columns(dataframe):
+        return []
+    if is_polars_frame(dataframe):
+        return dataframe.select(column).to_series().to_list()
+    return dataframe[column].tolist()
 
 
 def is_missing_value(value):
@@ -677,6 +686,62 @@ def chart_records(dataframe, limit=900):
     return add_time_fields(sample_records(select_columns(dataframe), limit), "tkout_time")
 
 
+def numeric_domain(values):
+    if not values:
+        return None
+    return {"min": min(values), "max": max(values)}
+
+
+def numeric_column_values(dataframe, column):
+    values = []
+    for value in column_values(dataframe, column):
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            values.append(number)
+    return values
+
+
+def percentile(sorted_values, ratio):
+    if not sorted_values:
+        return None
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    position = (len(sorted_values) - 1) * ratio
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return sorted_values[lower]
+    weight = position - lower
+    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
+
+
+def outlier_filtered_values(values):
+    if len(values) < 4:
+        return values
+
+    sorted_values = sorted(values)
+    q1 = percentile(sorted_values, 0.25)
+    q3 = percentile(sorted_values, 0.75)
+    iqr = q3 - q1
+    if iqr <= 0:
+        return values
+
+    lower = q1 - iqr * 1.5
+    upper = q3 + iqr * 1.5
+    filtered = [value for value in values if lower <= value <= upper]
+    return filtered or values
+
+
+def time_domain(dataframe, column):
+    values = [value for value in (time_ms(value) for value in column_values(dataframe, column)) if value is not None]
+    if not values:
+        return None
+    return {"min": min(values), "max": max(values)}
+
+
 def command_chart(args):
     resolved_paths = resolve_chart_paths(args.main_step, args.chart_met_step)
     all_path = resolved_paths["allPath"]
@@ -688,6 +753,7 @@ def command_chart(args):
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
+    fail_fab_values = numeric_column_values(fail_for_eqp, "fab_value")
 
     pm_events = []
     if os.path.isfile(CONFIG["pmCodePath"]) and os.access(CONFIG["pmCodePath"], os.R_OK):
@@ -722,6 +788,11 @@ def command_chart(args):
                 "pm": CONFIG["pmCodePath"],
             },
             "latestDate": resolved_paths["latestDate"],
+            "domains": {
+                "x": time_domain(all_df, "tkout_time"),
+                "yFull": numeric_domain(fail_fab_values),
+                "yInitial": numeric_domain(outlier_filtered_values(fail_fab_values)),
+            },
             "allPoints": chart_records(all_df),
             "failPoints": chart_records(fail_for_eqp, 500),
             "pmEvents": pm_events,
