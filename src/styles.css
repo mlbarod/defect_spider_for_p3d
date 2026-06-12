@@ -264,14 +264,6 @@ code {
   line-height: 1.22;
 }
 
-.stepTrend {
-  color: #426257;
-  overflow-wrap: anywhere;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
 .stepSeqBadge {
   flex: 0 0 auto;
   border: 1px solid #c9d7d0;
@@ -587,19 +579,6 @@ tr:last-child td {
   line-height: 1.5;
 }
 
-.pathList {
-  display: grid;
-  gap: 8px;
-}
-
-.pathList code {
-  display: block;
-  border: 1px solid #d8e1dc;
-  border-radius: 7px;
-  background: #f7faf8;
-  padding: 10px;
-}
-
 .chartTitle {
   display: flex;
   align-items: flex-start;
@@ -649,18 +628,6 @@ tr:last-child td {
   pointer-events: none;
 }
 
-.chartMeta {
-  display: grid;
-  gap: 6px;
-  border-top: 1px solid #e3eae6;
-  padding: 10px 12px 12px;
-}
-
-.chartMeta code {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
 .emptyMiniState {
   display: grid;
   min-height: 250px;
@@ -706,7 +673,7 @@ tr:last-child td {
   fill: #2f6759;
   stroke: #ffffff;
   stroke-width: 0.8px;
-  opacity: 0.38;
+  opacity: 0.52;
   cursor: crosshair;
 }
 
@@ -772,24 +739,24 @@ tr:last-child td {
 
 .scrollTopButton {
   position: fixed;
-  right: 22px;
-  bottom: 22px;
+  right: 26px;
+  bottom: 26px;
   z-index: 20;
-  width: 48px;
-  height: 40px;
-  border: 1px solid #98aaa2;
+  width: 66px;
+  height: 52px;
+  border: 2px solid #80b96e;
   border-radius: 8px;
-  background: #ffffff;
-  color: #18342d;
-  font-size: 12px;
+  background: #d9f7c8;
+  color: #1f4d19;
+  font-size: 14px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 14px 34px rgba(23, 34, 30, 0.18);
+  box-shadow: 0 16px 38px rgba(44, 94, 34, 0.28);
 }
 
 .scrollTopButton:hover {
-  border-color: #1f6f5b;
-  background: #e8f6ee;
+  border-color: #5a9d46;
+  background: #c9f0af;
 }
 
 @media (max-width: 980px) {

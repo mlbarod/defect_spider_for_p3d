@@ -295,6 +295,25 @@ def filter_frame_eqp(dataframe, eqp_id):
     return dataframe[mask]
 
 
+def exclude_frame_eqp(dataframe, eqp_id):
+    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch") if column in frame_columns(dataframe)]
+    if not eqp_columns:
+        return dataframe
+    if is_polars_frame(dataframe):
+        pl = load_polars()
+        expression = None
+        for column in eqp_columns:
+            condition = pl.col(column).cast(pl.Utf8).fill_null("") != str(eqp_id)
+            expression = condition if expression is None else expression & condition
+        return dataframe.filter(expression)
+
+    mask = None
+    for column in eqp_columns:
+        condition = dataframe[column].astype(str) != str(eqp_id)
+        mask = condition if mask is None else mask & condition
+    return dataframe[mask]
+
+
 def select_frame_columns(dataframe, columns):
     existing = [column for column in columns if column in frame_columns(dataframe)]
     if is_polars_frame(dataframe):
@@ -662,6 +681,8 @@ def resolve_chart_paths(main_step, chart_met_step):
 
 
 def sample_records(dataframe, limit=900):
+    if limit is None:
+        return records(dataframe)
     height = frame_height(dataframe)
     if height <= limit:
         return records(dataframe)
@@ -768,9 +789,9 @@ def command_chart(args):
 
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")
-    all_for_eqp = filter_frame_eqp(all_df, args.eqp_id)
+    all_background = exclude_frame_eqp(all_df, args.eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
-    chart_fab_values = numeric_column_values(all_for_eqp, "fab_value") + numeric_column_values(fail_for_eqp, "fab_value")
+    chart_fab_values = numeric_column_values(all_background, "fab_value") + numeric_column_values(fail_for_eqp, "fab_value")
 
     pm_events = []
     if os.path.isfile(CONFIG["pmCodePath"]) and os.access(CONFIG["pmCodePath"], os.R_OK):
@@ -795,7 +816,7 @@ def command_chart(args):
                 "resolvedPaths": resolved_paths,
                 "inputRows": {
                     "all": frame_height(all_df),
-                    "allForEqp": frame_height(all_for_eqp),
+                    "allBackground": frame_height(all_background),
                     "fail": frame_height(fail_df),
                     "failForEqp": frame_height(fail_for_eqp),
                 },
@@ -811,8 +832,8 @@ def command_chart(args):
                 "yFull": numeric_domain(chart_fab_values),
                 "yInitial": numeric_domain(outlier_filtered_values(chart_fab_values)),
             },
-            "allPoints": chart_records(all_for_eqp),
-            "failPoints": chart_records(fail_for_eqp, 500),
+            "allPoints": chart_records(all_background, None),
+            "failPoints": chart_records(fail_for_eqp, None),
             "pmEvents": pm_events,
         }
     )

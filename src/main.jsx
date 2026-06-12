@@ -90,6 +90,10 @@ async function fetchJson(url, options) {
   return payload;
 }
 
+function hideFilePaths(value) {
+  return String(value ?? '').replace(/(?:\/[^\s,)\]}]+)+/g, '[숨김]').replace(/[A-Za-z]:\\[^\s,)\]}]+/g, '[숨김]');
+}
+
 function getSdwtTokens(value) {
   if (!value || typeof value !== 'string') return [];
 
@@ -137,20 +141,6 @@ function getChartMetStep(row) {
   const metStep = metItem ? `${metStepNo}_${metItem}` : metStepNo;
 
   return isMainLine ? `${metStep}_main` : metStep;
-}
-
-function getChartPaths(row, eqpId = '{eqp_id}') {
-  const chartMetStep = getChartMetStep(row);
-  const latestDate = row.latestDate ?? '{latestDate}';
-  const mainStepPath = row.mainStepPath ?? row.mainStep;
-  const base = `${folderPath}/${mainStepPath}/${chartMetStep}/${latestDate}`;
-
-  return {
-    eqpId,
-    all: `${base}/${isMainLine ? 'main_all' : 'all'}_${mainStepPath}.parquet`,
-    fail: `${base}/${isMainLine ? 'main_fail' : 'fail'}_${mainStepPath}.parquet`,
-    pm: CONFIG.pmCodePath,
-  };
 }
 
 function filterRowsBySdwt(rows, selectedSdwt) {
@@ -207,7 +197,7 @@ function SourceStatusBanner({ loading, error, sources, diagnostics }) {
         <h2>{loading ? '원본 파일 읽는 중' : error ? '원본 파일 읽기 실패' : '원본 파일 연결됨'}</h2>
       </div>
       <div className="sourceBannerText">
-        {error ? <strong>{error}</strong> : <span>웹 UI가 Vite API를 통해 표시된 원본 경로의 파일을 읽습니다.</span>}
+        {error ? <strong>{hideFilePaths(error)}</strong> : <span>웹 UI가 Vite API를 통해 파일 상태를 확인합니다.</span>}
         <span>
           loader {diagnostics?.version ?? 'unknown'} / 입력 {Object.values(diagnostics?.inputRows ?? {}).reduce((sum, value) => sum + Number(value || 0), 0).toLocaleString()}행 / 표시 {Number(diagnostics?.outputRows ?? 0).toLocaleString()}건
         </span>
@@ -216,7 +206,7 @@ function SourceStatusBanner({ loading, error, sources, diagnostics }) {
             미확인 파일 {missingSources.length}개: {missingSources.map((source) => source.label).join(', ')}
           </span>
         )}
-        {warningCount > 0 && <span>경고 {warningCount}개: {diagnostics.warnings.slice(0, 2).join(' / ')}</span>}
+        {warningCount > 0 && <span>경고 {warningCount}개: {diagnostics.warnings.slice(0, 2).map(hideFilePaths).join(' / ')}</span>}
       </div>
     </section>
   );
@@ -280,13 +270,12 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
           <span>
             {loading
               ? '원본 파일을 읽고 있습니다.'
-              : error ||
+              : hideFilePaths(error) ||
                 `파일 입력 ${Object.values(diagnostics?.inputRows ?? {}).reduce((sum, value) => sum + Number(value || 0), 0).toLocaleString()}행 중 화면에 표시할 대상이 0건입니다.`}
           </span>
           {diagnostics?.warnings?.slice(0, 3).map((warning) => (
-            <span key={warning}>{warning}</span>
+            <span key={warning}>{hideFilePaths(warning)}</span>
           ))}
-          <code>{DATA_SOURCES[3].path}</code>
         </div>
       ) : (
         <div className="mainStepList">
@@ -310,7 +299,6 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
                       <span className="stepName">{group.stepDesc || 'step_desc 확인 필요'}</span>
                       <span className="stepSeqBadge">{group.stepSeq || group.mainStep}</span>
                     </span>
-                    <span className="stepTrend">{group.mainStep}</span>
                   </span>
                   <span className="mainScore">{group.metSteps.length} met</span>
                 </button>
@@ -647,7 +635,6 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
 }
 
 function EquipmentChart({ row, eqpId }) {
-  const paths = getChartPaths(row, eqpId);
   const [chartState, setChartState] = useState({ loading: true, error: '', data: null });
 
   useEffect(() => {
@@ -686,45 +673,22 @@ function EquipmentChart({ row, eqpId }) {
         </div>
       ) : chartState.error ? (
         <div className="emptyChartBody">
-          <p>{chartState.error}</p>
-          {chartState.data?.diagnostics?.resolvedPaths?.attempts && (
-            <div className="pathList">
-              {(chartState.data.diagnostics.resolvedPaths.attempts.mainDirs ?? []).slice(0, 3).map((path) => (
-                <code key={path}>{path}</code>
-              ))}
-              {(chartState.data.diagnostics.resolvedPaths.attempts.metDirs ?? []).slice(0, 3).map((path) => (
-                <code key={path}>{path}</code>
-              ))}
-            </div>
-          )}
-          <div className="pathList">
-            <code>{paths.all}</code>
-            <code>{paths.fail}</code>
-            <code>{paths.pm}</code>
-          </div>
+          <p>{hideFilePaths(chartState.error)}</p>
         </div>
       ) : (
-        <>
-          <ScatterChart
-            allPoints={chartState.data.allPoints ?? []}
-            failPoints={chartState.data.failPoints ?? []}
-            pmEvents={chartState.data.pmEvents ?? []}
-            domains={chartState.data.domains ?? null}
-            eqpId={eqpId}
-          />
-          <div className="chartMeta">
-            <code>{chartState.data.paths.all}</code>
-            <code>{chartState.data.paths.fail}</code>
-          </div>
-        </>
+        <ScatterChart
+          allPoints={chartState.data.allPoints ?? []}
+          failPoints={chartState.data.failPoints ?? []}
+          pmEvents={chartState.data.pmEvents ?? []}
+          domains={chartState.data.domains ?? null}
+          eqpId={eqpId}
+        />
       )}
     </div>
   );
 }
 
 function EmptyChartState({ selectedRow }) {
-  const paths = selectedRow ? getChartPaths(selectedRow) : null;
-
   return (
     <div className="chartShell emptyChart">
       <div className="chartTitle">
@@ -740,11 +704,6 @@ function EmptyChartState({ selectedRow }) {
             ? '선택한 met_step에 연결된 eqp_id 목록이 확인되면 eqp별 차트를 그립니다.'
             : '좌측에서 main_step을 펼친 뒤 met_step을 선택하면 eqp별 차트 영역이 표시됩니다.'}
         </p>
-        <div className="pathList">
-          {(paths ? [paths.all, paths.fail, paths.pm] : DATA_SOURCES.map((source) => source.path)).map((path) => (
-            <code key={path}>{path}</code>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -757,7 +716,6 @@ function DataSourceTable({ sources, diagnostics }) {
         <thead>
           <tr>
             <th>파일</th>
-            <th>원본 경로</th>
             <th>필수 컬럼</th>
             <th>읽은 행</th>
             <th>상태</th>
@@ -770,9 +728,6 @@ function DataSourceTable({ sources, diagnostics }) {
             <tr key={source.key}>
               <td>
                 <strong>{source.label}</strong>
-              </td>
-              <td>
-                <code>{source.path}</code>
               </td>
               <td>{source.requiredColumns.join(', ')}</td>
               <td>{Number(diagnostics?.inputRows?.[source.key] ?? 0).toLocaleString()}</td>
