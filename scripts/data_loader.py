@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v5"
+LOADER_VERSION = "file-loader-v6"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 COMPACT_TIME_FORMATS = (
@@ -653,8 +653,14 @@ def resolve_chart_paths(main_step, chart_met_step):
     main_file_candidates = unique_nonempty([main_dir_name, main_step, normalize_step(main_step)])
     all_prefix = "main_all" if IS_MAIN_LINE else "all"
     fail_prefix = "main_fail" if IS_MAIN_LINE else "fail"
+    std_prefix = "main_fail_std" if IS_MAIN_LINE else "fail_std"
     all_path, all_attempts = resolve_parquet_file(data_dir, all_prefix, main_file_candidates)
     fail_path, fail_attempts = resolve_parquet_file(data_dir, fail_prefix, main_file_candidates)
+    try:
+        std_path, std_attempts = resolve_parquet_file(data_dir, std_prefix, main_file_candidates)
+    except FileNotFoundError:
+        std_path = None
+        std_attempts = [f"{std_prefix}_{candidate}.parquet" for candidate in main_file_candidates]
 
     return {
         "mainDir": main_dir,
@@ -663,6 +669,7 @@ def resolve_chart_paths(main_step, chart_met_step):
         "latestDate": latest_date,
         "allPath": all_path,
         "failPath": fail_path,
+        "stdPath": std_path,
         "requested": {
             "mainStep": main_step,
             "chartMetStep": chart_met_step,
@@ -676,6 +683,7 @@ def resolve_chart_paths(main_step, chart_met_step):
             "metDirs": met_attempts,
             "allFiles": all_attempts,
             "failFiles": fail_attempts,
+            "stdFiles": std_attempts,
         },
     }
 
@@ -710,17 +718,25 @@ def select_columns(dataframe):
         "tkout_time",
         "fab_value",
         "process_id",
+        "wafer_id",
+        "lot_id",
         "lot_wf",
         "step_seq",
         "eqp_ch",
         "eqp_id",
+        "eqpid",
+        "item_id",
         "final_decision",
     ]
     return select_frame_columns(dataframe, wanted)
 
 
-def chart_records(dataframe, limit=900):
-    return add_time_fields(sample_records(select_columns(dataframe), limit), "tkout_time")
+def chart_records(dataframe, limit=900, anomaly_type=None):
+    rows = add_time_fields(sample_records(select_columns(dataframe), limit), "tkout_time")
+    if anomaly_type:
+        for row in rows:
+            row["anomaly_type"] = anomaly_type
+    return rows
 
 
 def numeric_domain(values):
@@ -783,15 +799,23 @@ def command_chart(args):
     resolved_paths = resolve_chart_paths(args.main_step, args.chart_met_step)
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
+    std_path = resolved_paths["stdPath"]
 
     all_df = split_p3d_drawing_df(read_parquet(all_path))
     fail_df = split_p3d_drawing_df(read_parquet(fail_path))
+    std_df = split_p3d_drawing_df(read_parquet(std_path)) if std_path else fail_df.head(0)
 
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")
+    std_df = sort_frame(std_df, "tkout_time")
     all_background = exclude_frame_eqp(all_df, args.eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
-    chart_fab_values = numeric_column_values(all_background, "fab_value") + numeric_column_values(fail_for_eqp, "fab_value")
+    std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
+    chart_fab_values = (
+        numeric_column_values(all_background, "fab_value")
+        + numeric_column_values(fail_for_eqp, "fab_value")
+        + numeric_column_values(std_for_eqp, "fab_value")
+    )
 
     pm_events = []
     if os.path.isfile(CONFIG["pmCodePath"]) and os.access(CONFIG["pmCodePath"], os.R_OK):
@@ -819,11 +843,14 @@ def command_chart(args):
                     "allBackground": frame_height(all_background),
                     "fail": frame_height(fail_df),
                     "failForEqp": frame_height(fail_for_eqp),
+                    "std": frame_height(std_df),
+                    "stdForEqp": frame_height(std_for_eqp),
                 },
             },
             "paths": {
                 "all": all_path,
                 "fail": fail_path,
+                "std": std_path,
                 "pm": CONFIG["pmCodePath"],
             },
             "latestDate": resolved_paths["latestDate"],
@@ -833,7 +860,8 @@ def command_chart(args):
                 "yInitial": numeric_domain(outlier_filtered_values(chart_fab_values)),
             },
             "allPoints": chart_records(all_background, None),
-            "failPoints": chart_records(fail_for_eqp, None),
+            "failPoints": chart_records(fail_for_eqp, None, "center"),
+            "stdPoints": chart_records(std_for_eqp, None, "std"),
             "pmEvents": pm_events,
         }
     )

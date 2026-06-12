@@ -587,7 +587,7 @@ tr:last-child td {
   padding: 12px 14px 0;
 }
 
-.chartTitle div {
+.chartTitleText {
   display: grid;
   gap: 3px;
 }
@@ -601,6 +601,40 @@ tr:last-child td {
   color: #63766e;
   font-size: 12px;
   font-weight: 800;
+}
+
+.chartTitle .chartTags {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 42%;
+}
+
+.anomalyTag,
+.chartStatusText {
+  border: 1px solid #d1dcd6;
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 6px 9px;
+  color: #33433d;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.anomalyTag.center {
+  border-color: #e3b7a7;
+  background: #fff1ec;
+  color: #8f3f25;
+}
+
+.anomalyTag.std {
+  border-color: #b9c9e7;
+  background: #eef5ff;
+  color: #2d5794;
 }
 
 .scatterChart {
@@ -698,6 +732,34 @@ tr:last-child td {
   stroke: #ffffff;
   stroke-width: 1.2px;
   cursor: crosshair;
+}
+
+.stdScatterPoint {
+  stroke-width: 1.8px;
+}
+
+.ngTableShell {
+  width: 90%;
+  margin: 8px auto 16px;
+  overflow-x: auto;
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ngPointTable {
+  min-width: 820px;
+}
+
+.ngPointTable th,
+.ngPointTable td {
+  padding: 8px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ngPointTable th {
+  color: #53675f;
 }
 
 .pmLine {

@@ -192,15 +192,22 @@ function Metric({ label, value }) {
   );
 }
 
-function SourceStatusBanner({ loading, error, sources, diagnostics }) {
+function SourceStatusBanner({ loading, error, sources, diagnostics, latestDate }) {
   const missingSources = sources.filter((source) => !source.exists || !source.readable);
   const warningCount = diagnostics?.warnings?.length ?? 0;
+  const title = loading
+    ? '원본 파일 읽는 중'
+    : error
+      ? '원본 파일 읽기 실패'
+      : latestDate
+        ? `${latestDate} 데이터 기준 이상감지`
+        : '이상감지 기준일 확인 중';
 
   return (
     <section className={`sourceBanner ${error ? 'error' : ''}`}>
       <div>
         <p className="eyebrow">File Loader</p>
-        <h2>{loading ? '원본 파일 읽는 중' : error ? '원본 파일 읽기 실패' : '원본 파일 연결됨'}</h2>
+        <h2>{title}</h2>
       </div>
       <div className="sourceBannerText">
         {error ? <strong>{hideFilePaths(error)}</strong> : <span>웹 UI가 Vite API를 통해 파일 상태를 확인합니다.</span>}
@@ -369,7 +376,7 @@ function getPointTooltipRows(point) {
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
-function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
+function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -384,10 +391,21 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
     [allPoints],
   );
   const allScatterPoints = useMemo(() => axisPoints.filter((point) => point.y !== null), [axisPoints]);
-  const scatterPoints = useMemo(
-    () => failPoints.map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) })).filter((point) => point.x !== null && point.y !== null),
+  const centerScatterPoints = useMemo(
+    () =>
+      failPoints
+        .map((point) => ({ ...point, anomaly_type: point.anomaly_type || 'center', x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
+        .filter((point) => point.x !== null && point.y !== null),
     [failPoints],
   );
+  const stdScatterPoints = useMemo(
+    () =>
+      stdPoints
+        .map((point) => ({ ...point, anomaly_type: point.anomaly_type || 'std', x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) }))
+        .filter((point) => point.x !== null && point.y !== null),
+    [stdPoints],
+  );
+  const scatterPoints = useMemo(() => [...centerScatterPoints, ...stdScatterPoints], [centerScatterPoints, stdScatterPoints]);
   const hasPoints = allScatterPoints.length > 0 || scatterPoints.length > 0;
   const fallbackXValues = (axisPoints.length > 0 ? axisPoints : scatterPoints).map((point) => point.x);
   const fallbackYValues = (allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y);
@@ -425,7 +443,7 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
     setViewDomain(null);
     setDragRange(null);
     setTooltip(null);
-  }, [allPoints, failPoints, eqpId]);
+  }, [allPoints, failPoints, stdPoints, eqpId]);
 
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
@@ -681,8 +699,10 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
               .filter((point) => isVisible(point))
               .map((point, index) => (
                 <circle
-                  key={`fail-${index}`}
-                  className={String(point.final_decision ?? '').trim().toUpperCase() === 'NG' ? 'failPoint' : 'okPoint'}
+                  key={`${point.anomaly_type}-${index}`}
+                  className={`${String(point.final_decision ?? '').trim().toUpperCase() === 'NG' ? 'failPoint' : 'okPoint'} ${
+                    point.anomaly_type === 'std' ? 'stdScatterPoint' : 'centerScatterPoint'
+                  }`}
                   cx={xScale(point.x)}
                   cy={yScale(point.y)}
                   r="4.7"
@@ -710,7 +730,75 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId, domains }) {
   );
 }
 
-function EquipmentChart({ row, eqpId }) {
+const NG_TABLE_COLUMNS = ['wafer_id', 'tkout_time', 'step_seq', 'eqp_id', 'lot_id', 'process_id', 'item_id', 'fab_value'];
+
+function isNgPoint(point) {
+  return String(point?.final_decision ?? '').trim().toUpperCase() === 'NG';
+}
+
+function isDrawablePoint(point) {
+  return toTime(point?.tkout_time, point) !== null && toNumber(point?.fab_value) !== null;
+}
+
+function formatTableValue(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'number' && Number.isFinite(value)) return value.toLocaleString();
+  return String(value);
+}
+
+function getNgTableValue(point, column, row, eqpId) {
+  if (column === 'tkout_time') return point.tkout_time_text || point.tkout_time;
+  if (column === 'eqp_id') return point.eqp_id ?? point.eqpid ?? point.eqp_ch ?? eqpId;
+  if (column === 'lot_id') return point.lot_id ?? point.lot_wf;
+  if (column === 'item_id') return point.item_id ?? getMetStepDisplay(row.metStep).metItem;
+  return point[column];
+}
+
+function NgPointTable({ points, row, eqpId }) {
+  return (
+    <div className="ngTableShell">
+      <table className="ngPointTable">
+        <thead>
+          <tr>
+            {NG_TABLE_COLUMNS.map((column) => (
+              <th key={column}>{column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {points.length > 0 ? (
+            points.map((point, index) => (
+              <tr key={`${point.anomaly_type ?? 'ng'}-${point.tkout_time_ms ?? point.tkout_time}-${index}`}>
+                {NG_TABLE_COLUMNS.map((column) => (
+                  <td key={column}>{formatTableValue(getNgTableValue(point, column, row, eqpId))}</td>
+                ))}
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={NG_TABLE_COLUMNS.length}>final_decision NG 데이터가 없습니다.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ChartTags({ centerCount, stdCount, loading, error }) {
+  if (loading || error) {
+    return <span className="chartStatusText">{loading ? 'loading' : 'read failed'}</span>;
+  }
+
+  return (
+    <div className="chartTags" aria-label="이상 유형">
+      {centerCount > 0 && <span className="anomalyTag center">중심치 이상</span>}
+      {stdCount > 0 && <span className="anomalyTag std">산포이상</span>}
+    </div>
+  );
+}
+
+function EquipmentChart({ row, eqpId, onLatestDate }) {
   const [chartState, setChartState] = useState({ loading: true, error: '', data: null });
 
   useEffect(() => {
@@ -723,25 +811,32 @@ function EquipmentChart({ row, eqpId }) {
 
     setChartState({ loading: true, error: '', data: null });
     fetchJson(`/api/chart?${params.toString()}`, { signal: controller.signal })
-      .then((payload) => setChartState({ loading: false, error: '', data: payload }))
+      .then((payload) => {
+        setChartState({ loading: false, error: '', data: payload });
+        if (payload.latestDate) onLatestDate?.(payload.latestDate);
+      })
       .catch((error) => {
         if (controller.signal.aborted) return;
         setChartState({ loading: false, error: error.message, data: error.payload ?? null });
       });
 
     return () => controller.abort();
-  }, [eqpId, row]);
+  }, [eqpId, onLatestDate, row]);
+
+  const failPoints = chartState.data?.failPoints ?? [];
+  const stdPoints = chartState.data?.stdPoints ?? [];
+  const ngTablePoints = [...failPoints, ...stdPoints].filter((point) => isNgPoint(point) && isDrawablePoint(point));
 
   return (
     <div className="chartShell">
       <div className="chartTitle">
-        <div>
+        <div className="chartTitleText">
           <strong>{eqpId}</strong>
           <span>
             {getChartHeading(row)}
           </span>
         </div>
-        <span>{chartState.loading ? 'loading' : chartState.error ? 'read failed' : `date ${chartState.data.latestDate}`}</span>
+        <ChartTags centerCount={failPoints.length} stdCount={stdPoints.length} loading={chartState.loading} error={chartState.error} />
       </div>
       {chartState.loading ? (
         <div className="emptyChartBody">
@@ -754,12 +849,14 @@ function EquipmentChart({ row, eqpId }) {
       ) : (
         <ScatterChart
           allPoints={chartState.data.allPoints ?? []}
-          failPoints={chartState.data.failPoints ?? []}
+          failPoints={failPoints}
+          stdPoints={stdPoints}
           pmEvents={chartState.data.pmEvents ?? []}
           domains={chartState.data.domains ?? null}
           eqpId={eqpId}
         />
       )}
+      {!chartState.loading && !chartState.error && <NgPointTable points={ngTablePoints} row={row} eqpId={eqpId} />}
     </div>
   );
 }
@@ -768,7 +865,7 @@ function EmptyChartState({ selectedRow }) {
   return (
     <div className="chartShell emptyChart">
       <div className="chartTitle">
-        <div>
+        <div className="chartTitleText">
           <strong>eqp별 Chart</strong>
           <span>{selectedRow ? getChartHeading(selectedRow) : 'step 선택 필요'}</span>
         </div>
@@ -793,6 +890,7 @@ function App() {
   const filteredRows = useMemo(() => filterRowsBySdwt(rows, selectedSdwt), [rows, selectedSdwt]);
   const mainStepGroups = useMemo(() => groupRowsByMainStep(filteredRows), [filteredRows]);
   const [selectedMetStep, setSelectedMetStep] = useState(null);
+  const [chartLatestDate, setChartLatestDate] = useState('');
 
   useEffect(() => {
     fetchJson(`/api/summary?t=${Date.now()}`)
@@ -824,6 +922,10 @@ function App() {
     });
   }, [mainStepGroups]);
 
+  useEffect(() => {
+    setChartLatestDate('');
+  }, [selectedMetStep?.key]);
+
   const selectedEqpIds = selectedMetStep?.eqpIds ?? [];
   const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
@@ -833,7 +935,7 @@ function App() {
       <header className="topBar">
         <div>
           <p className="eyebrow">P3D Defect Spider</p>
-          <h1>스텝별 시계열 이상 트렌드 감지</h1>
+          <h1>Defect SPIDER</h1>
         </div>
         <div className="summaryPills">
           <span>감지 라인 {CONFIG.lineName}</span>
@@ -848,6 +950,7 @@ function App() {
         error={loadState.error}
         sources={loadState.sources}
         diagnostics={loadState.diagnostics}
+        latestDate={chartLatestDate}
       />
 
       <div className="topMetrics">
@@ -880,7 +983,7 @@ function App() {
 
           <div className="chartGrid">
             {selectedMetStep && selectedEqpIds.length > 0 ? (
-              selectedEqpIds.map((eqpId) => <EquipmentChart key={eqpId} row={selectedMetStep} eqpId={eqpId} />)
+              selectedEqpIds.map((eqpId) => <EquipmentChart key={eqpId} row={selectedMetStep} eqpId={eqpId} onLatestDate={setChartLatestDate} />)
             ) : (
               <EmptyChartState selectedRow={selectedMetStep} />
             )}
