@@ -745,7 +745,10 @@ tr:last-child td {
 .chartCanvas {
   position: relative;
   display: grid;
-  width: 90%;
+  grid-template-columns: minmax(0, 1fr) minmax(128px, 168px);
+  align-items: start;
+  gap: 10px;
+  width: 94%;
   margin: 0 auto;
   padding: 12px 12px 0;
 }
@@ -763,6 +766,79 @@ tr:last-child td {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+.chartLegend {
+  display: grid;
+  gap: 9px;
+  max-height: 238px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in srgb, var(--background) 88%, var(--muted));
+  padding: 8px;
+}
+
+.legendGroup {
+  display: grid;
+  gap: 5px;
+}
+
+.legendGroup strong {
+  color: var(--muted-foreground);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.legendItem {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 22px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--foreground);
+  padding: 3px 5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.legendItem:hover {
+  border-color: var(--border);
+  background: var(--accent);
+}
+
+.legendItem.isHidden {
+  opacity: 0.42;
+}
+
+.legendSwatch {
+  width: 8px;
+  height: 8px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  border-radius: 999px;
+}
+
+.legendLabel,
+.legendCount {
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.legendLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legendCount {
+  color: var(--muted-foreground);
 }
 
 .zoomSelection {
@@ -1049,6 +1125,11 @@ tr:last-child td {
   }
 
   .chartCanvas {
+    grid-template-columns: 1fr;
     width: 100%;
+  }
+
+  .chartLegend {
+    max-height: 150px;
   }
 }

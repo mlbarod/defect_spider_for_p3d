@@ -376,10 +376,69 @@ function getPointTooltipRows(point) {
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
+const STEP_LEGEND_COLORS = [
+  { swatch: 'hsl(268 75% 58%)', point: 'hsla(268, 75%, 58%, 0.16)' },
+  { swatch: 'hsl(204 94% 45%)', point: 'hsla(204, 94%, 45%, 0.16)' },
+  { swatch: 'hsl(152 57% 40%)', point: 'hsla(152, 57%, 40%, 0.16)' },
+  { swatch: 'hsl(35 92% 56%)', point: 'hsla(35, 92%, 56%, 0.16)' },
+  { swatch: 'hsl(350 89% 60%)', point: 'hsla(350, 89%, 60%, 0.16)' },
+  { swatch: 'hsl(240 55% 58%)', point: 'hsla(240, 55%, 58%, 0.16)' },
+];
+
+function getLegendKey(type, value) {
+  return `${type}:${String(value)}`;
+}
+
+function getStepPrefix(point) {
+  const text = String(point?.step_seq ?? '').trim();
+  return text ? text.slice(0, 2) : '-';
+}
+
+function getEquipmentId(point, fallback = '') {
+  const value = point?.eqp_id ?? point?.eqpid ?? point?.eqp_ch ?? fallback;
+  const text = String(value ?? '').trim();
+  return text || '-';
+}
+
+function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
+  if (stepItems.length === 0 && equipmentItems.length === 0) return null;
+
+  const renderItems = (items) =>
+    items.map((item) => {
+      const isHidden = hiddenKeys.has(item.key);
+
+      return (
+        <button key={item.key} className={`legendItem ${isHidden ? 'isHidden' : ''}`} type="button" onClick={() => onToggle(item.key)} title={item.label}>
+          <span className="legendSwatch" style={{ background: item.color }} aria-hidden="true" />
+          <span className="legendLabel">{item.label}</span>
+          <span className="legendCount">{item.count.toLocaleString()}</span>
+        </button>
+      );
+    });
+
+  return (
+    <aside className="chartLegend" aria-label="chart legend">
+      {stepItems.length > 0 && (
+        <div className="legendGroup">
+          <strong>STEP</strong>
+          {renderItems(stepItems)}
+        </div>
+      )}
+      {equipmentItems.length > 0 && (
+        <div className="legendGroup">
+          <strong>EQP</strong>
+          {renderItems(equipmentItems)}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
+  const [hiddenLegendKeys, setHiddenLegendKeys] = useState(() => new Set());
   const canvasRef = useRef(null);
   const width = 720;
   const height = 238;
@@ -407,6 +466,74 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   );
   const scatterPoints = useMemo(() => [...centerScatterPoints, ...stdScatterPoints], [centerScatterPoints, stdScatterPoints]);
   const hasPoints = allScatterPoints.length > 0 || scatterPoints.length > 0;
+  const stepLegendItems = useMemo(() => {
+    const counts = new Map();
+
+    allScatterPoints.forEach((point) => {
+      const label = getStepPrefix(point);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    });
+
+    return Array.from(counts.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([label, count], index) => {
+        const color = STEP_LEGEND_COLORS[index % STEP_LEGEND_COLORS.length];
+
+        return {
+          key: getLegendKey('step', label),
+          label,
+          count,
+          color: color.swatch,
+          pointColor: color.point,
+        };
+      });
+  }, [allScatterPoints]);
+  const stepPointColorByPrefix = useMemo(() => new Map(stepLegendItems.map((item) => [item.label, item.pointColor])), [stepLegendItems]);
+  const equipmentLegendItems = useMemo(() => {
+    const counts = new Map();
+    const groupedEqpId = String(eqpId ?? '').trim();
+    const addPoint = (point, fallback = '') => {
+      const label = getEquipmentId(point, fallback);
+      const current = counts.get(label) ?? { label, count: 0, grouped: label === groupedEqpId };
+      current.count += 1;
+      current.grouped = current.grouped || label === groupedEqpId;
+      counts.set(label, current);
+    };
+
+    allScatterPoints.forEach((point) => addPoint(point));
+    scatterPoints.forEach((point) => addPoint(point, groupedEqpId));
+
+    return Array.from(counts.values())
+      .sort((left, right) => Number(right.grouped) - Number(left.grouped) || left.label.localeCompare(right.label))
+      .map((item) => ({
+        key: getLegendKey('eqp', item.label),
+        label: item.label,
+        count: item.count,
+        color: item.grouped ? 'hsl(0 72% 51%)' : 'hsl(240 4% 64%)',
+      }));
+  }, [allScatterPoints, scatterPoints, eqpId]);
+  const visibleAllScatterPoints = useMemo(
+    () =>
+      allScatterPoints.filter(
+        (point) => !hiddenLegendKeys.has(getLegendKey('step', getStepPrefix(point))) && !hiddenLegendKeys.has(getLegendKey('eqp', getEquipmentId(point))),
+      ),
+    [allScatterPoints, hiddenLegendKeys],
+  );
+  const visibleScatterPoints = useMemo(
+    () =>
+      scatterPoints.filter(
+        (point) => !hiddenLegendKeys.has(getLegendKey('step', getStepPrefix(point))) && !hiddenLegendKeys.has(getLegendKey('eqp', getEquipmentId(point, eqpId))),
+      ),
+    [scatterPoints, hiddenLegendKeys, eqpId],
+  );
+  const toggleLegendKey = (key) => {
+    setHiddenLegendKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const fallbackXValues = (axisPoints.length > 0 ? axisPoints : scatterPoints).map((point) => point.x);
   const fallbackYValues = (allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y);
   const resolveRange = (range, fallbackValues) => {
@@ -455,6 +582,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     setViewDomain(null);
     setDragRange(null);
     setTooltip(null);
+    setHiddenLegendKeys(new Set());
   }, [allPoints, anomalyType, failPoints, stdPoints, eqpId]);
 
   const plotWidth = width - padding.left - padding.right;
@@ -474,7 +602,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     const cellSize = 12;
     const buckets = new Map();
 
-    allScatterPoints.forEach((point) => {
+    visibleAllScatterPoints.forEach((point) => {
       if (!isVisible(point)) return;
       const sx = xScale(point.x);
       const sy = yScale(point.y);
@@ -487,7 +615,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     });
 
     return { buckets, cellSize };
-  }, [allScatterPoints, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
+  }, [visibleAllScatterPoints, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
   const selection = dragRange
     ? {
         x: Math.min(dragRange.startX, dragRange.endX),
@@ -524,7 +652,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     };
   };
   const getTooltipPosition = (event) => {
-    const container = event.currentTarget.ownerSVGElement?.parentElement;
+    const container = event.currentTarget.ownerSVGElement?.closest?.('.chartCanvas') ?? event.currentTarget.closest?.('.chartCanvas');
     const rect = container?.getBoundingClientRect();
     if (!rect) return { x: 12, y: 12 };
     const maxLeft = Math.max(8, rect.width - 196);
@@ -637,20 +765,29 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     context.beginPath();
     context.rect(padding.left - clipOverflow, padding.top - clipOverflow, plotWidth + clipOverflow * 2, plotHeight + clipOverflow * 2);
     context.clip();
-    context.fillStyle = 'rgba(47, 103, 89, 0.16)';
-    context.beginPath();
-
-    allScatterPoints.forEach((point) => {
+    const colorGroups = new Map();
+    visibleAllScatterPoints.forEach((point) => {
       if (!isVisible(point)) return;
-      const x = xScale(point.x);
-      const y = yScale(point.y);
-      context.moveTo(x + 1.7, y);
-      context.arc(x, y, 1.7, 0, Math.PI * 2);
+      const stepPrefix = getStepPrefix(point);
+      const color = stepPointColorByPrefix.get(stepPrefix) ?? STEP_LEGEND_COLORS[0].point;
+      const group = colorGroups.get(color);
+      if (group) group.push(point);
+      else colorGroups.set(color, [point]);
     });
 
-    context.fill();
+    colorGroups.forEach((points, color) => {
+      context.fillStyle = color;
+      context.beginPath();
+      points.forEach((point) => {
+        const x = xScale(point.x);
+        const y = yScale(point.y);
+        context.moveTo(x + 1.7, y);
+        context.arc(x, y, 1.7, 0, Math.PI * 2);
+      });
+      context.fill();
+    });
     context.restore();
-  }, [allScatterPoints, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
+  }, [visibleAllScatterPoints, stepPointColorByPrefix, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
 
   if (!hasPoints) {
     return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
@@ -707,7 +844,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
                   </text>
                 </g>
               ))}
-            {scatterPoints
+            {visibleScatterPoints
               .filter((point) => isVisible(point))
               .map((point, index) => (
                 <circle
@@ -729,6 +866,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
           )}
         </svg>
       </div>
+      <ChartLegend stepItems={stepLegendItems} equipmentItems={equipmentLegendItems} hiddenKeys={hiddenLegendKeys} onToggle={toggleLegendKey} />
       {tooltip && (
         <div className="tooltipPanel" style={{ left: tooltip.x, top: tooltip.y }}>
           {tooltip.rows.map(([label, value]) => (

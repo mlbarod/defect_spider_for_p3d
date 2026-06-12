@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v9"
+LOADER_VERSION = "file-loader-v10"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 COMPACT_TIME_FORMATS = (
@@ -776,8 +776,8 @@ def outlier_filtered_values(values):
         return values
 
     sorted_values = sorted(values)
-    q1 = percentile(sorted_values, 0.25)
-    q3 = percentile(sorted_values, 0.75)
+    q1 = percentile(sorted_values, 0.2)
+    q3 = percentile(sorted_values, 0.8)
     iqr = q3 - q1
     if iqr <= 0:
         return values
