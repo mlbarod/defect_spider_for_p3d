@@ -869,7 +869,7 @@ def command_chart(args):
                 },
                 "std": {
                     "yFull": numeric_domain(chart_fab_values_std),
-                    "yInitial": numeric_domain(chart_fab_values_std),
+                    "yInitial": outlier_display_domain(chart_fab_values_std),
                 },
             },
             "allPoints": chart_records(all_background, None),

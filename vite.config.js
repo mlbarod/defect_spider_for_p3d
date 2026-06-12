@@ -21,6 +21,7 @@ function runLoader(args, res) {
   });
   child.on('close', (code) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
     if (stdout.trim()) {
       res.end(stdout);
       return;

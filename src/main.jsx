@@ -376,7 +376,7 @@ function getPointTooltipRows(point) {
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
-function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType, useFullInitialDomain = false }) {
+function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -438,7 +438,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   };
   const xRange = resolveRange(domains?.x, fallbackXValues);
   const yFullRange = resolveRange(domains?.yFull, fallbackYValues);
-  const yInitialRange = resolveRange(useFullInitialDomain ? domains?.yFull : domains?.yInitial, fallbackYValues);
+  const yInitialRange = resolveRange(domains?.yInitial, fallbackYValues);
   const normalizedXRange = xRange.max === xRange.min ? { min: xRange.min, max: xRange.max + 1 } : xRange;
   const fullDomain = {
     minX: normalizedXRange.min,
@@ -448,7 +448,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   const initialDomain = {
     minX: normalizedXRange.min,
     maxX: normalizedXRange.max,
-    ...getYDomain(yInitialRange, useFullInitialDomain),
+    ...getYDomain(yInitialRange, false),
   };
 
   useEffect(() => {
@@ -846,7 +846,6 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
         domains={getTypedDomains(chartData.domains ?? null, anomalyType)}
         eqpId={eqpId}
         anomalyType={anomalyType}
-        useFullInitialDomain={anomalyType === 'std'}
       />
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
@@ -873,6 +872,7 @@ function EquipmentChart({ row, eqpId, onLatestDate }) {
       mainStep: row.mainStepPath ?? row.mainStep,
       chartMetStep: getChartMetStep(row),
       eqpId,
+      t: String(Date.now()),
     });
 
     setChartState({ loading: true, error: '', data: null });
