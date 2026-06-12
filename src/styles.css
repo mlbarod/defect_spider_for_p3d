@@ -256,21 +256,6 @@ code {
   line-height: 1.35;
 }
 
-.scoreBar {
-  grid-column: 1 / -1;
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e1e8e4;
-}
-
-.scoreBar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #2a7f62, #d0832f);
-}
-
 .mainStepGroup {
   display: grid;
   gap: 10px;
@@ -670,7 +655,7 @@ tr:last-child td {
 
 .axisText {
   fill: #62726b;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
 }
 

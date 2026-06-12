@@ -173,6 +173,8 @@ function groupRowsByMainStep(rows) {
       eqpCount: 0,
     };
 
+    if (row.stepDesc && !current.stepDesc) current.stepDesc = row.stepDesc;
+    if (row.sdwt && !current.sdwt) current.sdwt = row.sdwt;
     current.metSteps.push(row);
     current.centerCount += row.centerCount ?? 0;
     current.stdCount += row.stdCount ?? 0;
@@ -302,14 +304,11 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
                     ▸
                   </span>
                   <span className="mainStepTitle">
-                    <span className="stepName">{group.mainStep}</span>
-                    <span className="stepTrend">{group.stepDesc || group.sdwt || 'step_desc 확인 필요'}</span>
+                    <span className="stepName">{group.stepDesc || 'step_desc 확인 필요'}</span>
+                    <span className="stepTrend">{group.mainStep}</span>
                   </span>
                   <span className="mainScore">{group.metSteps.length} met</span>
                 </button>
-                <span className="scoreBar" aria-hidden="true">
-                  <span style={{ width: `${Math.min(100, group.centerCount + group.stdCount)}%` }} />
-                </span>
                 {isOpen && (
                   <div className="subStepButtons" id={`metsteps-${group.mainStep}`}>
                     {group.metSteps.map((row) => {
@@ -547,7 +546,7 @@ function ScatterChart({ allPoints, failPoints, pmEvents, eqpId }) {
           <g key={tick}>
             <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />
             <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
-              {tick.toFixed(2)}
+              {Math.round(tick).toLocaleString()}
             </text>
           </g>
         ))}
