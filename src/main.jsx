@@ -376,7 +376,7 @@ function getPointTooltipRows(point) {
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
-function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains }) {
+function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType, useFullInitialDomain = false }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -385,7 +385,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   const height = 238;
   const padding = { left: 56, right: 18, top: 22, bottom: 42 };
   const clipOverflow = 7;
-  const clipId = `plot-${String(eqpId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const clipId = `plot-${String(`${eqpId}-${anomalyType ?? 'all'}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const axisPoints = useMemo(
     () => allPoints.map((point) => ({ ...point, x: toTime(point.tkout_time, point), y: toNumber(point.fab_value) })).filter((point) => point.x !== null),
     [allPoints],
@@ -426,7 +426,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   };
   const xRange = resolveRange(domains?.x, fallbackXValues);
   const yFullRange = resolveRange(domains?.yFull, fallbackYValues);
-  const yInitialRange = resolveRange(domains?.yInitial, fallbackYValues);
+  const yInitialRange = resolveRange(useFullInitialDomain ? domains?.yFull : domains?.yInitial, fallbackYValues);
   const normalizedXRange = xRange.max === xRange.min ? { min: xRange.min, max: xRange.max + 1 } : xRange;
   const fullDomain = {
     minX: normalizedXRange.min,
@@ -443,7 +443,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     setViewDomain(null);
     setDragRange(null);
     setTooltip(null);
-  }, [allPoints, failPoints, stdPoints, eqpId]);
+  }, [allPoints, anomalyType, failPoints, stdPoints, eqpId]);
 
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
@@ -731,6 +731,10 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
 }
 
 const NG_TABLE_COLUMNS = ['wafer_id', 'tkout_time', 'step_seq', 'eqp_id', 'lot_id', 'process_id', 'item_id', 'fab_value'];
+const ANOMALY_META = {
+  center: { label: '중심치 이상', tagClass: 'center' },
+  std: { label: '산포이상', tagClass: 'std' },
+};
 
 function isNgPoint(point) {
   return String(point?.final_decision ?? '').trim().toUpperCase() === 'NG';
@@ -785,15 +789,65 @@ function NgPointTable({ points, row, eqpId }) {
   );
 }
 
-function ChartTags({ centerCount, stdCount, loading, error }) {
-  if (loading || error) {
-    return <span className="chartStatusText">{loading ? 'loading' : 'read failed'}</span>;
-  }
+function getTypedDomains(domains, anomalyType) {
+  const typedDomain = domains?.[anomalyType];
+  if (!typedDomain) return domains;
 
+  return {
+    ...domains,
+    yFull: typedDomain.yFull ?? domains?.yFull,
+    yInitial: typedDomain.yInitial ?? typedDomain.yFull ?? domains?.yInitial,
+  };
+}
+
+function ChartTag({ anomalyType }) {
+  const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
   return (
     <div className="chartTags" aria-label="이상 유형">
-      {centerCount > 0 && <span className="anomalyTag center">중심치 이상</span>}
-      {stdCount > 0 && <span className="anomalyTag std">산포이상</span>}
+      <span className={`anomalyTag ${meta.tagClass}`}>{meta.label}</span>
+    </div>
+  );
+}
+
+function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
+  const [isTableOpen, setIsTableOpen] = useState(false);
+  const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
+  const ngTablePoints = points.filter((point) => isNgPoint(point) && isDrawablePoint(point));
+  const tableId = `ng-table-${String(`${eqpId}-${anomalyType}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+  return (
+    <div className="chartShell">
+      <div className="chartTitle">
+        <div className="chartTitleText">
+          <strong>{eqpId}</strong>
+          <span>
+            {getChartHeading(row)} / {meta.label}
+          </span>
+        </div>
+        <ChartTag anomalyType={anomalyType} />
+      </div>
+      <ScatterChart
+        allPoints={chartData.allPoints ?? []}
+        failPoints={anomalyType === 'center' ? points : []}
+        stdPoints={anomalyType === 'std' ? points : []}
+        pmEvents={chartData.pmEvents ?? []}
+        domains={getTypedDomains(chartData.domains ?? null, anomalyType)}
+        eqpId={eqpId}
+        anomalyType={anomalyType}
+        useFullInitialDomain={anomalyType === 'std'}
+      />
+      <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
+        <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
+          ▸
+        </span>
+        <span>이상감지 Wafer List 보기</span>
+        <strong>{ngTablePoints.length.toLocaleString()} rows</strong>
+      </button>
+      {isTableOpen && (
+        <div id={tableId}>
+          <NgPointTable points={ngTablePoints} row={row} eqpId={eqpId} />
+        </div>
+      )}
     </div>
   );
 }
@@ -825,39 +879,42 @@ function EquipmentChart({ row, eqpId, onLatestDate }) {
 
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
-  const ngTablePoints = [...failPoints, ...stdPoints].filter((point) => isNgPoint(point) && isDrawablePoint(point));
+  const chartConfigs = [
+    { anomalyType: 'center', points: failPoints },
+    { anomalyType: 'std', points: stdPoints },
+  ].filter((config) => config.points.length > 0);
+
+  if (chartState.loading || chartState.error || chartConfigs.length === 0) {
+    return (
+      <div className="chartShell">
+        <div className="chartTitle">
+          <div className="chartTitleText">
+            <strong>{eqpId}</strong>
+            <span>
+              {getChartHeading(row)}
+            </span>
+          </div>
+          <span className="chartStatusText">{chartState.loading ? 'loading' : chartState.error ? 'read failed' : 'no anomaly data'}</span>
+        </div>
+        <div className="emptyChartBody">
+          <p>
+            {chartState.loading
+              ? '차트 parquet 파일을 읽고 있습니다.'
+              : chartState.error
+                ? hideFilePaths(chartState.error)
+                : '선택한 eqp_id에서 중심치/산포 이상 데이터를 찾지 못했습니다.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="chartShell">
-      <div className="chartTitle">
-        <div className="chartTitleText">
-          <strong>{eqpId}</strong>
-          <span>
-            {getChartHeading(row)}
-          </span>
-        </div>
-        <ChartTags centerCount={failPoints.length} stdCount={stdPoints.length} loading={chartState.loading} error={chartState.error} />
-      </div>
-      {chartState.loading ? (
-        <div className="emptyChartBody">
-          <p>차트 parquet 파일을 읽고 있습니다.</p>
-        </div>
-      ) : chartState.error ? (
-        <div className="emptyChartBody">
-          <p>{hideFilePaths(chartState.error)}</p>
-        </div>
-      ) : (
-        <ScatterChart
-          allPoints={chartState.data.allPoints ?? []}
-          failPoints={failPoints}
-          stdPoints={stdPoints}
-          pmEvents={chartState.data.pmEvents ?? []}
-          domains={chartState.data.domains ?? null}
-          eqpId={eqpId}
-        />
-      )}
-      {!chartState.loading && !chartState.error && <NgPointTable points={ngTablePoints} row={row} eqpId={eqpId} />}
-    </div>
+    <>
+      {chartConfigs.map((config) => (
+        <AnomalyChartCard key={`${eqpId}-${config.anomalyType}`} row={row} eqpId={eqpId} chartData={chartState.data} {...config} />
+      ))}
+    </>
   );
 }
 

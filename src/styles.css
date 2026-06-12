@@ -738,9 +738,44 @@ tr:last-child td {
   stroke-width: 1.8px;
 }
 
+.ngTableToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 90%;
+  min-height: 36px;
+  margin: 8px auto 14px;
+  border: 1px solid #d7dfda;
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: #26342f;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ngTableToggle:hover {
+  border-color: #94b6a8;
+  background: #f4f8f5;
+}
+
+.ngTableToggle span:not(.chevron) {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ngTableToggle strong {
+  flex: 0 0 auto;
+  color: #1f6f5b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .ngTableShell {
   width: 90%;
-  margin: 8px auto 16px;
+  margin: -6px auto 16px;
   overflow-x: auto;
   border: 1px solid #dce4df;
   border-radius: 8px;
