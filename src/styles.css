@@ -770,8 +770,11 @@ tr:last-child td {
 
 .chartLegend {
   display: grid;
+  align-self: start;
   gap: 9px;
-  max-height: 238px;
+  height: var(--chart-legend-height, 238px);
+  min-height: 0;
+  max-height: var(--chart-legend-height, 238px);
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
@@ -893,19 +896,19 @@ tr:last-child td {
 .okPoint {
   fill: var(--chart-3);
   stroke: var(--background);
-  stroke-width: 1.2px;
+  stroke-width: 1px;
   cursor: crosshair;
 }
 
 .failPoint {
   fill: var(--destructive);
   stroke: var(--background);
-  stroke-width: 1.2px;
+  stroke-width: 1px;
   cursor: crosshair;
 }
 
 .stdScatterPoint {
-  stroke-width: 1.8px;
+  stroke-width: 1.4px;
 }
 
 .ngTableToggle {
@@ -1130,6 +1133,7 @@ tr:last-child td {
   }
 
   .chartLegend {
+    height: auto;
     max-height: 150px;
   }
 }

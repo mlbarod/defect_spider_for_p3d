@@ -440,9 +440,13 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   const [tooltip, setTooltip] = useState(null);
   const [hiddenLegendKeys, setHiddenLegendKeys] = useState(() => new Set());
   const canvasRef = useRef(null);
+  const plotRef = useRef(null);
   const width = 720;
   const height = 238;
   const padding = { left: 56, right: 18, top: 22, bottom: 42 };
+  const backgroundPointRadius = 1.25;
+  const anomalyPointRadius = 3.7;
+  const [legendHeight, setLegendHeight] = useState(height);
   const clipOverflow = 7;
   const clipId = `plot-${String(`${eqpId}-${anomalyType ?? 'all'}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const axisPoints = useMemo(
@@ -584,6 +588,22 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     setTooltip(null);
     setHiddenLegendKeys(new Set());
   }, [allPoints, anomalyType, failPoints, stdPoints, eqpId]);
+
+  useEffect(() => {
+    const element = plotRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+
+    const updateLegendHeight = () => {
+      const nextHeight = Math.max(height, Math.round(element.getBoundingClientRect().height));
+      setLegendHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
+    };
+    const observer = new ResizeObserver(updateLegendHeight);
+
+    updateLegendHeight();
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
 
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
@@ -781,8 +801,8 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
       points.forEach((point) => {
         const x = xScale(point.x);
         const y = yScale(point.y);
-        context.moveTo(x + 1.7, y);
-        context.arc(x, y, 1.7, 0, Math.PI * 2);
+        context.moveTo(x + backgroundPointRadius, y);
+        context.arc(x, y, backgroundPointRadius, 0, Math.PI * 2);
       });
       context.fill();
     });
@@ -794,8 +814,8 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   }
 
   return (
-    <div className="chartCanvas">
-      <div className="chartPlot">
+    <div className="chartCanvas" style={{ '--chart-legend-height': `${legendHeight}px` }}>
+      <div className="chartPlot" ref={plotRef}>
         <canvas ref={canvasRef} className="scatterCanvas" aria-hidden="true" />
         <svg
           className="scatterChart"
@@ -854,7 +874,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
                   }`}
                   cx={xScale(point.x)}
                   cy={yScale(point.y)}
-                  r="4.7"
+                  r={anomalyPointRadius}
                   onMouseEnter={(event) => showTooltip(event, point)}
                   onMouseMove={(event) => showTooltip(event, point)}
                   onMouseLeave={() => setTooltip(null)}
