@@ -446,6 +446,25 @@ function eqpListIncludes(eqpIds, eqpId) {
   return Array.isArray(eqpIds) && eqpIds.some((value) => String(value ?? '').trim() === target);
 }
 
+function svgNumber(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : 0;
+}
+
+function buildCirclePath(points, radius) {
+  if (points.length === 0) return '';
+
+  const diameter = svgNumber(radius * 2);
+  const r = svgNumber(radius);
+
+  return points
+    .map((point) => {
+      const x = svgNumber(point.sx);
+      const y = svgNumber(point.sy);
+      return `M${svgNumber(x + radius)},${y}a${r},${r} 0 1,0 -${diameter},0a${r},${r} 0 1,0 ${diameter},0`;
+    })
+    .join('');
+}
+
 function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
   if (stepItems.length === 0 && equipmentItems.length === 0) return null;
 
@@ -480,7 +499,7 @@ function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
   );
 }
 
-function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType }) {
+const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -668,16 +687,51 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
   const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
   const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
   const yTicks = [viewMinY, viewMinY + (viewMaxY - viewMinY) / 2, viewMaxY];
-  const allHoverIndex = useMemo(() => {
-    const cellSize = 12;
+  const visibleAllScreenPoints = useMemo(
+    () =>
+      visibleAllScatterPoints.filter(isVisible).map((point) => {
+        const stepPrefix = getStepPrefix(point);
+
+        return {
+          point,
+          sx: xScale(point.x),
+          sy: yScale(point.y),
+          color: stepPointColorByPrefix.get(stepPrefix) ?? STEP_LEGEND_COLORS[0].point,
+        };
+      }),
+    [visibleAllScatterPoints, stepPointColorByPrefix, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight],
+  );
+  const visibleScatterScreenPoints = useMemo(
+    () =>
+      visibleScatterPoints.filter(isVisible).map((point) => ({
+        point,
+        sx: xScale(point.x),
+        sy: yScale(point.y),
+        isNg: isNgPoint(point, ngIdentitySet),
+        isStd: point.anomaly_type === 'std',
+      })),
+    [visibleScatterPoints, ngIdentitySet, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight],
+  );
+  const scatterPathItems = useMemo(() => {
+    const groups = new Map();
+
+    visibleScatterScreenPoints.forEach((point) => {
+      const className = `${point.isNg ? 'failPoint' : 'okPoint'} ${point.isStd ? 'stdScatterPoint' : 'centerScatterPoint'}`;
+      const group = groups.get(className);
+      if (group) group.push(point);
+      else groups.set(className, [point]);
+    });
+
+    return Array.from(groups.entries()).map(([className, points]) => ({
+      className,
+      d: buildCirclePath(points, anomalyPointRadius),
+    }));
+  }, [visibleScatterScreenPoints, anomalyPointRadius]);
+  const buildHoverIndex = (screenPoints, cellSize = 12) => {
     const buckets = new Map();
 
-    visibleAllScatterPoints.forEach((point) => {
-      if (!isVisible(point)) return;
-      const sx = xScale(point.x);
-      const sy = yScale(point.y);
-      const key = `${Math.floor(sx / cellSize)}:${Math.floor(sy / cellSize)}`;
-      const item = { point, sx, sy };
+    screenPoints.forEach((item) => {
+      const key = `${Math.floor(item.sx / cellSize)}:${Math.floor(item.sy / cellSize)}`;
       const bucket = buckets.get(key);
 
       if (bucket) bucket.push(item);
@@ -685,7 +739,9 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     });
 
     return { buckets, cellSize };
-  }, [visibleAllScatterPoints, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
+  };
+  const allHoverIndex = useMemo(() => buildHoverIndex(visibleAllScreenPoints), [visibleAllScreenPoints]);
+  const scatterHoverIndex = useMemo(() => buildHoverIndex(visibleScatterScreenPoints), [visibleScatterScreenPoints]);
   const selection = dragRange
     ? {
         x: Math.min(dragRange.startX, dragRange.endX),
@@ -737,17 +793,16 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
       ...getTooltipPosition(event),
     });
   };
-  const findCanvasPoint = (position) => {
-    const threshold = 6;
+  const findIndexedPoint = (index, position, threshold) => {
     const thresholdSquared = threshold * threshold;
-    const cellX = Math.floor(position.x / allHoverIndex.cellSize);
-    const cellY = Math.floor(position.y / allHoverIndex.cellSize);
+    const cellX = Math.floor(position.x / index.cellSize);
+    const cellY = Math.floor(position.y / index.cellSize);
     let nearest = null;
     let nearestDistance = thresholdSquared;
 
     for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
       for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
-        const bucket = allHoverIndex.buckets.get(`${cellX + xOffset}:${cellY + yOffset}`);
+        const bucket = index.buckets.get(`${cellX + xOffset}:${cellY + yOffset}`);
         if (!bucket) continue;
 
         bucket.forEach((item) => {
@@ -774,8 +829,8 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
       return;
     }
 
-    if (event.target?.closest?.('.failPoint, .okPoint')) return;
-    const canvasPoint = findCanvasPoint(point);
+    const scatterPoint = findIndexedPoint(scatterHoverIndex, point, anomalyPointRadius + 3);
+    const canvasPoint = scatterPoint ?? findIndexedPoint(allHoverIndex, point, 6);
     if (canvasPoint) showTooltip(event, canvasPoint);
     else setTooltip(null);
   };
@@ -836,28 +891,23 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     context.rect(padding.left - clipOverflow, padding.top - clipOverflow, plotWidth + clipOverflow * 2, plotHeight + clipOverflow * 2);
     context.clip();
     const colorGroups = new Map();
-    visibleAllScatterPoints.forEach((point) => {
-      if (!isVisible(point)) return;
-      const stepPrefix = getStepPrefix(point);
-      const color = stepPointColorByPrefix.get(stepPrefix) ?? STEP_LEGEND_COLORS[0].point;
-      const group = colorGroups.get(color);
+    visibleAllScreenPoints.forEach((point) => {
+      const group = colorGroups.get(point.color);
       if (group) group.push(point);
-      else colorGroups.set(color, [point]);
+      else colorGroups.set(point.color, [point]);
     });
 
     colorGroups.forEach((points, color) => {
       context.fillStyle = color;
       context.beginPath();
       points.forEach((point) => {
-        const x = xScale(point.x);
-        const y = yScale(point.y);
-        context.moveTo(x + backgroundPointRadius, y);
-        context.arc(x, y, backgroundPointRadius, 0, Math.PI * 2);
+        context.moveTo(point.sx + backgroundPointRadius, point.sy);
+        context.arc(point.sx, point.sy, backgroundPointRadius, 0, Math.PI * 2);
       });
       context.fill();
     });
     context.restore();
-  }, [visibleAllScatterPoints, stepPointColorByPrefix, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight]);
+  }, [visibleAllScreenPoints, plotWidth, plotHeight]);
 
   if (!hasPoints) {
     return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
@@ -914,22 +964,9 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
                   </text>
                 </g>
               ))}
-            {visibleScatterPoints
-              .filter((point) => isVisible(point))
-              .map((point, index) => (
-                <circle
-                  key={`${point.anomaly_type}-${index}`}
-                  className={`${isNgPoint(point, ngIdentitySet) ? 'failPoint' : 'okPoint'} ${
-                    point.anomaly_type === 'std' ? 'stdScatterPoint' : 'centerScatterPoint'
-                  }`}
-                  cx={xScale(point.x)}
-                  cy={yScale(point.y)}
-                  r={anomalyPointRadius}
-                  onMouseEnter={(event) => showTooltip(event, point)}
-                  onMouseMove={(event) => showTooltip(event, point)}
-                  onMouseLeave={() => setTooltip(null)}
-                />
-              ))}
+            {scatterPathItems.map((item) => (
+              <path key={item.className} className={item.className} d={item.d} pointerEvents="none" />
+            ))}
           </g>
           {selection && selection.width > 1 && selection.height > 1 && (
             <rect className="zoomSelection" x={selection.x} y={selection.y} width={selection.width} height={selection.height} />
@@ -948,7 +985,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
       )}
     </div>
   );
-}
+});
 
 const NG_TABLE_COLUMNS = ['wafer_id', 'tkout_time', 'step_seq', 'eqp_id', 'lot_id', 'process_id', 'item_id', 'fab_value'];
 const ANOMALY_META = {
