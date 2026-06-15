@@ -724,6 +724,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
 
     return Array.from(groups.entries()).map(([className, points]) => ({
       className,
+      borderD: buildCirclePath(points, anomalyPointRadius + (className.includes('stdScatterPoint') ? 0.7 : 0.5)),
       d: buildCirclePath(points, anomalyPointRadius),
     }));
   }, [visibleScatterScreenPoints, anomalyPointRadius]);
@@ -965,7 +966,10 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
                 </g>
               ))}
             {scatterPathItems.map((item) => (
-              <path key={item.className} className={item.className} d={item.d} pointerEvents="none" />
+              <path key={`${item.className}-border`} className="pointBorderLayer" d={item.borderD} pointerEvents="none" />
+            ))}
+            {scatterPathItems.map((item) => (
+              <path key={item.className} className={`${item.className} pointFillLayer`} d={item.d} pointerEvents="none" />
             ))}
           </g>
           {selection && selection.width > 1 && selection.height > 1 && (

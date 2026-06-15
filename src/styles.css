@@ -911,6 +911,15 @@ tr:last-child td {
   stroke-width: 1.4px;
 }
 
+.pointBorderLayer {
+  fill: var(--background);
+  stroke: none;
+}
+
+.pointFillLayer {
+  stroke: none;
+}
+
 .ngTableToggle {
   display: flex;
   align-items: center;
