@@ -376,6 +376,42 @@ function getPointTooltipRows(point) {
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
+function normalizeTextValue(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+}
+
+function isNgDecision(value) {
+  return normalizeTextValue(value).toUpperCase().replace(/[^A-Z0-9]/g, '') === 'NG';
+}
+
+function getPointIdentity(point) {
+  const lotId = normalizeTextValue(point?.lot_id ?? point?.lot_wf);
+  const waferId = normalizeTextValue(point?.wafer_id);
+
+  return lotId && waferId ? `${lotId}::${waferId}` : '';
+}
+
+function buildNgIdentitySet(points) {
+  const identities = new Set();
+
+  points.forEach((point) => {
+    if (!isNgDecision(point?.final_decision)) return;
+    const identity = getPointIdentity(point);
+    if (identity) identities.add(identity);
+  });
+
+  return identities;
+}
+
+function pointMatchesNg(point, ngIdentitySet = null) {
+  if (isNgDecision(point?.final_decision)) return true;
+  const identity = getPointIdentity(point);
+  return Boolean(identity && ngIdentitySet?.has(identity));
+}
+
 const STEP_LEGEND_COLORS = [
   { swatch: 'hsl(268 75% 58%)', point: 'hsla(268, 75%, 58%, 0.16)' },
   { swatch: 'hsl(204 94% 45%)', point: 'hsla(204, 94%, 45%, 0.16)' },
@@ -469,6 +505,10 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
     [stdPoints],
   );
   const scatterPoints = useMemo(() => [...centerScatterPoints, ...stdScatterPoints], [centerScatterPoints, stdScatterPoints]);
+  const ngIdentitySet = useMemo(
+    () => buildNgIdentitySet([...failPoints, ...stdPoints]),
+    [failPoints, stdPoints],
+  );
   const hasPoints = allScatterPoints.length > 0 || scatterPoints.length > 0;
   const stepLegendItems = useMemo(() => {
     const counts = new Map();
@@ -869,7 +909,7 @@ function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domai
               .map((point, index) => (
                 <circle
                   key={`${point.anomaly_type}-${index}`}
-                  className={`${String(point.final_decision ?? '').trim().toUpperCase() === 'NG' ? 'failPoint' : 'okPoint'} ${
+                  className={`${isNgPoint(point, ngIdentitySet) ? 'failPoint' : 'okPoint'} ${
                     point.anomaly_type === 'std' ? 'stdScatterPoint' : 'centerScatterPoint'
                   }`}
                   cx={xScale(point.x)}
@@ -906,8 +946,8 @@ const ANOMALY_META = {
   std: { label: '산포이상', tagClass: 'std' },
 };
 
-function isNgPoint(point) {
-  return String(point?.final_decision ?? '').trim().toUpperCase() === 'NG';
+function isNgPoint(point, ngIdentitySet = null) {
+  return pointMatchesNg(point, ngIdentitySet);
 }
 
 function isDrawablePoint(point) {
@@ -982,7 +1022,25 @@ function ChartTag({ anomalyType }) {
 function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
-  const ngTablePoints = points.filter((point) => isNgPoint(point) && isDrawablePoint(point));
+  const ngIdentitySet = useMemo(() => buildNgIdentitySet(points), [points]);
+  const ngTablePoints = useMemo(() => {
+    const seen = new Set();
+
+    return points
+      .filter((point) => isNgPoint(point, ngIdentitySet) && isDrawablePoint(point))
+      .filter((point) => {
+        const key = [
+          getPointIdentity(point),
+          point.tkout_time_ms ?? point.tkout_time ?? '',
+          point.fab_value ?? '',
+          getEquipmentId(point, eqpId),
+        ].join('|');
+
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [points, ngIdentitySet, eqpId]);
   const tableId = `ng-table-${String(`${eqpId}-${anomalyType}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
   return (

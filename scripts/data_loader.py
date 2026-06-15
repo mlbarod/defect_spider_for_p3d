@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v10"
+LOADER_VERSION = "file-loader-v11"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 COMPACT_TIME_FORMATS = (
@@ -280,17 +280,18 @@ def filter_frame_eqp(dataframe, eqp_id):
     eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch") if column in frame_columns(dataframe)]
     if not eqp_columns:
         return dataframe
+    target_eqp_id = str(eqp_id).strip()
     if is_polars_frame(dataframe):
         pl = load_polars()
         expression = None
         for column in eqp_columns:
-            condition = pl.col(column).cast(pl.Utf8) == str(eqp_id)
+            condition = pl.col(column).cast(pl.Utf8).fill_null("").str.strip_chars() == target_eqp_id
             expression = condition if expression is None else expression | condition
         return dataframe.filter(expression)
 
     mask = None
     for column in eqp_columns:
-        condition = dataframe[column].astype(str) == str(eqp_id)
+        condition = dataframe[column].astype(str).str.strip() == target_eqp_id
         mask = condition if mask is None else mask | condition
     return dataframe[mask]
 
@@ -299,17 +300,18 @@ def exclude_frame_eqp(dataframe, eqp_id):
     eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch") if column in frame_columns(dataframe)]
     if not eqp_columns:
         return dataframe
+    target_eqp_id = str(eqp_id).strip()
     if is_polars_frame(dataframe):
         pl = load_polars()
         expression = None
         for column in eqp_columns:
-            condition = pl.col(column).cast(pl.Utf8).fill_null("") != str(eqp_id)
+            condition = pl.col(column).cast(pl.Utf8).fill_null("").str.strip_chars() != target_eqp_id
             expression = condition if expression is None else expression & condition
         return dataframe.filter(expression)
 
     mask = None
     for column in eqp_columns:
-        condition = dataframe[column].astype(str) != str(eqp_id)
+        condition = dataframe[column].astype(str).str.strip() != target_eqp_id
         mask = condition if mask is None else mask & condition
     return dataframe[mask]
 
