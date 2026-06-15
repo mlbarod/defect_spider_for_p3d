@@ -373,6 +373,7 @@ function getPointTooltipRows(point) {
     ['tkout_time', point.tkout_time_text || point.tkout_time],
     ['eqp_ch', point.eqp_ch],
     ['step_seq', point.step_seq],
+    ['fab_value', point.fab_value],
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
@@ -446,23 +447,35 @@ function eqpListIncludes(eqpIds, eqpId) {
   return Array.isArray(eqpIds) && eqpIds.some((value) => String(value ?? '').trim() === target);
 }
 
-function svgNumber(value) {
-  return Number.isFinite(value) ? Number(value.toFixed(2)) : 0;
+function getCssVar(element, name, fallback) {
+  const value = element ? getComputedStyle(element).getPropertyValue(name).trim() : '';
+  return value || fallback;
 }
 
-function buildCirclePath(points, radius) {
-  if (points.length === 0) return '';
+function setCanvasFillStyle(context, value, fallback) {
+  context.fillStyle = fallback;
+  context.fillStyle = value || fallback;
+}
 
-  const diameter = svgNumber(radius * 2);
-  const r = svgNumber(radius);
+function addCircleToCanvasPath(context, x, y, radius) {
+  context.moveTo(x + radius, y);
+  context.arc(x, y, radius, 0, Math.PI * 2);
+}
 
-  return points
-    .map((point) => {
-      const x = svgNumber(point.sx);
-      const y = svgNumber(point.sy);
-      return `M${svgNumber(x + radius)},${y}a${r},${r} 0 1,0 -${diameter},0a${r},${r} 0 1,0 ${diameter},0`;
-    })
-    .join('');
+function prepareCanvas(canvas, width, height) {
+  if (!canvas) return null;
+
+  const ratio = window.devicePixelRatio || 1;
+  const nextWidth = Math.round(width * ratio);
+  const nextHeight = Math.round(height * ratio);
+  if (canvas.width !== nextWidth) canvas.width = nextWidth;
+  if (canvas.height !== nextHeight) canvas.height = nextHeight;
+
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  return context;
 }
 
 function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
@@ -505,6 +518,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   const [tooltip, setTooltip] = useState(null);
   const [hiddenLegendKeys, setHiddenLegendKeys] = useState(() => new Set());
   const canvasRef = useRef(null);
+  const pointCanvasRef = useRef(null);
   const plotRef = useRef(null);
   const width = 720;
   const height = 238;
@@ -712,22 +726,6 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
       })),
     [visibleScatterPoints, ngIdentitySet, viewMinX, viewMaxX, viewMinY, viewMaxY, plotWidth, plotHeight],
   );
-  const scatterPathItems = useMemo(() => {
-    const groups = new Map();
-
-    visibleScatterScreenPoints.forEach((point) => {
-      const className = `${point.isNg ? 'failPoint' : 'okPoint'} ${point.isStd ? 'stdScatterPoint' : 'centerScatterPoint'}`;
-      const group = groups.get(className);
-      if (group) group.push(point);
-      else groups.set(className, [point]);
-    });
-
-    return Array.from(groups.entries()).map(([className, points]) => ({
-      className,
-      borderD: buildCirclePath(points, anomalyPointRadius + (className.includes('stdScatterPoint') ? 0.7 : 0.5)),
-      d: buildCirclePath(points, anomalyPointRadius),
-    }));
-  }, [visibleScatterScreenPoints, anomalyPointRadius]);
   const buildHoverIndex = (screenPoints, cellSize = 12) => {
     const buckets = new Map();
 
@@ -878,15 +876,8 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ratio = window.devicePixelRatio || 1;
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
-    const context = canvas.getContext('2d');
+    const context = prepareCanvas(canvas, width, height);
     if (!context) return;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, width, height);
     context.save();
     context.beginPath();
     context.rect(padding.left - clipOverflow, padding.top - clipOverflow, plotWidth + clipOverflow * 2, plotHeight + clipOverflow * 2);
@@ -910,6 +901,41 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     context.restore();
   }, [visibleAllScreenPoints, plotWidth, plotHeight]);
 
+  useEffect(() => {
+    const canvas = pointCanvasRef.current;
+    const context = prepareCanvas(canvas, width, height);
+    if (!context) return;
+    context.save();
+    context.beginPath();
+    context.rect(padding.left - clipOverflow, padding.top - clipOverflow, plotWidth + clipOverflow * 2, plotHeight + clipOverflow * 2);
+    context.clip();
+
+    const backgroundColor = getCssVar(canvas, '--background', 'hsl(270 100% 99%)');
+    const okColor = getCssVar(canvas, '--chart-3', 'hsl(227 28% 37%)');
+    const failColor = getCssVar(canvas, '--destructive', 'hsl(0 72% 51%)');
+
+    setCanvasFillStyle(context, backgroundColor, 'hsl(270 100% 99%)');
+    context.beginPath();
+    visibleScatterScreenPoints.forEach((point) => {
+      addCircleToCanvasPath(context, point.sx, point.sy, anomalyPointRadius + (point.isStd ? 0.7 : 0.5));
+    });
+    context.fill();
+
+    [
+      [false, okColor, 'hsl(227 28% 37%)'],
+      [true, failColor, 'hsl(0 72% 51%)'],
+    ].forEach(([isNg, color, fallback]) => {
+      setCanvasFillStyle(context, color, fallback);
+      context.beginPath();
+      visibleScatterScreenPoints.forEach((point) => {
+        if (point.isNg === isNg) addCircleToCanvasPath(context, point.sx, point.sy, anomalyPointRadius);
+      });
+      context.fill();
+    });
+
+    context.restore();
+  }, [visibleScatterScreenPoints, plotWidth, plotHeight, anomalyPointRadius]);
+
   if (!hasPoints) {
     return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
   }
@@ -918,6 +944,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     <div className="chartCanvas" style={{ '--chart-legend-height': `${legendHeight}px` }}>
       <div className="chartPlot" ref={plotRef}>
         <canvas ref={canvasRef} className="scatterCanvas" aria-hidden="true" />
+        <canvas ref={pointCanvasRef} className="pointCanvas" aria-hidden="true" />
         <svg
           className="scatterChart"
           viewBox={`0 0 ${width} ${height}`}
@@ -965,17 +992,19 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
                   </text>
                 </g>
               ))}
-            {scatterPathItems.map((item) => (
-              <path key={`${item.className}-border`} className="pointBorderLayer" d={item.borderD} pointerEvents="none" />
-            ))}
-            {scatterPathItems.map((item) => (
-              <path key={item.className} className={`${item.className} pointFillLayer`} d={item.d} pointerEvents="none" />
-            ))}
           </g>
-          {selection && selection.width > 1 && selection.height > 1 && (
-            <rect className="zoomSelection" x={selection.x} y={selection.y} width={selection.width} height={selection.height} />
-          )}
         </svg>
+        {selection && selection.width > 1 && selection.height > 1 && (
+          <div
+            className="zoomSelectionOverlay"
+            style={{
+              left: `${(selection.x / width) * 100}%`,
+              top: `${(selection.y / height) * 100}%`,
+              width: `${(selection.width / width) * 100}%`,
+              height: `${(selection.height / height) * 100}%`,
+            }}
+          />
+        )}
       </div>
       <ChartLegend stepItems={stepLegendItems} equipmentItems={equipmentLegendItems} hiddenKeys={hiddenLegendKeys} onToggle={toggleLegendKey} />
       {tooltip && (
