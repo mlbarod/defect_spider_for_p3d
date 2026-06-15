@@ -436,6 +436,11 @@ function getEquipmentId(point, fallback = '') {
   return text || '-';
 }
 
+function eqpListIncludes(eqpIds, eqpId) {
+  const target = String(eqpId ?? '').trim();
+  return Array.isArray(eqpIds) && eqpIds.some((value) => String(value ?? '').trim() === target);
+}
+
 function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
   if (stepItems.length === 0 && equipmentItems.length === 0) return null;
 
@@ -1107,9 +1112,11 @@ function EquipmentChart({ row, eqpId, onLatestDate }) {
 
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
+  const shouldDrawCenter = eqpListIncludes(row.centerEqpIds, eqpId);
+  const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
   const chartConfigs = [
-    { anomalyType: 'center', points: failPoints },
-    { anomalyType: 'std', points: stdPoints },
+    { anomalyType: 'center', points: shouldDrawCenter ? failPoints : [] },
+    { anomalyType: 'std', points: shouldDrawStd ? stdPoints : [] },
   ].filter((config) => config.points.length > 0);
 
   if (chartState.loading || chartState.error || chartConfigs.length === 0) {

@@ -415,6 +415,7 @@ def add_summary_rows(target, source_rows, count_key, by_main_step):
     main_columns = ("main_seq", "대상스탭", "main_step", "mainStep")
     met_columns = ("met_seq", "계측스탭", "met_step", "metStep")
     eqp_columns = ("eqpid", "eqp_id", "eqpIds", "eqp_ids")
+    eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
     added = 0
     for row in source_rows:
@@ -446,6 +447,8 @@ def add_summary_rows(target, source_rows, count_key, by_main_step):
                 "sdwt": sdwt,
                 "centerCount": 0,
                 "stdCount": 0,
+                "centerEqpIds": [],
+                "stdEqpIds": [],
                 "eqpIds": [],
             },
         )
@@ -455,7 +458,8 @@ def add_summary_rows(target, source_rows, count_key, by_main_step):
         if sdwt and not current["sdwt"]:
             current["sdwt"] = sdwt
 
-        current[count_key] = len(eqp_ids)
+        current[eqp_ids_key] = sorted(set(current[eqp_ids_key]) | set(eqp_ids))
+        current[count_key] = len(current[eqp_ids_key])
         current["eqpIds"] = sorted(set(current["eqpIds"]) | set(eqp_ids))
         added += 1
 
