@@ -387,6 +387,11 @@ function isNgDecision(value) {
   return normalizeTextValue(value).toUpperCase().replace(/[^A-Z0-9]/g, '') === 'NG';
 }
 
+function getNgDecisionValue(point) {
+  if (point?.anomaly_type === 'std') return point.std_result ?? point.final_decision;
+  return point?.final_decision;
+}
+
 function getPointIdentity(point) {
   const lotId = normalizeTextValue(point?.lot_id ?? point?.lot_wf);
   const waferId = normalizeTextValue(point?.wafer_id);
@@ -398,7 +403,7 @@ function buildNgIdentitySet(points) {
   const identities = new Set();
 
   points.forEach((point) => {
-    if (!isNgDecision(point?.final_decision)) return;
+    if (!isNgDecision(getNgDecisionValue(point))) return;
     const identity = getPointIdentity(point);
     if (identity) identities.add(identity);
   });
@@ -407,7 +412,7 @@ function buildNgIdentitySet(points) {
 }
 
 function pointMatchesNg(point, ngIdentitySet = null) {
-  if (isNgDecision(point?.final_decision)) return true;
+  if (isNgDecision(getNgDecisionValue(point))) return true;
   const identity = getPointIdentity(point);
   return Boolean(identity && ngIdentitySet?.has(identity));
 }
@@ -995,7 +1000,7 @@ function NgPointTable({ points, row, eqpId }) {
             ))
           ) : (
             <tr>
-              <td colSpan={NG_TABLE_COLUMNS.length}>final_decision NG 데이터가 없습니다.</td>
+              <td colSpan={NG_TABLE_COLUMNS.length}>NG 데이터가 없습니다.</td>
             </tr>
           )}
         </tbody>

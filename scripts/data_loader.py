@@ -733,6 +733,7 @@ def select_columns(dataframe):
         "eqpid",
         "item_id",
         "final_decision",
+        "std_result",
     ]
     return select_frame_columns(dataframe, wanted)
 
