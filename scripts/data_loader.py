@@ -783,8 +783,8 @@ def outlier_filtered_values(values):
         return values
 
     sorted_values = sorted(values)
-    q1 = percentile(sorted_values, 0.2)
-    q3 = percentile(sorted_values, 0.8)
+    q1 = percentile(sorted_values, 0.1)
+    q3 = percentile(sorted_values, 0.9)
     iqr = q3 - q1
     if iqr <= 0:
         return values
