@@ -262,7 +262,7 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
   };
 
   return (
-    <aside className="sidePanel" aria-label="메인 스텝 선택">
+    <aside className="sidePanel primaryStepPanel" aria-label="메인 스텝 선택">
       <div className="sideHeader">
         <div>
           <p className="eyebrow">Main Step</p>
@@ -363,7 +363,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
       <div className="sideHeader">
         <div>
           <p className="eyebrow">Additional Detection</p>
-          <h2>추가 이상감지</h2>
+          <h2>FCC지수 연관 이상감지(개발중)</h2>
         </div>
         <span className="countBadge">{groups.length}</span>
       </div>
