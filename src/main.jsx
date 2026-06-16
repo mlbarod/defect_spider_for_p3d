@@ -339,6 +339,103 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
   );
 }
 
+function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, error, diagnostics }) {
+  const [openSteps, setOpenSteps] = useState(() => new Set());
+
+  useEffect(() => {
+    if (groups[0]?.mainStep) setOpenSteps(new Set([groups[0].mainStep]));
+    else setOpenSteps(new Set());
+  }, [groups]);
+
+  const toggleMainStep = (mainStep) => {
+    setOpenSteps((current) => {
+      const next = new Set(current);
+
+      if (next.has(mainStep)) next.delete(mainStep);
+      else next.add(mainStep);
+
+      return next;
+    });
+  };
+
+  return (
+    <aside className="sidePanel secondaryStepPanel" aria-label="추가 이상감지 스텝 선택">
+      <div className="sideHeader">
+        <div>
+          <p className="eyebrow">Additional Detection</p>
+          <h2>추가 이상감지</h2>
+        </div>
+        <span className="countBadge">{groups.length}</span>
+      </div>
+
+      {groups.length === 0 ? (
+        <div className="emptyPanel">
+          <strong>표시할 main_step이 없습니다.</strong>
+          <span>
+            {loading
+              ? '원본 파일을 읽고 있습니다.'
+              : hideFilePaths(error) ||
+                `파일 입력 ${Object.values(diagnostics?.inputRows ?? {}).reduce((sum, value) => sum + Number(value || 0), 0).toLocaleString()}행 중 화면에 표시할 대상이 0건입니다.`}
+          </span>
+          {diagnostics?.warnings?.slice(0, 3).map((warning) => (
+            <span key={warning}>{hideFilePaths(warning)}</span>
+          ))}
+        </div>
+      ) : (
+        <div className="mainStepList secondaryStepList">
+          {groups.map((group) => {
+            const isOpen = openSteps.has(group.mainStep);
+            const hasSelectedMetStep = group.metSteps.some((metStep) => metStep.key === selectedMetStepKey);
+
+            return (
+              <section key={group.mainStep} className={`mainStepGroup secondaryStepGroup ${hasSelectedMetStep ? 'selected' : ''}`}>
+                <button
+                  className="mainStepToggle"
+                  onClick={() => toggleMainStep(group.mainStep)}
+                  aria-expanded={isOpen}
+                  aria-controls={`additional-metsteps-${group.mainStep}`}
+                >
+                  <span className={`chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">
+                    ▸
+                  </span>
+                  <span className="mainStepTitle">
+                    <span className="stepNameRow">
+                      <span className="stepName">{group.stepDesc || 'step_desc 확인 필요'}</span>
+                      <span className="stepSeqBadge">{group.stepSeq || group.mainStep}</span>
+                    </span>
+                  </span>
+                  <span className="mainScore">{group.metSteps.length} met</span>
+                </button>
+                {isOpen && (
+                  <div className="subStepButtons" id={`additional-metsteps-${group.mainStep}`}>
+                    {group.metSteps.map((row) => {
+                      const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+
+                      return (
+                        <button
+                          key={row.key}
+                          className={`subStepButton secondaryStepButton ${selectedMetStepKey === row.key ? 'active' : ''}`}
+                          onClick={() => onSelectMetStep(row)}
+                        >
+                          <span>
+                            {metStepNo}
+                            {metItem ? ` / ${metItem}` : ''}
+                          </span>
+                          <strong>선택</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -1246,6 +1343,7 @@ function App() {
   const filteredRows = useMemo(() => filterRowsBySdwt(rows, selectedSdwt), [rows, selectedSdwt]);
   const mainStepGroups = useMemo(() => groupRowsByMainStep(filteredRows), [filteredRows]);
   const [selectedMetStep, setSelectedMetStep] = useState(null);
+  const [selectedAdditionalMetStep, setSelectedAdditionalMetStep] = useState(null);
   const [chartLatestDate, setChartLatestDate] = useState('');
 
   useEffect(() => {
@@ -1275,6 +1373,10 @@ function App() {
     setSelectedMetStep((current) => {
       if (current && mainStepGroups.some((group) => group.metSteps.some((row) => row.key === current.key))) return current;
       return firstMetStep;
+    });
+    setSelectedAdditionalMetStep((current) => {
+      if (current && mainStepGroups.some((group) => group.metSteps.some((row) => row.key === current.key))) return current;
+      return null;
     });
   }, [mainStepGroups]);
 
@@ -1322,6 +1424,14 @@ function App() {
             groups={mainStepGroups}
             selectedMetStepKey={selectedMetStep?.key}
             onSelectMetStep={setSelectedMetStep}
+            loading={loadState.loading}
+            error={loadState.error}
+            diagnostics={loadState.diagnostics}
+          />
+          <AdditionalAnomalyStepTree
+            groups={mainStepGroups}
+            selectedMetStepKey={selectedAdditionalMetStep?.key}
+            onSelectMetStep={setSelectedAdditionalMetStep}
             loading={loadState.loading}
             error={loadState.error}
             diagnostics={loadState.diagnostics}

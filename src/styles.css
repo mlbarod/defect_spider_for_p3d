@@ -208,9 +208,10 @@ code {
 
 .leftRail {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   min-width: 0;
+  align-content: start;
 }
 
 .sdwtButtons {
@@ -309,6 +310,14 @@ code {
   overscroll-behavior: contain;
 }
 
+.secondaryStepPanel {
+  min-height: 320px;
+}
+
+.secondaryStepList {
+  max-height: min(360px, calc(100vh - 320px));
+}
+
 .emptyPanel {
   display: grid;
   gap: 10px;
@@ -404,6 +413,12 @@ code {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
+.secondaryStepGroup.selected {
+  border-color: color-mix(in srgb, var(--chart-2) 38%, var(--border));
+  background: var(--chart-2-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chart-2) 10%, transparent);
+}
+
 .mainStepTitle {
   display: grid;
   gap: 2px;
@@ -468,6 +483,12 @@ code {
 .subStepButton.active {
   border-color: var(--primary);
   background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.secondaryStepButton.active {
+  border-color: color-mix(in srgb, var(--chart-2) 72%, var(--border));
+  background: color-mix(in srgb, var(--chart-2) 88%, var(--foreground));
   color: var(--primary-foreground);
 }
 
