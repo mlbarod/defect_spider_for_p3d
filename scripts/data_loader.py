@@ -446,31 +446,6 @@ def met_lookup(met_rows):
     return by_main_step, by_step_desc
 
 
-def met_step_lookup(met_rows):
-    lookup = {}
-    step_columns = ("main_step", "met_step", "step_seq", "fcc_step", "fcc_met_step")
-    for row in met_rows:
-        step_desc = row.get("step_desc") or row.get("desc") or ""
-        sdwt = row.get("sdwt") or ""
-        for column in step_columns:
-            key = normalize_step(row.get(column, ""))
-            if key and key not in lookup:
-                lookup[key] = (step_desc, sdwt)
-    return lookup
-
-
-def find_step_meta(step_value, lookup):
-    key = normalize_step(step_value)
-    if not key:
-        return "", ""
-    if key in lookup:
-        return lookup[key]
-    for lookup_key, meta in lookup.items():
-        if lookup_key and (lookup_key in key or key in lookup_key):
-            return meta
-    return "", ""
-
-
 def find_step_desc(main_seq, by_main_step):
     main_seq = normalize_step(main_seq)
     for main_step, step_desc, sdwt in by_main_step:
@@ -480,10 +455,17 @@ def find_step_desc(main_seq, by_main_step):
     return "", ""
 
 
-def add_summary_rows(target, source_rows, count_key, by_main_step):
-    main_columns = ("main_seq", "대상스탭", "main_step", "mainStep")
-    met_columns = ("met_seq", "계측스탭", "met_step", "metStep")
-    eqp_columns = ("eqpid", "eqp_id", "eqpIds", "eqp_ids")
+def add_summary_rows(
+    target,
+    source_rows,
+    count_key,
+    by_main_step,
+    main_columns=("main_seq", "대상스탭", "main_step", "mainStep"),
+    met_columns=("met_seq", "계측스탭", "met_step", "metStep"),
+    eqp_columns=("eqpid", "eqp_id", "eqpIds", "eqp_ids"),
+    data_kind="",
+    key_prefix="",
+):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
     added = 0
@@ -495,7 +477,7 @@ def add_summary_rows(target, source_rows, count_key, by_main_step):
         if not main_step or not met_step:
             continue
 
-        key = f"{main_step}::{met_step}"
+        key = f"{key_prefix}{main_step}::{met_step}"
         step_desc, sdwt = find_step_desc(main_step, by_main_step)
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
         if (CONFIG["selectLine"] == "PFB3" and CONFIG["device"] == "D1c") or CONFIG["selectLine"] == "P4D":
@@ -503,24 +485,25 @@ def add_summary_rows(target, source_rows, count_key, by_main_step):
         if not eqp_ids:
             continue
 
-        current = target.setdefault(
-            key,
-            {
-                "key": key,
-                "mainStep": main_step,
-                "mainStepPath": main_step_raw or main_step,
-                "stepSeq": main_step,
-                "metStep": met_step,
-                "metStepPath": met_step_raw or met_step,
-                "stepDesc": step_desc,
-                "sdwt": sdwt,
-                "centerCount": 0,
-                "stdCount": 0,
-                "centerEqpIds": [],
-                "stdEqpIds": [],
-                "eqpIds": [],
-            },
-        )
+        initial_row = {
+            "key": key,
+            "mainStep": main_step,
+            "mainStepPath": main_step_raw or main_step,
+            "stepSeq": main_step,
+            "metStep": met_step,
+            "metStepPath": met_step_raw or met_step,
+            "stepDesc": step_desc,
+            "sdwt": sdwt,
+            "centerCount": 0,
+            "stdCount": 0,
+            "centerEqpIds": [],
+            "stdEqpIds": [],
+            "eqpIds": [],
+        }
+        if data_kind:
+            initial_row["dataKind"] = data_kind
+
+        current = target.setdefault(key, initial_row)
 
         if step_desc and not current["stepDesc"]:
             current["stepDesc"] = step_desc
@@ -606,75 +589,6 @@ def command_summary(_args):
     )
 
 
-def add_fcc_summary_rows(target, source_rows, count_key, step_lookup):
-    main_columns = ("main_seq", "대상스탭", "main_step", "mainStep", "target_step")
-    met_columns = (
-        "met_seq",
-        "계측스탭",
-        "met_step",
-        "metStep",
-        "fcc_met_step",
-        "fcc_step",
-        "step_seq",
-        "step",
-    )
-    eqp_columns = ("eqp_ch", "eqpid", "eqp_id", "eqpIds", "eqp_ids")
-    eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
-
-    added = 0
-    for row in source_rows:
-        met_step_raw = str(get_first(row, met_columns) or "").strip()
-        main_step_raw = str(get_first(row, main_columns) or "").strip()
-        if not met_step_raw and main_step_raw:
-            met_step_raw = main_step_raw
-        if not met_step_raw:
-            continue
-
-        met_step = normalize_step(met_step_raw)
-        main_step = normalize_step(main_step_raw) if main_step_raw else "FCC지수"
-        key = f"fcc::{main_step}::{met_step}"
-        step_desc, sdwt = find_step_meta(main_step, step_lookup)
-        if not step_desc:
-            step_desc, sdwt = find_step_meta(met_step, step_lookup)
-        eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
-        if (CONFIG["selectLine"] == "PFB3" and CONFIG["device"] == "D1c") or CONFIG["selectLine"] == "P4D":
-            eqp_ids = [eqp_id for eqp_id in eqp_ids if not is_p4d_eqp(eqp_id)]
-        if not eqp_ids:
-            continue
-
-        current = target.setdefault(
-            key,
-            {
-                "key": key,
-                "dataKind": "fcc",
-                "mainStep": main_step,
-                "mainStepPath": main_step_raw or main_step,
-                "stepSeq": main_step if main_step != "FCC지수" else "FCC",
-                "metStep": met_step,
-                "metStepPath": met_step_raw or met_step,
-                "stepDesc": step_desc or "FCC지수",
-                "sdwt": sdwt,
-                "centerCount": 0,
-                "stdCount": 0,
-                "centerEqpIds": [],
-                "stdEqpIds": [],
-                "eqpIds": [],
-            },
-        )
-
-        if step_desc and current["stepDesc"] == "FCC지수":
-            current["stepDesc"] = step_desc
-        if sdwt and not current["sdwt"]:
-            current["sdwt"] = sdwt
-
-        current[eqp_ids_key] = sorted(set(current[eqp_ids_key]) | set(eqp_ids))
-        current[count_key] = len(current[eqp_ids_key])
-        current["eqpIds"] = sorted(set(current["eqpIds"]) | set(eqp_ids))
-        added += 1
-
-    return added
-
-
 def command_fcc_summary(_args):
     diagnostics = {
         "version": LOADER_VERSION,
@@ -696,10 +610,30 @@ def command_fcc_summary(_args):
         diagnostics["columns"]["fcc_met"] = []
         diagnostics["warnings"].append(f"{FCC_DATA_SOURCES[0]['label']} 읽기 실패: {exc}")
 
-    lookup = met_step_lookup(met_rows)
+    by_main_step, _by_step_desc = met_lookup(met_rows)
     merged = {}
-    diagnostics["usedRows"]["fcc_fail"] = add_fcc_summary_rows(merged, fail_rows, "centerCount", lookup)
-    diagnostics["usedRows"]["fcc_std"] = add_fcc_summary_rows(merged, std_rows, "stdCount", lookup)
+    diagnostics["usedRows"]["fcc_fail"] = add_summary_rows(
+        merged,
+        fail_rows,
+        "centerCount",
+        by_main_step,
+        main_columns=("main_seq",),
+        met_columns=("met_seq",),
+        eqp_columns=("eqp_ch",),
+        data_kind="fcc",
+        key_prefix="fcc::",
+    )
+    diagnostics["usedRows"]["fcc_std"] = add_summary_rows(
+        merged,
+        std_rows,
+        "stdCount",
+        by_main_step,
+        main_columns=("main_seq",),
+        met_columns=("met_seq",),
+        eqp_columns=("eqp_ch",),
+        data_kind="fcc",
+        key_prefix="fcc::",
+    )
 
     rows = [
         row
