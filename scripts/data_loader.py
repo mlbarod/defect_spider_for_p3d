@@ -235,7 +235,7 @@ def read_met_rows(path, device=CONFIG["device"]):
     for line in lines[1:]:
         values = [part.strip() for part in line.split("\t")]
         row = dict(zip(header, values))
-        if "device" in row and row.get("device") and row.get("device") != device:
+        if device and "device" in row and row.get("device") and row.get("device") != device:
             continue
         row["main_step"] = strip_percent_prefix(row.get("main_step", ""))
         row["met_step"] = strip_percent_prefix(row.get("met_step", ""))
@@ -371,6 +371,10 @@ def split_p3d_drawing_df(dataframe):
     return filter_frame_p3d_drawing(dataframe)
 
 
+def split_fcc_drawing_df(dataframe):
+    return normalize_fcc_chart_frame(dataframe)
+
+
 def records(dataframe):
     return frame_records(dataframe)
 
@@ -465,6 +469,7 @@ def add_summary_rows(
     eqp_columns=("eqpid", "eqp_id", "eqpIds", "eqp_ids"),
     data_kind="",
     key_prefix="",
+    filter_cross_line_eqp=True,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
@@ -480,7 +485,7 @@ def add_summary_rows(
         key = f"{key_prefix}{main_step}::{met_step}"
         step_desc, sdwt = find_step_desc(main_step, by_main_step)
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
-        if (CONFIG["selectLine"] == "PFB3" and CONFIG["device"] == "D1c") or CONFIG["selectLine"] == "P4D":
+        if filter_cross_line_eqp and ((CONFIG["selectLine"] == "PFB3" and CONFIG["device"] == "D1c") or CONFIG["selectLine"] == "P4D"):
             eqp_ids = [eqp_id for eqp_id in eqp_ids if not is_p4d_eqp(eqp_id)]
         if not eqp_ids:
             continue
@@ -636,7 +641,7 @@ def command_fcc_summary(_args):
     fail_rows = load_optional_parquet(FCC_DATA_SOURCES[1], diagnostics)
     std_rows = load_optional_parquet(FCC_DATA_SOURCES[2], diagnostics)
     try:
-        met_rows = read_met_rows(FCC_DATA_SOURCES[0]["path"])
+        met_rows = read_met_rows(FCC_DATA_SOURCES[0]["path"], device=None)
         diagnostics["inputRows"]["fcc_met"] = len(met_rows)
         diagnostics["columns"]["fcc_met"] = list(met_rows[0].keys()) if met_rows else []
     except Exception as exc:
@@ -658,6 +663,7 @@ def command_fcc_summary(_args):
         eqp_columns=("eqp_ch",),
         data_kind="fcc",
         key_prefix="fcc::",
+        filter_cross_line_eqp=False,
     )
     diagnostics["usedRows"]["fcc_std"] = add_summary_rows(
         merged,
@@ -669,17 +675,18 @@ def command_fcc_summary(_args):
         eqp_columns=("eqp_ch",),
         data_kind="fcc",
         key_prefix="fcc::",
+        filter_cross_line_eqp=False,
     )
 
     rows = list(merged.values())
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
 
-    if not fail_rows and not std_rows:
+    if not met_rows and not fail_rows and not std_rows:
         write_json(
             {
                 "ok": False,
-                "error": "FCC 중심치/산포 이상 parquet에서 읽은 행이 없습니다. 파일 경로, 권한, parquet 의존성을 확인하세요.",
+                "error": "FCC MET/중심치/산포 파일에서 읽은 행이 없습니다. 파일 경로, 권한, 입력 컬럼을 확인하세요.",
                 "config": CONFIG,
                 "sources": source_status(FCC_DATA_SOURCES),
                 "diagnostics": diagnostics,
@@ -1135,9 +1142,9 @@ def command_fcc_chart(args):
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
 
-    all_df = split_p3d_drawing_df(normalize_fcc_chart_frame(read_parquet(all_path)))
-    fail_df = split_p3d_drawing_df(normalize_fcc_chart_frame(read_parquet(fail_path)))
-    std_df = split_p3d_drawing_df(normalize_fcc_chart_frame(read_parquet(std_path))) if std_path else fail_df.head(0)
+    all_df = split_fcc_drawing_df(read_parquet(all_path))
+    fail_df = split_fcc_drawing_df(read_parquet(fail_path))
+    std_df = split_fcc_drawing_df(read_parquet(std_path)) if std_path else fail_df.head(0)
 
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")
