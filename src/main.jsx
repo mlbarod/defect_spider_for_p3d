@@ -12,6 +12,8 @@ const CONFIG = {
 
 const isMainLine = CONFIG.lineName === CONFIG.lineName;
 const folderPath = `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}`;
+const fccFolderPath = `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}_fcc`;
+const fccStepPath = `${fccFolderPath}/fcc_step`;
 
 const DATA_SOURCES = [
   {
@@ -46,11 +48,46 @@ const DATA_SOURCES = [
   },
 ];
 
+const FCC_DATA_SOURCES = [
+  {
+    key: 'fcc_met',
+    label: 'FCC MET 매핑',
+    path: `${fccFolderPath}/met_fcc.txt`,
+    requiredColumns: ['met_step', 'step_desc', 'sdwt'],
+  },
+  {
+    key: 'fcc_fail',
+    label: 'FCC 중심치 이상 목록',
+    path: `${fccStepPath}/fail_list_fcc.parquet`,
+    requiredColumns: ['met_seq', 'eqpid'],
+  },
+  {
+    key: 'fcc_std',
+    label: 'FCC 산포 이상 목록',
+    path: `${fccStepPath}/fail_list_std_fcc.parquet`,
+    requiredColumns: ['met_seq', 'eqpid'],
+  },
+];
+
 const EMPTY_LOAD_STATE = {
   loading: true,
   error: '',
   rows: [],
   sources: DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
+  diagnostics: {
+    version: 'browser-init',
+    inputRows: {},
+    usedRows: {},
+    outputRows: 0,
+    warnings: [],
+  },
+};
+
+const EMPTY_FCC_LOAD_STATE = {
+  loading: true,
+  error: '',
+  rows: [],
+  sources: FCC_DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
   diagnostics: {
     version: 'browser-init',
     inputRows: {},
@@ -132,7 +169,14 @@ function stripPercentPrefix(value) {
   return text.includes('%') ? text.split('%').pop() : text;
 }
 
+function stripFccPrefix(value) {
+  const text = String(value ?? '').trim();
+  return text.toLowerCase().startsWith('fcc_') ? text.slice(4) : text;
+}
+
 function getChartMetStep(row) {
+  if (row?.dataKind === 'fcc') return stripFccPrefix(stripPercentPrefix(row.metStepPath ?? row.metStep));
+
   let rawMetStep = stripPercentPrefix(row.metStepPath ?? row.metStep);
   while (rawMetStep.endsWith('_main_main')) rawMetStep = rawMetStep.replace(/_main_main$/, '_main');
   if (isMainLine && rawMetStep.endsWith('_main')) return rawMetStep;
@@ -363,7 +407,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
       <div className="sideHeader">
         <div>
           <p className="eyebrow">Additional Detection</p>
-          <h2>FCC지수 연관 이상감지(개발중)</h2>
+          <h2>FCC지수 연관 이상감지</h2>
         </div>
         <span className="countBadge">{groups.length}</span>
       </div>
@@ -421,7 +465,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
                             {metStepNo}
                             {metItem ? ` / ${metItem}` : ''}
                           </span>
-                          <strong>선택</strong>
+                          <strong>{row.eqpIds?.length ?? 0} eqp</strong>
                         </button>
                       );
                     })}
@@ -1245,7 +1289,7 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
   );
 }
 
-function EquipmentChart({ row, eqpId, onLatestDate }) {
+function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart' }) {
   const [chartState, setChartState] = useState({ loading: true, error: '', data: null });
 
   useEffect(() => {
@@ -1258,7 +1302,7 @@ function EquipmentChart({ row, eqpId, onLatestDate }) {
     });
 
     setChartState({ loading: true, error: '', data: null });
-    fetchJson(`/api/chart?${params.toString()}`, { signal: controller.signal })
+    fetchJson(`${chartEndpoint}?${params.toString()}`, { signal: controller.signal })
       .then((payload) => {
         setChartState({ loading: false, error: '', data: payload });
         if (payload.latestDate) onLatestDate?.(payload.latestDate);
@@ -1269,7 +1313,7 @@ function EquipmentChart({ row, eqpId, onLatestDate }) {
       });
 
     return () => controller.abort();
-  }, [eqpId, onLatestDate, row]);
+  }, [chartEndpoint, eqpId, onLatestDate, row]);
 
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
@@ -1337,13 +1381,18 @@ function EmptyChartState({ selectedRow }) {
 
 function App() {
   const [loadState, setLoadState] = useState(EMPTY_LOAD_STATE);
+  const [fccLoadState, setFccLoadState] = useState(EMPTY_FCC_LOAD_STATE);
   const rows = loadState.rows;
-  const sdwtOptions = useMemo(() => buildSdwtOptions(rows), [rows]);
+  const fccRows = fccLoadState.rows;
+  const sdwtOptions = useMemo(() => buildSdwtOptions([...rows, ...fccRows]), [rows, fccRows]);
   const [selectedSdwt, setSelectedSdwt] = useState('ALL');
   const filteredRows = useMemo(() => filterRowsBySdwt(rows, selectedSdwt), [rows, selectedSdwt]);
+  const filteredFccRows = useMemo(() => filterRowsBySdwt(fccRows, selectedSdwt), [fccRows, selectedSdwt]);
   const mainStepGroups = useMemo(() => groupRowsByMainStep(filteredRows), [filteredRows]);
+  const fccStepGroups = useMemo(() => groupRowsByMainStep(filteredFccRows), [filteredFccRows]);
   const [selectedMetStep, setSelectedMetStep] = useState(null);
   const [selectedAdditionalMetStep, setSelectedAdditionalMetStep] = useState(null);
+  const [activeChartSource, setActiveChartSource] = useState('main');
   const [chartLatestDate, setChartLatestDate] = useState('');
 
   useEffect(() => {
@@ -1369,24 +1418,61 @@ function App() {
   }, []);
 
   useEffect(() => {
+    fetchJson(`/api/fcc-summary?t=${Date.now()}`)
+      .then((payload) => {
+        setFccLoadState({
+          loading: false,
+          error: '',
+          rows: payload.rows ?? [],
+          sources: payload.sources ?? EMPTY_FCC_LOAD_STATE.sources,
+          diagnostics: payload.diagnostics ?? EMPTY_FCC_LOAD_STATE.diagnostics,
+        });
+      })
+      .catch((error) => {
+        setFccLoadState({
+          loading: false,
+          error: error.message,
+          rows: [],
+          sources: error.payload?.sources ?? EMPTY_FCC_LOAD_STATE.sources,
+          diagnostics: error.payload?.diagnostics ?? EMPTY_FCC_LOAD_STATE.diagnostics,
+        });
+      });
+  }, []);
+
+  useEffect(() => {
     const firstMetStep = mainStepGroups[0]?.metSteps[0] ?? null;
     setSelectedMetStep((current) => {
       if (current && mainStepGroups.some((group) => group.metSteps.some((row) => row.key === current.key))) return current;
       return firstMetStep;
     });
-    setSelectedAdditionalMetStep((current) => {
-      if (current && mainStepGroups.some((group) => group.metSteps.some((row) => row.key === current.key))) return current;
-      return null;
-    });
   }, [mainStepGroups]);
 
   useEffect(() => {
-    setChartLatestDate('');
-  }, [selectedMetStep?.key]);
+    const firstFccMetStep = fccStepGroups[0]?.metSteps[0] ?? null;
+    setSelectedAdditionalMetStep((current) => {
+      if (current && fccStepGroups.some((group) => group.metSteps.some((row) => row.key === current.key))) return current;
+      return firstFccMetStep;
+    });
+  }, [fccStepGroups]);
 
-  const selectedEqpIds = selectedMetStep?.eqpIds ?? [];
+  useEffect(() => {
+    setChartLatestDate('');
+  }, [activeChartSource, activeChartSource === 'fcc' ? selectedAdditionalMetStep?.key : selectedMetStep?.key]);
+
+  useEffect(() => {
+    if (activeChartSource === 'fcc' && !selectedAdditionalMetStep && selectedMetStep) setActiveChartSource('main');
+    if (activeChartSource === 'main' && !selectedMetStep && selectedAdditionalMetStep) setActiveChartSource('fcc');
+  }, [activeChartSource, selectedAdditionalMetStep, selectedMetStep]);
+
+  const activeSelectedRow = activeChartSource === 'fcc' ? selectedAdditionalMetStep : selectedMetStep;
+  const activeLoadState = activeChartSource === 'fcc' ? fccLoadState : loadState;
+  const activeChartEndpoint = activeChartSource === 'fcc' ? '/api/fcc-chart' : '/api/chart';
+  const activeChartEyebrow = activeChartSource === 'fcc' ? 'FCC Equipment Charts' : 'Equipment Charts';
+  const selectedEqpIds = activeSelectedRow?.eqpIds ?? [];
   const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
+  const fccMetStepCount = fccStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
+  const fccEqpCount = filteredFccRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
 
   return (
     <main className="app">
@@ -1400,14 +1486,15 @@ function App() {
           <span>선택 라인 {CONFIG.selectLine}</span>
           <span>Device {CONFIG.device}</span>
           <span>SDWT {selectedSdwt}</span>
+          <span>{activeChartSource === 'fcc' ? 'FCC 차트' : 'Main 차트'}</span>
         </div>
       </header>
 
       <SourceStatusBanner
-        loading={loadState.loading}
-        error={loadState.error}
-        sources={loadState.sources}
-        diagnostics={loadState.diagnostics}
+        loading={activeLoadState.loading}
+        error={activeLoadState.error}
+        sources={activeLoadState.sources}
+        diagnostics={activeLoadState.diagnostics}
         latestDate={chartLatestDate}
       />
 
@@ -1415,43 +1502,52 @@ function App() {
         <Metric label="메인 스탭" value={mainStepGroups.length.toLocaleString()} />
         <Metric label="MET 스탭" value={metStepCount.toLocaleString()} />
         <Metric label="감지 댓수" value={eqpCount.toLocaleString()} />
+        <Metric label="FCC 스탭 / 댓수" value={`${fccMetStepCount.toLocaleString()} / ${fccEqpCount.toLocaleString()}`} />
       </div>
 
       <section className="workspace">
         <div className="leftRail">
-          <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0} />
+          <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0 && fccRows.length === 0} />
           <MainStepTree
             groups={mainStepGroups}
             selectedMetStepKey={selectedMetStep?.key}
-            onSelectMetStep={setSelectedMetStep}
+            onSelectMetStep={(row) => {
+              setSelectedMetStep(row);
+              setActiveChartSource('main');
+            }}
             loading={loadState.loading}
             error={loadState.error}
             diagnostics={loadState.diagnostics}
           />
           <AdditionalAnomalyStepTree
-            groups={mainStepGroups}
+            groups={fccStepGroups}
             selectedMetStepKey={selectedAdditionalMetStep?.key}
-            onSelectMetStep={setSelectedAdditionalMetStep}
-            loading={loadState.loading}
-            error={loadState.error}
-            diagnostics={loadState.diagnostics}
+            onSelectMetStep={(row) => {
+              setSelectedAdditionalMetStep(row);
+              setActiveChartSource('fcc');
+            }}
+            loading={fccLoadState.loading}
+            error={fccLoadState.error}
+            diagnostics={fccLoadState.diagnostics}
           />
         </div>
 
         <section className="detailPanel">
           <div className="detailHeader">
             <div>
-              <p className="eyebrow">Equipment Charts</p>
-              <h2>{getChartHeading(selectedMetStep)}</h2>
+              <p className="eyebrow">{activeChartEyebrow}</p>
+              <h2>{getChartHeading(activeSelectedRow)}</h2>
             </div>
-            <div className="statusChip">{loadState.error ? '파일 읽기 실패' : loadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
+            <div className="statusChip">{activeLoadState.error ? '파일 읽기 실패' : activeLoadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
           </div>
 
           <div className="chartGrid">
-            {selectedMetStep && selectedEqpIds.length > 0 ? (
-              selectedEqpIds.map((eqpId) => <EquipmentChart key={eqpId} row={selectedMetStep} eqpId={eqpId} onLatestDate={setChartLatestDate} />)
+            {activeSelectedRow && selectedEqpIds.length > 0 ? (
+              selectedEqpIds.map((eqpId) => (
+                <EquipmentChart key={`${activeChartSource}-${eqpId}`} row={activeSelectedRow} eqpId={eqpId} onLatestDate={setChartLatestDate} chartEndpoint={activeChartEndpoint} />
+              ))
             ) : (
-              <EmptyChartState selectedRow={selectedMetStep} />
+              <EmptyChartState selectedRow={activeSelectedRow} />
             )}
           </div>
         </section>

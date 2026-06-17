@@ -16,9 +16,11 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v11"
+LOADER_VERSION = "file-loader-v12"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
+FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
+FCC_STEP_PATH = f"{FCC_FOLDER_PATH}/fcc_step"
 COMPACT_TIME_FORMATS = (
     "%Y%m%d%H%M%S",
     "%Y%m%d%H%M",
@@ -52,6 +54,24 @@ DATA_SOURCES = [
         "key": "pm",
         "label": "PM 이력",
         "path": CONFIG["pmCodePath"],
+    },
+]
+
+FCC_DATA_SOURCES = [
+    {
+        "key": "fcc_met",
+        "label": "FCC MET 매핑",
+        "path": f"{FCC_FOLDER_PATH}/met_fcc.txt",
+    },
+    {
+        "key": "fcc_fail",
+        "label": "FCC 중심치 이상 목록",
+        "path": f"{FCC_STEP_PATH}/fail_list_fcc.parquet",
+    },
+    {
+        "key": "fcc_std",
+        "label": "FCC 산포 이상 목록",
+        "path": f"{FCC_STEP_PATH}/fail_list_std_fcc.parquet",
     },
 ]
 
@@ -168,14 +188,14 @@ def load_polars():
         raise RuntimeError("parquet 파일을 읽으려면 Python 패키지 polars가 필요합니다.") from exc
 
 
-def source_status():
+def source_status(sources=DATA_SOURCES):
     return [
         {
             **source,
             "exists": os.path.exists(source["path"]),
             "readable": os.access(source["path"], os.R_OK),
         }
-        for source in DATA_SOURCES
+        for source in sources
     ]
 
 
@@ -201,7 +221,7 @@ def read_parquet(path):
             raise RuntimeError("parquet 파일을 읽으려면 Python 패키지 polars 또는 pandas+pyarrow가 필요합니다.") from exc
 
 
-def read_met_rows(path):
+def read_met_rows(path, device=CONFIG["device"]):
     require_file(path)
 
     with open(path, "r", encoding="utf-8") as file:
@@ -215,10 +235,11 @@ def read_met_rows(path):
     for line in lines[1:]:
         values = [part.strip() for part in line.split("\t")]
         row = dict(zip(header, values))
-        if row.get("device") == CONFIG["device"]:
-            row["main_step"] = strip_percent_prefix(row.get("main_step", ""))
-            row["met_step"] = strip_percent_prefix(row.get("met_step", ""))
-            rows.append(row)
+        if "device" in row and row.get("device") and row.get("device") != device:
+            continue
+        row["main_step"] = strip_percent_prefix(row.get("main_step", ""))
+        row["met_step"] = strip_percent_prefix(row.get("met_step", ""))
+        rows.append(row)
     return rows
 
 
@@ -402,6 +423,31 @@ def met_lookup(met_rows):
     return by_main_step, by_step_desc
 
 
+def met_step_lookup(met_rows):
+    lookup = {}
+    step_columns = ("main_step", "met_step", "step_seq", "fcc_step", "fcc_met_step")
+    for row in met_rows:
+        step_desc = row.get("step_desc") or row.get("desc") or ""
+        sdwt = row.get("sdwt") or ""
+        for column in step_columns:
+            key = normalize_step(row.get(column, ""))
+            if key and key not in lookup:
+                lookup[key] = (step_desc, sdwt)
+    return lookup
+
+
+def find_step_meta(step_value, lookup):
+    key = normalize_step(step_value)
+    if not key:
+        return "", ""
+    if key in lookup:
+        return lookup[key]
+    for lookup_key, meta in lookup.items():
+        if lookup_key and (lookup_key in key or key in lookup_key):
+            return meta
+    return "", ""
+
+
 def find_step_desc(main_seq, by_main_step):
     main_seq = normalize_step(main_seq)
     for main_step, step_desc, sdwt in by_main_step:
@@ -531,6 +577,133 @@ def command_summary(_args):
             "ok": True,
             "config": CONFIG,
             "sources": source_status(),
+            "diagnostics": diagnostics,
+            "rows": rows,
+        }
+    )
+
+
+def add_fcc_summary_rows(target, source_rows, count_key, step_lookup):
+    main_columns = ("main_seq", "대상스탭", "main_step", "mainStep", "target_step")
+    met_columns = (
+        "met_seq",
+        "계측스탭",
+        "met_step",
+        "metStep",
+        "fcc_met_step",
+        "fcc_step",
+        "step_seq",
+        "step",
+    )
+    eqp_columns = ("eqpid", "eqp_id", "eqpIds", "eqp_ids", "eqp_ch")
+    eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
+
+    added = 0
+    for row in source_rows:
+        met_step_raw = str(get_first(row, met_columns) or "").strip()
+        main_step_raw = str(get_first(row, main_columns) or "").strip()
+        if not met_step_raw and main_step_raw:
+            met_step_raw = main_step_raw
+        if not met_step_raw:
+            continue
+
+        met_step = normalize_step(met_step_raw)
+        main_step = normalize_step(main_step_raw) if main_step_raw else "FCC지수"
+        key = f"fcc::{main_step}::{met_step}"
+        step_desc, sdwt = find_step_meta(main_step, step_lookup)
+        if not step_desc:
+            step_desc, sdwt = find_step_meta(met_step, step_lookup)
+        eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
+        if (CONFIG["selectLine"] == "PFB3" and CONFIG["device"] == "D1c") or CONFIG["selectLine"] == "P4D":
+            eqp_ids = [eqp_id for eqp_id in eqp_ids if not is_p4d_eqp(eqp_id)]
+        if not eqp_ids:
+            continue
+
+        current = target.setdefault(
+            key,
+            {
+                "key": key,
+                "dataKind": "fcc",
+                "mainStep": main_step,
+                "mainStepPath": main_step_raw or main_step,
+                "stepSeq": main_step if main_step != "FCC지수" else "FCC",
+                "metStep": met_step,
+                "metStepPath": met_step_raw or met_step,
+                "stepDesc": step_desc or "FCC지수",
+                "sdwt": sdwt,
+                "centerCount": 0,
+                "stdCount": 0,
+                "centerEqpIds": [],
+                "stdEqpIds": [],
+                "eqpIds": [],
+            },
+        )
+
+        if step_desc and current["stepDesc"] == "FCC지수":
+            current["stepDesc"] = step_desc
+        if sdwt and not current["sdwt"]:
+            current["sdwt"] = sdwt
+
+        current[eqp_ids_key] = sorted(set(current[eqp_ids_key]) | set(eqp_ids))
+        current[count_key] = len(current[eqp_ids_key])
+        current["eqpIds"] = sorted(set(current["eqpIds"]) | set(eqp_ids))
+        added += 1
+
+    return added
+
+
+def command_fcc_summary(_args):
+    diagnostics = {
+        "version": LOADER_VERSION,
+        "inputRows": {},
+        "columns": {},
+        "usedRows": {},
+        "outputRows": 0,
+        "warnings": [],
+    }
+    fail_rows = load_optional_parquet(FCC_DATA_SOURCES[1], diagnostics)
+    std_rows = load_optional_parquet(FCC_DATA_SOURCES[2], diagnostics)
+    try:
+        met_rows = read_met_rows(FCC_DATA_SOURCES[0]["path"])
+        diagnostics["inputRows"]["fcc_met"] = len(met_rows)
+        diagnostics["columns"]["fcc_met"] = list(met_rows[0].keys()) if met_rows else []
+    except Exception as exc:
+        met_rows = []
+        diagnostics["inputRows"]["fcc_met"] = 0
+        diagnostics["columns"]["fcc_met"] = []
+        diagnostics["warnings"].append(f"{FCC_DATA_SOURCES[0]['label']} 읽기 실패: {exc}")
+
+    lookup = met_step_lookup(met_rows)
+    merged = {}
+    diagnostics["usedRows"]["fcc_fail"] = add_fcc_summary_rows(merged, fail_rows, "centerCount", lookup)
+    diagnostics["usedRows"]["fcc_std"] = add_fcc_summary_rows(merged, std_rows, "stdCount", lookup)
+
+    rows = [
+        row
+        for row in merged.values()
+        if row["centerCount"] != 0 or row["stdCount"] != 0
+    ]
+    rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
+    diagnostics["outputRows"] = len(rows)
+
+    if not fail_rows and not std_rows:
+        write_json(
+            {
+                "ok": False,
+                "error": "FCC 중심치/산포 이상 parquet에서 읽은 행이 없습니다. 파일 경로, 권한, parquet 의존성을 확인하세요.",
+                "config": CONFIG,
+                "sources": source_status(FCC_DATA_SOURCES),
+                "diagnostics": diagnostics,
+                "rows": [],
+            }
+        )
+        return
+
+    write_json(
+        {
+            "ok": True,
+            "config": CONFIG,
+            "sources": source_status(FCC_DATA_SOURCES),
             "diagnostics": diagnostics,
             "rows": rows,
         }
@@ -686,6 +859,65 @@ def resolve_chart_paths(main_step, chart_met_step):
         },
         "attempts": {
             "mainDirs": main_attempts,
+            "metDirs": met_attempts,
+            "allFiles": all_attempts,
+            "failFiles": fail_attempts,
+            "stdFiles": std_attempts,
+        },
+    }
+
+
+def strip_fcc_prefix(value):
+    value = str(value or "").strip()
+    return value[4:] if value.lower().startswith("fcc_") else value
+
+
+def fcc_met_step_candidates(chart_met_step):
+    raw = normalize_step(chart_met_step)
+    base = strip_fcc_prefix(strip_main_suffix(raw))
+    return unique_nonempty([raw, base])
+
+
+def fcc_dir_candidates(chart_met_step):
+    candidates = []
+    for candidate in fcc_met_step_candidates(chart_met_step):
+        candidates.append(candidate)
+        if not candidate.lower().startswith("fcc_"):
+            candidates.append(f"fcc_{candidate}")
+    return unique_nonempty(candidates)
+
+
+def resolve_fcc_chart_paths(chart_met_step):
+    met_candidates = fcc_dir_candidates(chart_met_step)
+    met_dir, met_dir_name, met_attempts = resolve_child_dir(FCC_STEP_PATH, met_candidates, "fcc_step", is_met=True)
+
+    latest_date = latest_child_dir(met_dir)
+    data_dir = os.path.join(met_dir, latest_date)
+    file_candidates = unique_nonempty([met_dir_name, *fcc_dir_candidates(strip_fcc_prefix(met_dir_name)), *fcc_dir_candidates(chart_met_step)])
+    all_path, all_attempts = resolve_parquet_file(data_dir, "all", file_candidates)
+    fail_path, fail_attempts = resolve_parquet_file(data_dir, "fail", file_candidates)
+    try:
+        std_path, std_attempts = resolve_parquet_file(data_dir, "fail_std", file_candidates)
+    except FileNotFoundError:
+        std_path = None
+        std_attempts = [f"fail_std_{candidate}.parquet" for candidate in file_candidates]
+
+    return {
+        "mainDir": FCC_STEP_PATH,
+        "metDir": met_dir,
+        "dataDir": data_dir,
+        "latestDate": latest_date,
+        "allPath": all_path,
+        "failPath": fail_path,
+        "stdPath": std_path,
+        "requested": {
+            "chartMetStep": chart_met_step,
+        },
+        "resolved": {
+            "mainStep": "fcc_step",
+            "chartMetStep": met_dir_name,
+        },
+        "attempts": {
             "metDirs": met_attempts,
             "allFiles": all_attempts,
             "failFiles": fail_attempts,
@@ -888,29 +1120,122 @@ def command_chart(args):
     )
 
 
+def pm_events_for_eqp(eqp_id):
+    if not os.path.isfile(CONFIG["pmCodePath"]) or not os.access(CONFIG["pmCodePath"], os.R_OK):
+        return []
+
+    pm_df = read_parquet(CONFIG["pmCodePath"])
+    if not {"asset", "inprg_dt", "work_type"}.issubset(set(frame_columns(pm_df))):
+        return []
+
+    if is_polars_frame(pm_df):
+        pl = load_polars()
+        pm_df = pm_df.with_columns(pl.col("asset").cast(pl.Utf8).str.replace_all("-", "_").alias("asset"))
+        pm_df = pm_df.filter(pl.col("asset").str.contains(str(eqp_id), literal=True))
+        return add_time_fields(records(pm_df.select(["inprg_dt", "work_type"]).head(80)), "inprg_dt")
+
+    pm_df = pm_df.copy()
+    pm_df["asset"] = pm_df["asset"].astype(str).str.replace("-", "_", regex=False)
+    pm_df = pm_df[pm_df["asset"].str.contains(str(eqp_id), regex=False, na=False)]
+    return add_time_fields(records(pm_df[["inprg_dt", "work_type"]].head(80)), "inprg_dt")
+
+
+def command_fcc_chart(args):
+    resolved_paths = resolve_fcc_chart_paths(args.chart_met_step)
+    all_path = resolved_paths["allPath"]
+    fail_path = resolved_paths["failPath"]
+    std_path = resolved_paths["stdPath"]
+
+    all_df = split_p3d_drawing_df(read_parquet(all_path))
+    fail_df = split_p3d_drawing_df(read_parquet(fail_path))
+    std_df = split_p3d_drawing_df(read_parquet(std_path)) if std_path else fail_df.head(0)
+
+    all_df = sort_frame(all_df, "tkout_time")
+    fail_df = sort_frame(fail_df, "tkout_time")
+    std_df = sort_frame(std_df, "tkout_time")
+    all_background = exclude_frame_eqp(all_df, args.eqp_id)
+    fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
+    std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
+    all_fab_values = numeric_column_values(all_df, "fab_value")
+    chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
+    chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
+    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
+
+    write_json(
+        {
+            "ok": True,
+            "diagnostics": {
+                "version": LOADER_VERSION,
+                "resolvedPaths": resolved_paths,
+                "inputRows": {
+                    "all": frame_height(all_df),
+                    "allBackground": frame_height(all_background),
+                    "fail": frame_height(fail_df),
+                    "failForEqp": frame_height(fail_for_eqp),
+                    "std": frame_height(std_df),
+                    "stdForEqp": frame_height(std_for_eqp),
+                },
+            },
+            "paths": {
+                "all": all_path,
+                "fail": fail_path,
+                "std": std_path,
+                "pm": CONFIG["pmCodePath"],
+            },
+            "latestDate": resolved_paths["latestDate"],
+            "domains": {
+                "x": time_domain(all_df, "tkout_time"),
+                "yFull": numeric_domain(chart_fab_values),
+                "yInitial": outlier_display_domain(all_fab_values),
+                "center": {
+                    "yFull": numeric_domain(chart_fab_values_center),
+                    "yInitial": outlier_display_domain(all_fab_values),
+                },
+                "std": {
+                    "yFull": numeric_domain(chart_fab_values_std),
+                    "yInitial": outlier_display_domain(all_fab_values),
+                },
+            },
+            "allPoints": chart_records(all_background, None),
+            "failPoints": chart_records(fail_for_eqp, None, "center"),
+            "stdPoints": chart_records(std_for_eqp, None, "std"),
+            "pmEvents": pm_events_for_eqp(args.eqp_id),
+        }
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("summary")
+    subparsers.add_parser("fcc-summary")
     chart_parser = subparsers.add_parser("chart")
     chart_parser.add_argument("--main-step", required=True)
     chart_parser.add_argument("--chart-met-step", required=True)
     chart_parser.add_argument("--eqp-id", required=True)
+    fcc_chart_parser = subparsers.add_parser("fcc-chart")
+    fcc_chart_parser.add_argument("--chart-met-step", required=True)
+    fcc_chart_parser.add_argument("--eqp-id", required=True)
     args = parser.parse_args()
 
     try:
         if args.command == "summary":
             command_summary(args)
+        elif args.command == "fcc-summary":
+            command_fcc_summary(args)
         elif args.command == "chart":
             command_chart(args)
+        elif args.command == "fcc-chart":
+            command_fcc_chart(args)
     except Exception as exc:
+        sources = source_status(FCC_DATA_SOURCES) if args.command.startswith("fcc") else source_status()
         write_json(
             {
                 "ok": False,
                 "error": str(exc),
                 "config": CONFIG,
                 "diagnostics": {"version": LOADER_VERSION},
-                "sources": source_status(),
+                "sources": sources,
             }
         )
         return 1

@@ -42,6 +42,10 @@ function installApiHandlers(middlewares) {
     runLoader(['summary'], res);
   });
 
+  middlewares.use('/api/fcc-summary', (_req, res) => {
+    runLoader(['fcc-summary'], res);
+  });
+
   middlewares.use('/api/chart', (req, res) => {
     const url = new URL(req.url ?? '', 'http://localhost');
     const mainStep = url.searchParams.get('mainStep');
@@ -56,6 +60,21 @@ function installApiHandlers(middlewares) {
     }
 
     runLoader(['chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
+  });
+
+  middlewares.use('/api/fcc-chart', (req, res) => {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const chartMetStep = url.searchParams.get('chartMetStep');
+    const eqpId = url.searchParams.get('eqpId');
+
+    if (!chartMetStep || !eqpId) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ ok: false, error: 'chartMetStep, eqpId가 필요합니다.' }));
+      return;
+    }
+
+    runLoader(['fcc-chart', '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
   });
 
   middlewares.use('/api', (req, res) => {
