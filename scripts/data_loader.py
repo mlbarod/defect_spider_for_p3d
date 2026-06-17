@@ -518,6 +518,41 @@ def add_summary_rows(
     return added
 
 
+def add_fcc_met_rows(target, met_rows):
+    added = 0
+    for row in met_rows:
+        main_step_raw = str(row.get("main_step") or "").strip()
+        met_step_raw = str(row.get("met_step") or "").strip()
+        main_step = normalize_step(main_step_raw)
+        met_step = normalize_step(met_step_raw)
+        if not main_step or not met_step:
+            continue
+
+        key = f"fcc::{main_step}::{met_step}"
+        if key in target:
+            continue
+
+        target[key] = {
+            "key": key,
+            "dataKind": "fcc",
+            "mainStep": main_step,
+            "mainStepPath": main_step_raw or main_step,
+            "stepSeq": main_step,
+            "metStep": met_step,
+            "metStepPath": met_step_raw or met_step,
+            "stepDesc": row.get("step_desc") or "",
+            "sdwt": row.get("sdwt") or "",
+            "centerCount": 0,
+            "stdCount": 0,
+            "centerEqpIds": [],
+            "stdEqpIds": [],
+            "eqpIds": [],
+        }
+        added += 1
+
+    return added
+
+
 def load_optional_parquet(source, diagnostics):
     try:
         dataframe = read_parquet(source["path"])
@@ -612,6 +647,7 @@ def command_fcc_summary(_args):
 
     by_main_step, _by_step_desc = met_lookup(met_rows)
     merged = {}
+    diagnostics["usedRows"]["fcc_met"] = add_fcc_met_rows(merged, met_rows)
     diagnostics["usedRows"]["fcc_fail"] = add_summary_rows(
         merged,
         fail_rows,
@@ -635,11 +671,7 @@ def command_fcc_summary(_args):
         key_prefix="fcc::",
     )
 
-    rows = [
-        row
-        for row in merged.values()
-        if row["centerCount"] != 0 or row["stdCount"] != 0
-    ]
+    rows = list(merged.values())
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
 

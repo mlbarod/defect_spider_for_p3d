@@ -484,6 +484,9 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
                   <div className="subStepButtons" id={`additional-metsteps-${group.mainStep}`}>
                     {group.metSteps.map((row) => {
                       const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+                      const centerCount = row.centerCount ?? 0;
+                      const stdCount = row.stdCount ?? 0;
+                      const anomalyText = centerCount + stdCount > 0 ? `중 ${centerCount} / 산 ${stdCount}` : '없음';
 
                       return (
                         <button
@@ -495,7 +498,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
                             {metStepNo}
                             {metItem ? ` / ${metItem}` : ''}
                           </span>
-                          <strong>{row.eqpIds?.length ?? 0} eqp</strong>
+                          <strong>{anomalyText}</strong>
                         </button>
                       );
                     })}
