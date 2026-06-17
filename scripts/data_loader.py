@@ -283,18 +283,28 @@ def sort_frame(dataframe, column):
 
 
 def filter_frame_p3d_drawing(dataframe):
-    if "eqp_id" not in frame_columns(dataframe):
+    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch") if column in frame_columns(dataframe)]
+    if not eqp_columns:
         return dataframe
     if is_polars_frame(dataframe):
         pl = load_polars()
-        return dataframe.filter(
-            ~pl.col("eqp_id")
-            .cast(pl.Utf8)
-            .str.extract_all(r"\d+")
-            .list.eval(pl.element().str.starts_with("35"))
-            .list.any()
-        )
-    return dataframe[~dataframe["eqp_id"].astype(str).apply(is_p4d_eqp)]
+        expression = None
+        for column in eqp_columns:
+            condition = (
+                pl.col(column)
+                .cast(pl.Utf8)
+                .str.extract_all(r"\d+")
+                .list.eval(pl.element().str.starts_with("35"))
+                .list.any()
+            )
+            expression = condition if expression is None else expression | condition
+        return dataframe.filter(~expression)
+
+    mask = None
+    for column in eqp_columns:
+        condition = dataframe[column].astype(str).apply(is_p4d_eqp)
+        mask = condition if mask is None else mask | condition
+    return dataframe[~mask]
 
 
 def filter_frame_eqp(dataframe, eqp_id):
@@ -342,6 +352,19 @@ def select_frame_columns(dataframe, columns):
     if is_polars_frame(dataframe):
         return dataframe.select(existing)
     return dataframe[existing]
+
+
+def rename_frame_column(dataframe, source, target):
+    columns = frame_columns(dataframe)
+    if source not in columns or target in columns:
+        return dataframe
+    if is_polars_frame(dataframe):
+        return dataframe.rename({source: target})
+    return dataframe.rename(columns={source: target})
+
+
+def normalize_fcc_chart_frame(dataframe):
+    return rename_frame_column(dataframe, "defect_value", "fab_value")
 
 
 def split_p3d_drawing_df(dataframe):
@@ -595,7 +618,7 @@ def add_fcc_summary_rows(target, source_rows, count_key, step_lookup):
         "step_seq",
         "step",
     )
-    eqp_columns = ("eqpid", "eqp_id", "eqpIds", "eqp_ids", "eqp_ch")
+    eqp_columns = ("eqp_ch", "eqpid", "eqp_id", "eqpIds", "eqp_ids")
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
     added = 0
@@ -1146,9 +1169,9 @@ def command_fcc_chart(args):
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
 
-    all_df = split_p3d_drawing_df(read_parquet(all_path))
-    fail_df = split_p3d_drawing_df(read_parquet(fail_path))
-    std_df = split_p3d_drawing_df(read_parquet(std_path)) if std_path else fail_df.head(0)
+    all_df = split_p3d_drawing_df(normalize_fcc_chart_frame(read_parquet(all_path)))
+    fail_df = split_p3d_drawing_df(normalize_fcc_chart_frame(read_parquet(fail_path)))
+    std_df = split_p3d_drawing_df(normalize_fcc_chart_frame(read_parquet(std_path))) if std_path else fail_df.head(0)
 
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")

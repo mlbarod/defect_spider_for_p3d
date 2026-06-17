@@ -53,19 +53,19 @@ const FCC_DATA_SOURCES = [
     key: 'fcc_met',
     label: 'FCC MET 매핑',
     path: `${fccFolderPath}/met_fcc.txt`,
-    requiredColumns: ['met_step', 'step_desc', 'sdwt'],
+    requiredColumns: ['device', 'main_step', 'met_step', 'step_desc', 'sdwt'],
   },
   {
     key: 'fcc_fail',
     label: 'FCC 중심치 이상 목록',
     path: `${fccStepPath}/fail_list_fcc.parquet`,
-    requiredColumns: ['met_seq', 'eqpid'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqp_ch'],
   },
   {
     key: 'fcc_std',
     label: 'FCC 산포 이상 목록',
     path: `${fccStepPath}/fail_list_std_fcc.parquet`,
-    requiredColumns: ['met_seq', 'eqpid'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqp_ch'],
   },
 ];
 
