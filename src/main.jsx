@@ -86,6 +86,7 @@ const EMPTY_LOAD_STATE = {
 const EMPTY_FCC_LOAD_STATE = {
   loading: true,
   error: '',
+  apiPath: '/api/fcc-summary',
   rows: [],
   sources: FCC_DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
   diagnostics: {
@@ -111,24 +112,26 @@ async function fetchJson(url, options) {
 
   if (!contentType.includes('application/json')) {
     const preview = body.slice(0, 80).replace(/\s+/g, ' ');
-    throw new Error(`/api 응답이 JSON이 아닙니다. 정적 서버나 Vite preview가 HTML을 반환했습니다: ${preview}`);
+    throw Object.assign(new Error(`/api 응답이 JSON이 아닙니다. 정적 서버나 Vite preview가 HTML을 반환했습니다: ${preview}`), { requestUrl: url });
   }
 
   try {
     payload = JSON.parse(body);
   } catch (error) {
-    throw new Error(`/api JSON 파싱 실패: ${error.message}`);
+    throw Object.assign(new Error(`/api JSON 파싱 실패: ${error.message}`), { requestUrl: url });
   }
 
   if (!response.ok || payload.ok === false) {
-    throw Object.assign(new Error(payload.error || `${url} 요청 실패`), { payload });
+    throw Object.assign(new Error(payload.error || `${url} 요청 실패`), { payload, requestUrl: url });
   }
 
   return payload;
 }
 
 function hideFilePaths(value) {
-  return String(value ?? '').replace(/(?:\/[^\s,)\]}]+)+/g, '[숨김]').replace(/[A-Za-z]:\\[^\s,)\]}]+/g, '[숨김]');
+  return String(value ?? '')
+    .replace(/(?:\/[^\s,)\]}]+)+/g, (match) => (match.startsWith('/api') ? match : '[숨김]'))
+    .replace(/[A-Za-z]:\\[^\s,)\]}]+/g, '[숨김]');
 }
 
 function getSdwtTokens(value) {
@@ -286,6 +289,32 @@ function SdwtSelector({ options, selectedSdwt, onSelect, disabled }) {
   );
 }
 
+function SourceReferenceList({ apiPath, sources = [] }) {
+  if (!apiPath && sources.length === 0) return null;
+
+  return (
+    <div className="sourceReferenceList">
+      {apiPath && (
+        <div>
+          <strong>API</strong>
+          <code>{apiPath}</code>
+        </div>
+      )}
+      {sources.map((source) => (
+        <div key={source.key ?? source.path}>
+          <strong>
+            {source.label}
+            <span className={source.exists && source.readable ? 'readOk' : 'readFail'}>
+              {source.exists && source.readable ? 'readable' : source.exists ? 'not readable' : 'missing'}
+            </span>
+          </strong>
+          <code>{source.path}</code>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, error, diagnostics }) {
   const [openSteps, setOpenSteps] = useState(() => new Set());
 
@@ -383,7 +412,7 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
   );
 }
 
-function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, error, diagnostics }) {
+function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, error, diagnostics, sources, apiPath }) {
   const [openSteps, setOpenSteps] = useState(() => new Set());
 
   useEffect(() => {
@@ -424,6 +453,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
           {diagnostics?.warnings?.slice(0, 3).map((warning) => (
             <span key={warning}>{hideFilePaths(warning)}</span>
           ))}
+          <SourceReferenceList apiPath={apiPath} sources={sources} />
         </div>
       ) : (
         <div className="mainStepList secondaryStepList">
@@ -1423,6 +1453,7 @@ function App() {
         setFccLoadState({
           loading: false,
           error: '',
+          apiPath: '/api/fcc-summary',
           rows: payload.rows ?? [],
           sources: payload.sources ?? EMPTY_FCC_LOAD_STATE.sources,
           diagnostics: payload.diagnostics ?? EMPTY_FCC_LOAD_STATE.diagnostics,
@@ -1432,6 +1463,7 @@ function App() {
         setFccLoadState({
           loading: false,
           error: error.message,
+          apiPath: error.requestUrl ?? '/api/fcc-summary',
           rows: [],
           sources: error.payload?.sources ?? EMPTY_FCC_LOAD_STATE.sources,
           diagnostics: error.payload?.diagnostics ?? EMPTY_FCC_LOAD_STATE.diagnostics,
@@ -1529,6 +1561,8 @@ function App() {
             loading={fccLoadState.loading}
             error={fccLoadState.error}
             diagnostics={fccLoadState.diagnostics}
+            sources={fccLoadState.sources}
+            apiPath={fccLoadState.apiPath}
           />
         </div>
 

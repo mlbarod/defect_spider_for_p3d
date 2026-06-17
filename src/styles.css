@@ -345,6 +345,42 @@ code {
   line-height: 1.45;
 }
 
+.sourceReferenceList {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.sourceReferenceList div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sourceReferenceList strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.sourceReferenceList strong span {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.sourceReferenceList code {
+  display: block;
+  color: var(--foreground);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .stepNameRow {
   display: flex;
   align-items: center;

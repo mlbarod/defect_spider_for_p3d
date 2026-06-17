@@ -38,49 +38,53 @@ function runLoader(args, res) {
 }
 
 function installApiHandlers(middlewares) {
-  middlewares.use('/api/summary', (_req, res) => {
-    runLoader(['summary'], res);
-  });
-
-  middlewares.use('/api/fcc-summary', (_req, res) => {
-    runLoader(['fcc-summary'], res);
-  });
-
-  middlewares.use('/api/chart', (req, res) => {
-    const url = new URL(req.url ?? '', 'http://localhost');
-    const mainStep = url.searchParams.get('mainStep');
-    const chartMetStep = url.searchParams.get('chartMetStep');
-    const eqpId = url.searchParams.get('eqpId');
-
-    if (!mainStep || !chartMetStep || !eqpId) {
-      res.statusCode = 400;
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.end(JSON.stringify({ ok: false, error: 'mainStep, chartMetStep, eqpId가 필요합니다.' }));
-      return;
-    }
-
-    runLoader(['chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
-  });
-
-  middlewares.use('/api/fcc-chart', (req, res) => {
-    const url = new URL(req.url ?? '', 'http://localhost');
-    const chartMetStep = url.searchParams.get('chartMetStep');
-    const eqpId = url.searchParams.get('eqpId');
-
-    if (!chartMetStep || !eqpId) {
-      res.statusCode = 400;
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.end(JSON.stringify({ ok: false, error: 'chartMetStep, eqpId가 필요합니다.' }));
-      return;
-    }
-
-    runLoader(['fcc-chart', '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
-  });
-
   middlewares.use('/api', (req, res) => {
+    const url = new URL(req.url ?? '', 'http://localhost');
+
+    if (url.pathname === '/summary') {
+      runLoader(['summary'], res);
+      return;
+    }
+
+    if (url.pathname === '/fcc-summary') {
+      runLoader(['fcc-summary'], res);
+      return;
+    }
+
+    if (url.pathname === '/chart') {
+      const mainStep = url.searchParams.get('mainStep');
+      const chartMetStep = url.searchParams.get('chartMetStep');
+      const eqpId = url.searchParams.get('eqpId');
+
+      if (!mainStep || !chartMetStep || !eqpId) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ ok: false, error: 'mainStep, chartMetStep, eqpId가 필요합니다.' }));
+        return;
+      }
+
+      runLoader(['chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
+      return;
+    }
+
+    if (url.pathname === '/fcc-chart') {
+      const chartMetStep = url.searchParams.get('chartMetStep');
+      const eqpId = url.searchParams.get('eqpId');
+
+      if (!chartMetStep || !eqpId) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ ok: false, error: 'chartMetStep, eqpId가 필요합니다.' }));
+        return;
+      }
+
+      runLoader(['fcc-chart', '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
+      return;
+    }
+
     res.statusCode = 404;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ ok: false, error: `알 수 없는 API 경로입니다: /api${req.url ?? ''}` }));
+    res.end(JSON.stringify({ ok: false, error: `알 수 없는 API 경로입니다: /api${url.pathname}` }));
   });
 }
 
