@@ -70,7 +70,7 @@ FCC_DATA_SOURCES = [
     {
         "key": "fcc_fail",
         "label": "FCC 중심치 이상 목록",
-        "path": f"{FCC_STEP_PATH}/fail_list_fcc.parquet",
+        "path": f"{FCC_STEP_PATH}/fail_list.parquet",
     },
     {
         "key": "fcc_std",
