@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v14"
+LOADER_VERSION = "file-loader-v15"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -62,11 +62,6 @@ DATA_SOURCES = [
 ]
 
 FCC_DATA_SOURCES = [
-    {
-        "key": "fcc_met",
-        "label": "FCC MET 매핑",
-        "path": f"{FCC_FOLDER_PATH}/met_fcc.txt",
-    },
     {
         "key": "fcc_step_met",
         "label": "FCC 스탭 MET 매핑",
@@ -445,11 +440,11 @@ def normalize_step(value):
     return strip_percent_prefix(str(value or "").strip())
 
 
-def met_lookup(met_rows):
+def met_lookup(met_rows, step_normalizer=normalize_step):
     by_main_step = []
     by_step_desc = {}
     for row in met_rows:
-        main_step = row.get("main_step") or ""
+        main_step = step_normalizer(row.get("main_step") or "")
         step_desc = row.get("step_desc") or ""
         sdwt = row.get("sdwt") or ""
         if main_step:
@@ -479,6 +474,8 @@ def add_summary_rows(
     data_kind="",
     key_prefix="",
     filter_cross_line_eqp=True,
+    allowed_keys=None,
+    step_normalizer=normalize_step,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
@@ -486,12 +483,14 @@ def add_summary_rows(
     for row in source_rows:
         main_step_raw = str(get_first(row, main_columns) or "").strip()
         met_step_raw = str(get_first(row, met_columns) or "").strip()
-        main_step = normalize_step(main_step_raw)
-        met_step = normalize_step(met_step_raw)
+        main_step = step_normalizer(main_step_raw)
+        met_step = step_normalizer(met_step_raw)
         if not main_step or not met_step:
             continue
 
         key = f"{key_prefix}{main_step}::{met_step}"
+        if allowed_keys is not None and key not in allowed_keys:
+            continue
         step_desc, sdwt = find_step_desc(main_step, by_main_step)
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
         if filter_cross_line_eqp and ((CONFIG["selectLine"] == "PFB3" and CONFIG["device"] == "D1c") or CONFIG["selectLine"] == "P4D"):
@@ -537,8 +536,8 @@ def add_fcc_met_rows(target, met_rows):
     for row in met_rows:
         main_step_raw = str(row.get("main_step") or "").strip()
         met_step_raw = str(row.get("met_step") or "").strip()
-        main_step = normalize_step(main_step_raw)
-        met_step = normalize_step(met_step_raw)
+        main_step = fcc_mapping_step_code(main_step_raw)
+        met_step = fcc_mapping_step_code(met_step_raw)
         if not main_step or not met_step:
             continue
 
@@ -652,20 +651,17 @@ def command_fcc_summary(_args):
         "outputRows": 0,
         "warnings": [],
     }
-    fcc_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_met")
     fcc_step_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_step_met")
     fcc_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_fail")
     fcc_std_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_std")
     fail_rows = load_optional_parquet(fcc_fail_source, diagnostics)
     std_rows = load_optional_parquet(fcc_std_source, diagnostics)
-    met_rows = [
-        *load_optional_met_rows(fcc_step_met_source, diagnostics, device=None),
-        *load_optional_met_rows(fcc_met_source, diagnostics, device=None),
-    ]
+    met_rows = load_optional_met_rows(fcc_step_met_source, diagnostics, device=None)
 
-    by_main_step, _by_step_desc = met_lookup(met_rows)
+    by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
     merged = {}
-    diagnostics["usedRows"]["fcc_met"] = add_fcc_met_rows(merged, met_rows)
+    diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(merged, met_rows)
+    mapped_keys = set(merged)
     diagnostics["usedRows"]["fcc_fail"] = add_summary_rows(
         merged,
         fail_rows,
@@ -677,6 +673,8 @@ def command_fcc_summary(_args):
         data_kind="fcc",
         key_prefix="fcc::",
         filter_cross_line_eqp=False,
+        allowed_keys=mapped_keys,
+        step_normalizer=fcc_mapping_step_code,
     )
     diagnostics["usedRows"]["fcc_std"] = add_summary_rows(
         merged,
@@ -689,9 +687,15 @@ def command_fcc_summary(_args):
         data_kind="fcc",
         key_prefix="fcc::",
         filter_cross_line_eqp=False,
+        allowed_keys=mapped_keys,
+        step_normalizer=fcc_mapping_step_code,
     )
 
-    rows = list(merged.values())
+    rows = [
+        row
+        for row in merged.values()
+        if row["centerCount"] != 0 or row["stdCount"] != 0
+    ]
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
 
@@ -699,7 +703,7 @@ def command_fcc_summary(_args):
         write_json(
             {
                 "ok": False,
-                "error": "FCC MET/중심치/산포 파일에서 읽은 행이 없습니다. 파일 경로, 권한, 입력 컬럼을 확인하세요.",
+                "error": "FCC 스탭 MET/중심치/산포 파일에서 읽은 행이 없습니다. 파일 경로, 권한, 입력 컬럼을 확인하세요.",
                 "config": CONFIG,
                 "sources": source_status(FCC_DATA_SOURCES),
                 "diagnostics": diagnostics,

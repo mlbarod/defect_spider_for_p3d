@@ -50,12 +50,6 @@ const DATA_SOURCES = [
 
 const FCC_DATA_SOURCES = [
   {
-    key: 'fcc_met',
-    label: 'FCC MET 매핑',
-    path: `${fccFolderPath}/met_fcc.txt`,
-    requiredColumns: ['device', 'main_step', 'met_step', 'step_desc', 'sdwt'],
-  },
-  {
     key: 'fcc_step_met',
     label: 'FCC 스탭 MET 매핑',
     path: `${fccStepPath}/met_fcc.txt`,
@@ -490,9 +484,6 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
                   <div className="subStepButtons" id={`additional-metsteps-${group.mainStep}`}>
                     {group.metSteps.map((row) => {
                       const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
-                      const centerCount = row.centerCount ?? 0;
-                      const stdCount = row.stdCount ?? 0;
-                      const anomalyText = centerCount + stdCount > 0 ? `중 ${centerCount} / 산 ${stdCount}` : '없음';
 
                       return (
                         <button
@@ -504,7 +495,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
                             {metStepNo}
                             {metItem ? ` / ${metItem}` : ''}
                           </span>
-                          <strong>{anomalyText}</strong>
+                          <strong>{row.eqpIds?.length ?? 0} eqp</strong>
                         </button>
                       );
                     })}
