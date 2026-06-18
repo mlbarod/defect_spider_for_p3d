@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v15"
+LOADER_VERSION = "file-loader-v16"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -28,11 +28,6 @@ COMPACT_TIME_FORMATS = (
     "%y%m%d%H%M",
     "%Y%m%d",
 )
-FCC_ITEM_ID_BY_MET_STEP = {
-    "125433": "26",
-    "13013": "186",
-}
-
 DATA_SOURCES = [
     {
         "key": "spec",
@@ -566,6 +561,74 @@ def add_fcc_met_rows(target, met_rows):
     return added
 
 
+def add_fcc_summary_rows(
+    target,
+    source_rows,
+    count_key,
+    by_main_step,
+    mapped_keys,
+    eqp_columns,
+):
+    eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
+
+    added = 0
+    for row in source_rows:
+        main_step_raw = str(get_first(row, ("main_seq",)) or "").strip()
+        met_seq_raw = str(get_first(row, ("met_seq",)) or "").strip()
+        main_step = fcc_mapping_step_code(main_step_raw)
+        met_step = fcc_mapping_step_code(met_seq_raw)
+        item_id = fcc_item_id_from_met_seq(met_seq_raw)
+        if not main_step or not met_step or not item_id:
+            continue
+
+        mapping_key = f"fcc::{main_step}::{met_step}"
+        if mapping_key not in mapped_keys:
+            continue
+
+        met_seq = f"{met_step}_{item_id}"
+        key = f"fcc::{main_step}::{met_seq}"
+        step_desc, sdwt = find_step_desc(main_step, by_main_step)
+        eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
+        if not eqp_ids:
+            continue
+
+        current = target.setdefault(
+            key,
+            {
+                "key": key,
+                "dataKind": "fcc",
+                "mainStep": main_step,
+                "mainStepPath": main_step_raw or main_step,
+                "stepSeq": main_step,
+                "metStep": met_seq,
+                "metStepPath": met_seq_raw or met_seq,
+                "stepDesc": step_desc,
+                "sdwt": sdwt,
+                "centerCount": 0,
+                "stdCount": 0,
+                "centerEqpIds": [],
+                "stdEqpIds": [],
+                "eqpIds": [],
+            },
+        )
+
+        if main_step_raw:
+            current["mainStepPath"] = main_step_raw
+        if met_seq_raw:
+            current["metStepPath"] = met_seq_raw
+        if step_desc and not current["stepDesc"]:
+            current["stepDesc"] = step_desc
+        if sdwt and not current["sdwt"]:
+            current["sdwt"] = sdwt
+
+        current[eqp_ids_key] = sorted(set(current[eqp_ids_key]) | set(eqp_ids))
+        current[count_key] = len(current[eqp_ids_key])
+        current["eqpIds"] = sorted(set(current["eqpIds"]) | set(eqp_ids))
+        added += 1
+
+    return added
+
+
 def load_optional_parquet(source, diagnostics):
     try:
         dataframe = read_parquet(source["path"])
@@ -662,33 +725,21 @@ def command_fcc_summary(_args):
     merged = {}
     diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(merged, met_rows)
     mapped_keys = set(merged)
-    diagnostics["usedRows"]["fcc_fail"] = add_summary_rows(
+    diagnostics["usedRows"]["fcc_fail"] = add_fcc_summary_rows(
         merged,
         fail_rows,
         "centerCount",
         by_main_step,
-        main_columns=("main_seq",),
-        met_columns=("met_seq",),
-        eqp_columns=("eqpch",),
-        data_kind="fcc",
-        key_prefix="fcc::",
-        filter_cross_line_eqp=False,
-        allowed_keys=mapped_keys,
-        step_normalizer=fcc_mapping_step_code,
+        mapped_keys,
+        eqp_columns=("eqpid",),
     )
-    diagnostics["usedRows"]["fcc_std"] = add_summary_rows(
+    diagnostics["usedRows"]["fcc_std"] = add_fcc_summary_rows(
         merged,
         std_rows,
         "stdCount",
         by_main_step,
-        main_columns=("main_seq",),
-        met_columns=("met_seq",),
-        eqp_columns=("eqpch",),
-        data_kind="fcc",
-        key_prefix="fcc::",
-        filter_cross_line_eqp=False,
-        allowed_keys=mapped_keys,
-        step_normalizer=fcc_mapping_step_code,
+        mapped_keys,
+        eqp_columns=("eqpch", "eqpid"),
     )
 
     rows = [
@@ -894,12 +945,21 @@ def fcc_mapping_step_code(value):
     return digits or head
 
 
-def fcc_item_id_for_met_step(met_step):
-    met_step_code = fcc_mapping_step_code(met_step)
-    lookup_key = met_step_code.lstrip("0") or met_step_code
-    item_id = FCC_ITEM_ID_BY_MET_STEP.get(lookup_key)
+def fcc_item_id_from_met_seq(value):
+    text = strip_fcc_prefix(strip_main_suffix(normalize_step(value))).strip()
+    if "_" not in text:
+        return ""
+    tail = text.split("_", 1)[1]
+    item_id = tail.split("_", 1)[0].strip()
+    digits = "".join(char for char in item_id if char.isdigit())
+    return digits or item_id
+
+
+def fcc_item_id_for_met_seq(met_seq):
+    item_id = fcc_item_id_from_met_seq(met_seq)
     if not item_id:
-        raise ValueError(f"FCC met_step {met_step_code}에 대한 item_id 매핑이 없습니다.")
+        met_step_code = fcc_mapping_step_code(met_seq)
+        raise ValueError(f"FCC met_seq {met_seq}에서 item_id를 찾지 못했습니다. 예: {met_step_code}_26")
     return item_id
 
 
@@ -909,7 +969,7 @@ def resolve_fcc_chart_paths(main_step, chart_met_step):
     if not main_step_code or not met_step_code:
         raise ValueError(f"FCC chart 경로에 필요한 main_step/met_step이 없습니다: {main_step}, {chart_met_step}")
 
-    item_id = fcc_item_id_for_met_step(met_step_code)
+    item_id = fcc_item_id_for_met_seq(chart_met_step)
     main_candidates = unique_nonempty([f"U%{main_step_code}", main_step, main_step_code])
     main_dir, main_dir_name, main_attempts = resolve_child_dir(FCC_STEP_PATH, main_candidates, "fcc main_step")
     met_candidates = unique_nonempty([f"{met_step_code}_{item_id}"])

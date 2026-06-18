@@ -59,7 +59,7 @@ const FCC_DATA_SOURCES = [
     key: 'fcc_fail',
     label: 'FCC 중심치 이상 목록',
     path: `${fccStepPath}/fail_list.parquet`,
-    requiredColumns: ['main_seq', 'met_seq', 'eqpch'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
   },
   {
     key: 'fcc_std',
