@@ -56,6 +56,12 @@ const FCC_DATA_SOURCES = [
     requiredColumns: ['device', 'main_step', 'met_step', 'step_desc', 'sdwt'],
   },
   {
+    key: 'fcc_step_met',
+    label: 'FCC 스탭 MET 매핑',
+    path: `${fccStepPath}/met_fcc.txt`,
+    requiredColumns: ['device', 'main_step', 'met_step', 'step_desc', 'sdwt'],
+  },
+  {
     key: 'fcc_fail',
     label: 'FCC 중심치 이상 목록',
     path: `${fccStepPath}/fail_list_fcc.parquet`,
@@ -64,7 +70,7 @@ const FCC_DATA_SOURCES = [
   {
     key: 'fcc_std',
     label: 'FCC 산포 이상 목록',
-    path: `${fccStepPath}/fail_list_std_fcc.parquet`,
+    path: `${fccStepPath}/fail_list_std.parquet`,
     requiredColumns: ['main_seq', 'met_seq', 'eqpch'],
   },
 ];

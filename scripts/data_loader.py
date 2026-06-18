@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v12"
+LOADER_VERSION = "file-loader-v14"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -28,6 +28,10 @@ COMPACT_TIME_FORMATS = (
     "%y%m%d%H%M",
     "%Y%m%d",
 )
+FCC_ITEM_ID_BY_MET_STEP = {
+    "125433": "26",
+    "13013": "186",
+}
 
 DATA_SOURCES = [
     {
@@ -64,6 +68,11 @@ FCC_DATA_SOURCES = [
         "path": f"{FCC_FOLDER_PATH}/met_fcc.txt",
     },
     {
+        "key": "fcc_step_met",
+        "label": "FCC 스탭 MET 매핑",
+        "path": f"{FCC_STEP_PATH}/met_fcc.txt",
+    },
+    {
         "key": "fcc_fail",
         "label": "FCC 중심치 이상 목록",
         "path": f"{FCC_STEP_PATH}/fail_list_fcc.parquet",
@@ -71,7 +80,7 @@ FCC_DATA_SOURCES = [
     {
         "key": "fcc_std",
         "label": "FCC 산포 이상 목록",
-        "path": f"{FCC_STEP_PATH}/fail_list_std_fcc.parquet",
+        "path": f"{FCC_STEP_PATH}/fail_list_std.parquet",
     },
 ]
 
@@ -571,6 +580,19 @@ def load_optional_parquet(source, diagnostics):
         return []
 
 
+def load_optional_met_rows(source, diagnostics, device=CONFIG["device"]):
+    try:
+        rows = read_met_rows(source["path"], device=device)
+        diagnostics["inputRows"][source["key"]] = len(rows)
+        diagnostics["columns"][source["key"]] = list(rows[0].keys()) if rows else []
+        return rows
+    except Exception as exc:
+        diagnostics["warnings"].append(f"{source['label']} 읽기 실패: {exc}")
+        diagnostics["inputRows"][source["key"]] = 0
+        diagnostics["columns"][source["key"]] = []
+        return []
+
+
 def command_summary(_args):
     diagnostics = {
         "version": LOADER_VERSION,
@@ -582,15 +604,7 @@ def command_summary(_args):
     }
     fail_rows = load_optional_parquet(DATA_SOURCES[1], diagnostics)
     std_rows = load_optional_parquet(DATA_SOURCES[2], diagnostics)
-    try:
-        met_rows = read_met_rows(DATA_SOURCES[3]["path"])
-        diagnostics["inputRows"]["met"] = len(met_rows)
-        diagnostics["columns"]["met"] = list(met_rows[0].keys()) if met_rows else []
-    except Exception as exc:
-        met_rows = []
-        diagnostics["inputRows"]["met"] = 0
-        diagnostics["columns"]["met"] = []
-        diagnostics["warnings"].append(f"{DATA_SOURCES[3]['label']} 읽기 실패: {exc}")
+    met_rows = load_optional_met_rows(DATA_SOURCES[3], diagnostics)
 
     by_main_step, _by_step_desc = met_lookup(met_rows)
     merged = {}
@@ -638,17 +652,16 @@ def command_fcc_summary(_args):
         "outputRows": 0,
         "warnings": [],
     }
-    fail_rows = load_optional_parquet(FCC_DATA_SOURCES[1], diagnostics)
-    std_rows = load_optional_parquet(FCC_DATA_SOURCES[2], diagnostics)
-    try:
-        met_rows = read_met_rows(FCC_DATA_SOURCES[0]["path"], device=None)
-        diagnostics["inputRows"]["fcc_met"] = len(met_rows)
-        diagnostics["columns"]["fcc_met"] = list(met_rows[0].keys()) if met_rows else []
-    except Exception as exc:
-        met_rows = []
-        diagnostics["inputRows"]["fcc_met"] = 0
-        diagnostics["columns"]["fcc_met"] = []
-        diagnostics["warnings"].append(f"{FCC_DATA_SOURCES[0]['label']} 읽기 실패: {exc}")
+    fcc_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_met")
+    fcc_step_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_step_met")
+    fcc_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_fail")
+    fcc_std_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_std")
+    fail_rows = load_optional_parquet(fcc_fail_source, diagnostics)
+    std_rows = load_optional_parquet(fcc_std_source, diagnostics)
+    met_rows = [
+        *load_optional_met_rows(fcc_step_met_source, diagnostics, device=None),
+        *load_optional_met_rows(fcc_met_source, diagnostics, device=None),
+    ]
 
     by_main_step, _by_step_desc = met_lookup(met_rows)
     merged = {}
@@ -868,28 +881,38 @@ def strip_fcc_prefix(value):
     return value[4:] if value.lower().startswith("fcc_") else value
 
 
-def fcc_met_step_candidates(chart_met_step):
-    raw = normalize_step(chart_met_step)
-    base = strip_fcc_prefix(strip_main_suffix(raw))
-    return unique_nonempty([raw, base])
+def fcc_mapping_step_code(value):
+    text = strip_fcc_prefix(strip_main_suffix(normalize_step(value))).strip()
+    head = text.split("_", 1)[0]
+    digits = "".join(char for char in head if char.isdigit())
+    if len(digits) >= 6:
+        return digits[-6:]
+    return digits or head
 
 
-def fcc_dir_candidates(chart_met_step):
-    candidates = []
-    for candidate in fcc_met_step_candidates(chart_met_step):
-        candidates.append(candidate)
-        if not candidate.lower().startswith("fcc_"):
-            candidates.append(f"fcc_{candidate}")
-    return unique_nonempty(candidates)
+def fcc_item_id_for_met_step(met_step):
+    met_step_code = fcc_mapping_step_code(met_step)
+    lookup_key = met_step_code.lstrip("0") or met_step_code
+    item_id = FCC_ITEM_ID_BY_MET_STEP.get(lookup_key)
+    if not item_id:
+        raise ValueError(f"FCC met_step {met_step_code}에 대한 item_id 매핑이 없습니다.")
+    return item_id
 
 
-def resolve_fcc_chart_paths(chart_met_step):
-    met_candidates = fcc_dir_candidates(chart_met_step)
-    met_dir, met_dir_name, met_attempts = resolve_child_dir(FCC_STEP_PATH, met_candidates, "fcc_step", is_met=True)
+def resolve_fcc_chart_paths(main_step, chart_met_step):
+    main_step_code = fcc_mapping_step_code(main_step)
+    met_step_code = fcc_mapping_step_code(chart_met_step)
+    if not main_step_code or not met_step_code:
+        raise ValueError(f"FCC chart 경로에 필요한 main_step/met_step이 없습니다: {main_step}, {chart_met_step}")
 
+    item_id = fcc_item_id_for_met_step(met_step_code)
+    main_candidates = unique_nonempty([f"U%{main_step_code}", main_step, main_step_code])
+    main_dir, main_dir_name, main_attempts = resolve_child_dir(FCC_STEP_PATH, main_candidates, "fcc main_step")
+    met_candidates = unique_nonempty([f"{met_step_code}_{item_id}"])
+    met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, met_candidates, "fcc met_step", is_met=True)
     latest_date = latest_child_dir(met_dir)
     data_dir = os.path.join(met_dir, latest_date)
-    file_candidates = unique_nonempty([met_dir_name, *fcc_dir_candidates(strip_fcc_prefix(met_dir_name)), *fcc_dir_candidates(chart_met_step)])
+    file_candidates = unique_nonempty([f"U%{main_step_code}", main_dir_name, main_step])
     all_path, all_attempts = resolve_parquet_file(data_dir, "all", file_candidates)
     fail_path, fail_attempts = resolve_parquet_file(data_dir, "fail", file_candidates)
     try:
@@ -899,7 +922,7 @@ def resolve_fcc_chart_paths(chart_met_step):
         std_attempts = [f"fail_std_{candidate}.parquet" for candidate in file_candidates]
 
     return {
-        "mainDir": FCC_STEP_PATH,
+        "mainDir": main_dir,
         "metDir": met_dir,
         "dataDir": data_dir,
         "latestDate": latest_date,
@@ -907,13 +930,18 @@ def resolve_fcc_chart_paths(chart_met_step):
         "failPath": fail_path,
         "stdPath": std_path,
         "requested": {
+            "mainStep": main_step,
             "chartMetStep": chart_met_step,
         },
         "resolved": {
-            "mainStep": "fcc_step",
+            "mainStep": main_dir_name,
             "chartMetStep": met_dir_name,
+            "mainStepCode": main_step_code,
+            "metStepCode": met_step_code,
+            "itemId": item_id,
         },
         "attempts": {
+            "mainDirs": main_attempts,
             "metDirs": met_attempts,
             "allFiles": all_attempts,
             "failFiles": fail_attempts,
@@ -1137,7 +1165,7 @@ def pm_events_for_eqp(eqp_id):
 
 
 def command_fcc_chart(args):
-    resolved_paths = resolve_fcc_chart_paths(args.chart_met_step)
+    resolved_paths = resolve_fcc_chart_paths(args.main_step, args.chart_met_step)
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
@@ -1210,6 +1238,7 @@ def main():
     chart_parser.add_argument("--chart-met-step", required=True)
     chart_parser.add_argument("--eqp-id", required=True)
     fcc_chart_parser = subparsers.add_parser("fcc-chart")
+    fcc_chart_parser.add_argument("--main-step", required=True)
     fcc_chart_parser.add_argument("--chart-met-step", required=True)
     fcc_chart_parser.add_argument("--eqp-id", required=True)
     args = parser.parse_args()
