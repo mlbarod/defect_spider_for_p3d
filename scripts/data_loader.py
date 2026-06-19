@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v16"
+LOADER_VERSION = "file-loader-v18"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -71,6 +71,16 @@ FCC_DATA_SOURCES = [
         "key": "fcc_std",
         "label": "FCC 산포 이상 목록",
         "path": f"{FCC_STEP_PATH}/fail_list_std.parquet",
+    },
+    {
+        "key": "fcc_extra_met",
+        "label": "FCC 추가 MET 매핑",
+        "path": f"{FCC_FOLDER_PATH}/met_fcc.txt",
+    },
+    {
+        "key": "fcc_extra_fail",
+        "label": "FCC 추가 중심치 이상 목록",
+        "path": f"{FCC_FOLDER_PATH}/fail_list.parquet",
     },
 ]
 
@@ -526,7 +536,7 @@ def add_summary_rows(
     return added
 
 
-def add_fcc_met_rows(target, met_rows):
+def add_fcc_met_rows(target, met_rows, key_prefix="fcc", chart_root="step", source_priority=1):
     added = 0
     for row in met_rows:
         main_step_raw = str(row.get("main_step") or "").strip()
@@ -536,13 +546,15 @@ def add_fcc_met_rows(target, met_rows):
         if not main_step or not met_step:
             continue
 
-        key = f"fcc::{main_step}::{met_step}"
+        key = f"{key_prefix}::{main_step}::{met_step}"
         if key in target:
             continue
 
         target[key] = {
             "key": key,
             "dataKind": "fcc",
+            "chartRoot": chart_root,
+            "sourcePriority": source_priority,
             "mainStep": main_step,
             "mainStepPath": main_step_raw or main_step,
             "stepSeq": main_step,
@@ -568,6 +580,9 @@ def add_fcc_summary_rows(
     by_main_step,
     mapped_keys,
     eqp_columns,
+    key_prefix="fcc",
+    chart_root="step",
+    source_priority=1,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
@@ -581,12 +596,12 @@ def add_fcc_summary_rows(
         if not main_step or not met_step or not item_id:
             continue
 
-        mapping_key = f"fcc::{main_step}::{met_step}"
+        mapping_key = f"{key_prefix}::{main_step}::{met_step}"
         if mapping_key not in mapped_keys:
             continue
 
         met_seq = f"{met_step}_{item_id}"
-        key = f"fcc::{main_step}::{met_seq}"
+        key = f"{key_prefix}::{main_step}::{met_seq}"
         step_desc, sdwt = find_step_desc(main_step, by_main_step)
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
         if not eqp_ids:
@@ -597,6 +612,8 @@ def add_fcc_summary_rows(
             {
                 "key": key,
                 "dataKind": "fcc",
+                "chartRoot": chart_root,
+                "sourcePriority": source_priority,
                 "mainStep": main_step,
                 "mainStepPath": main_step_raw or main_step,
                 "stepSeq": main_step,
@@ -620,6 +637,7 @@ def add_fcc_summary_rows(
             current["stepDesc"] = step_desc
         if sdwt and not current["sdwt"]:
             current["sdwt"] = sdwt
+        current["sourcePriority"] = min(current.get("sourcePriority", source_priority), source_priority)
 
         current[eqp_ids_key] = sorted(set(current[eqp_ids_key]) | set(eqp_ids))
         current[count_key] = len(current[eqp_ids_key])
@@ -717,13 +735,24 @@ def command_fcc_summary(_args):
     fcc_step_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_step_met")
     fcc_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_fail")
     fcc_std_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_std")
+    fcc_extra_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_met")
+    fcc_extra_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_fail")
     fail_rows = load_optional_parquet(fcc_fail_source, diagnostics)
     std_rows = load_optional_parquet(fcc_std_source, diagnostics)
     met_rows = load_optional_met_rows(fcc_step_met_source, diagnostics, device=None)
+    extra_fail_rows = load_optional_parquet(fcc_extra_fail_source, diagnostics)
+    extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
+    extra_by_main_step, _extra_by_step_desc = met_lookup(extra_met_rows, step_normalizer=fcc_mapping_step_code)
     merged = {}
-    diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(merged, met_rows)
+    diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(
+        merged,
+        met_rows,
+        key_prefix="fcc_step",
+        chart_root="step",
+        source_priority=1,
+    )
     mapped_keys = set(merged)
     diagnostics["usedRows"]["fcc_fail"] = add_fcc_summary_rows(
         merged,
@@ -732,6 +761,9 @@ def command_fcc_summary(_args):
         by_main_step,
         mapped_keys,
         eqp_columns=("eqpid",),
+        key_prefix="fcc_step",
+        chart_root="step",
+        source_priority=1,
     )
     diagnostics["usedRows"]["fcc_std"] = add_fcc_summary_rows(
         merged,
@@ -740,6 +772,28 @@ def command_fcc_summary(_args):
         by_main_step,
         mapped_keys,
         eqp_columns=("eqpch", "eqpid"),
+        key_prefix="fcc_step",
+        chart_root="step",
+        source_priority=1,
+    )
+    diagnostics["usedRows"]["fcc_extra_met"] = add_fcc_met_rows(
+        merged,
+        extra_met_rows,
+        key_prefix="fcc_extra",
+        chart_root="root",
+        source_priority=0,
+    )
+    extra_mapped_keys = {key for key in merged if key.startswith("fcc_extra::")}
+    diagnostics["usedRows"]["fcc_extra_fail"] = add_fcc_summary_rows(
+        merged,
+        extra_fail_rows,
+        "centerCount",
+        extra_by_main_step,
+        extra_mapped_keys,
+        eqp_columns=("eqpid",),
+        key_prefix="fcc_extra",
+        chart_root="root",
+        source_priority=0,
     )
 
     rows = [
@@ -747,10 +801,10 @@ def command_fcc_summary(_args):
         for row in merged.values()
         if row["centerCount"] != 0 or row["stdCount"] != 0
     ]
-    rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
+    rows.sort(key=lambda row: (row.get("sourcePriority", 1), row["mainStep"], row["centerCount"] == 0, row["metStep"]))
     diagnostics["outputRows"] = len(rows)
 
-    if not met_rows and not fail_rows and not std_rows:
+    if not met_rows and not fail_rows and not std_rows and not extra_met_rows and not extra_fail_rows:
         write_json(
             {
                 "ok": False,
@@ -963,15 +1017,16 @@ def fcc_item_id_for_met_seq(met_seq):
     return item_id
 
 
-def resolve_fcc_chart_paths(main_step, chart_met_step):
+def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step"):
     main_step_code = fcc_mapping_step_code(main_step)
     met_step_code = fcc_mapping_step_code(chart_met_step)
     if not main_step_code or not met_step_code:
         raise ValueError(f"FCC chart 경로에 필요한 main_step/met_step이 없습니다: {main_step}, {chart_met_step}")
 
     item_id = fcc_item_id_for_met_seq(chart_met_step)
+    root_path = FCC_FOLDER_PATH if chart_root == "root" else FCC_STEP_PATH
     main_candidates = unique_nonempty([f"U%{main_step_code}", main_step, main_step_code])
-    main_dir, main_dir_name, main_attempts = resolve_child_dir(FCC_STEP_PATH, main_candidates, "fcc main_step")
+    main_dir, main_dir_name, main_attempts = resolve_child_dir(root_path, main_candidates, "fcc main_step")
     met_candidates = unique_nonempty([f"{met_step_code}_{item_id}"])
     met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, met_candidates, "fcc met_step", is_met=True)
     latest_date = latest_child_dir(met_dir)
@@ -996,6 +1051,7 @@ def resolve_fcc_chart_paths(main_step, chart_met_step):
         "requested": {
             "mainStep": main_step,
             "chartMetStep": chart_met_step,
+            "chartRoot": chart_root,
         },
         "resolved": {
             "mainStep": main_dir_name,
@@ -1229,7 +1285,7 @@ def pm_events_for_eqp(eqp_id):
 
 
 def command_fcc_chart(args):
-    resolved_paths = resolve_fcc_chart_paths(args.main_step, args.chart_met_step)
+    resolved_paths = resolve_fcc_chart_paths(args.main_step, args.chart_met_step, args.chart_root)
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
@@ -1305,6 +1361,7 @@ def main():
     fcc_chart_parser.add_argument("--main-step", required=True)
     fcc_chart_parser.add_argument("--chart-met-step", required=True)
     fcc_chart_parser.add_argument("--eqp-id", required=True)
+    fcc_chart_parser.add_argument("--chart-root", choices=("step", "root"), default="step")
     args = parser.parse_args()
 
     try:

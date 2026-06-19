@@ -67,6 +67,18 @@ const FCC_DATA_SOURCES = [
     path: `${fccStepPath}/fail_list_std.parquet`,
     requiredColumns: ['main_seq', 'met_seq', 'eqpch'],
   },
+  {
+    key: 'fcc_extra_met',
+    label: 'FCC 추가 MET 매핑',
+    path: `${fccFolderPath}/met_fcc.txt`,
+    requiredColumns: ['device', 'main_step', 'met_step', 'step_desc', 'sdwt'],
+  },
+  {
+    key: 'fcc_extra_fail',
+    label: 'FCC 추가 중심치 이상 목록',
+    path: `${fccFolderPath}/fail_list.parquet`,
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
+  },
 ];
 
 const EMPTY_LOAD_STATE = {
@@ -202,7 +214,17 @@ function filterRowsBySdwt(rows, selectedSdwt) {
   return rows.filter((row) => getSdwtTokens(row.sdwt).includes(selectedSdwt));
 }
 
-function groupRowsByMainStep(rows) {
+function compareCenterAnomalyFirst(a, b) {
+  const aPriority = Number(a.sourcePriority ?? ((a.centerCount ?? 0) > 0 ? 1 : 2));
+  const bPriority = Number(b.sourcePriority ?? ((b.centerCount ?? 0) > 0 ? 1 : 2));
+  if (aPriority !== bPriority) return aPriority - bPriority;
+  const aCenterPriority = (a.centerCount ?? 0) > 0 ? 0 : 1;
+  const bCenterPriority = (b.centerCount ?? 0) > 0 ? 0 : 1;
+  if (aCenterPriority !== bCenterPriority) return aCenterPriority - bCenterPriority;
+  return String(a.metStep ?? '').localeCompare(String(b.metStep ?? ''));
+}
+
+function groupRowsByMainStep(rows, { prioritizeCenter = false } = {}) {
   const grouped = new Map();
 
   rows.forEach((row) => {
@@ -215,11 +237,13 @@ function groupRowsByMainStep(rows) {
       centerCount: 0,
       stdCount: 0,
       eqpCount: 0,
+      sourcePriority: row.sourcePriority ?? 2,
     };
 
     if (row.stepSeq && !current.stepSeq) current.stepSeq = row.stepSeq;
     if (row.stepDesc && !current.stepDesc) current.stepDesc = row.stepDesc;
     if (row.sdwt && !current.sdwt) current.sdwt = row.sdwt;
+    current.sourcePriority = Math.min(current.sourcePriority ?? 2, row.sourcePriority ?? 2);
     current.metSteps.push(row);
     current.centerCount += row.centerCount ?? 0;
     current.stdCount += row.stdCount ?? 0;
@@ -227,7 +251,24 @@ function groupRowsByMainStep(rows) {
     grouped.set(row.mainStep, current);
   });
 
-  return Array.from(grouped.values()).sort((a, b) => a.mainStep.localeCompare(b.mainStep));
+  if (prioritizeCenter) {
+    grouped.forEach((group) => {
+      group.metSteps.sort(compareCenterAnomalyFirst);
+    });
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => {
+    if (prioritizeCenter) {
+      const aPriority = Number(a.sourcePriority ?? ((a.centerCount ?? 0) > 0 ? 1 : 2));
+      const bPriority = Number(b.sourcePriority ?? ((b.centerCount ?? 0) > 0 ? 1 : 2));
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      const aCenterPriority = (a.centerCount ?? 0) > 0 ? 0 : 1;
+      const bCenterPriority = (b.centerCount ?? 0) > 0 ? 0 : 1;
+      if (aCenterPriority !== bCenterPriority) return aCenterPriority - bCenterPriority;
+    }
+
+    return a.mainStep.localeCompare(b.mainStep);
+  });
 }
 
 function Metric({ label, value }) {
@@ -616,6 +657,24 @@ function getEquipmentId(point, fallback = '') {
 function eqpListIncludes(eqpIds, eqpId) {
   const target = String(eqpId ?? '').trim();
   return Array.isArray(eqpIds) && eqpIds.some((value) => String(value ?? '').trim() === target);
+}
+
+function getPrioritizedEqpIds(row) {
+  const result = [];
+  const seen = new Set();
+
+  [row?.centerEqpIds, row?.stdEqpIds, row?.eqpIds].forEach((values) => {
+    if (!Array.isArray(values)) return;
+
+    values.forEach((value) => {
+      const eqpId = String(value ?? '').trim();
+      if (!eqpId || seen.has(eqpId)) return;
+      seen.add(eqpId);
+      result.push(eqpId);
+    });
+  });
+
+  return result;
 }
 
 function prepareCanvas(canvas, width, height) {
@@ -1328,6 +1387,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
       mainStep: row.mainStepPath ?? row.mainStep,
       chartMetStep: getChartMetStep(row),
       eqpId,
+      chartRoot: row.chartRoot ?? 'step',
       t: String(Date.now()),
     });
 
@@ -1348,7 +1408,8 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
   const shouldDrawCenter = eqpListIncludes(row.centerEqpIds, eqpId);
-  const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
+  const matchedFccCenterScatter = row?.dataKind === 'fcc' && row?.chartRoot === 'root' && shouldDrawCenter && failPoints.length > 0;
+  const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId) || matchedFccCenterScatter;
   const chartConfigs = [
     { anomalyType: 'center', points: shouldDrawCenter ? failPoints : [] },
     { anomalyType: 'std', points: shouldDrawStd ? stdPoints : [] },
@@ -1419,7 +1480,7 @@ function App() {
   const filteredRows = useMemo(() => filterRowsBySdwt(rows, selectedSdwt), [rows, selectedSdwt]);
   const filteredFccRows = useMemo(() => filterRowsBySdwt(fccRows, selectedSdwt), [fccRows, selectedSdwt]);
   const mainStepGroups = useMemo(() => groupRowsByMainStep(filteredRows), [filteredRows]);
-  const fccStepGroups = useMemo(() => groupRowsByMainStep(filteredFccRows), [filteredFccRows]);
+  const fccStepGroups = useMemo(() => groupRowsByMainStep(filteredFccRows, { prioritizeCenter: true }), [filteredFccRows]);
   const [selectedMetStep, setSelectedMetStep] = useState(null);
   const [selectedAdditionalMetStep, setSelectedAdditionalMetStep] = useState(null);
   const [activeChartSource, setActiveChartSource] = useState('main');
@@ -1500,7 +1561,7 @@ function App() {
   const activeLoadState = activeChartSource === 'fcc' ? fccLoadState : loadState;
   const activeChartEndpoint = activeChartSource === 'fcc' ? '/api/fcc-chart' : '/api/chart';
   const activeChartEyebrow = activeChartSource === 'fcc' ? 'FCC Equipment Charts' : 'Equipment Charts';
-  const selectedEqpIds = activeSelectedRow?.eqpIds ?? [];
+  const selectedEqpIds = getPrioritizedEqpIds(activeSelectedRow);
   const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
   const fccMetStepCount = fccStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);

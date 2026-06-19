@@ -95,13 +95,14 @@ function handleApi(req, res, url) {
     const mainStep = url.searchParams.get('mainStep');
     const chartMetStep = url.searchParams.get('chartMetStep');
     const eqpId = url.searchParams.get('eqpId');
+    const chartRoot = url.searchParams.get('chartRoot') || 'step';
 
     if (!mainStep || !chartMetStep || !eqpId) {
       sendJson(res, 400, { ok: false, error: 'mainStep, chartMetStep, eqpId가 필요합니다.' });
       return true;
     }
 
-    runLoader(['fcc-chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
+    runLoader(['fcc-chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId, '--chart-root', chartRoot], res);
     return true;
   }
 
