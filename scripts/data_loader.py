@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v19"
+LOADER_VERSION = "file-loader-v20"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1077,6 +1077,29 @@ def fcc_item_id_for_met_seq(met_seq):
     return item_id
 
 
+def resolve_fcc_met_dir(main_dir, met_candidates, item_id, chart_root):
+    try:
+        return resolve_child_dir(main_dir, met_candidates, "fcc met_step", is_met=True)
+    except FileNotFoundError:
+        if chart_root != "root":
+            raise
+
+        children = list_child_dirs(main_dir)
+        item_suffix = f"_{str(item_id).lower()}"
+        fallback_matches = [
+            child
+            for child in children
+            if normalize_dir_key(child, is_met=True).endswith(item_suffix)
+        ]
+        if not fallback_matches:
+            raise
+
+        fallback_name = fallback_matches[0]
+        attempts = [os.path.join(main_dir, candidate) for candidate in met_candidates]
+        attempts.extend(os.path.join(main_dir, match) for match in fallback_matches)
+        return os.path.join(main_dir, fallback_name), fallback_name, attempts
+
+
 def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step"):
     main_step_code = fcc_mapping_step_code(main_step)
     met_step_code = fcc_mapping_step_code(chart_met_step)
@@ -1088,7 +1111,7 @@ def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step"):
     main_candidates = unique_nonempty([f"U%{main_step_code}", main_step, main_step_code])
     main_dir, main_dir_name, main_attempts = resolve_child_dir(root_path, main_candidates, "fcc main_step")
     met_candidates = unique_nonempty([f"{met_step_code}_{item_id}"])
-    met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, met_candidates, "fcc met_step", is_met=True)
+    met_dir, met_dir_name, met_attempts = resolve_fcc_met_dir(main_dir, met_candidates, item_id, chart_root)
     latest_date = latest_child_dir(met_dir)
     data_dir = os.path.join(met_dir, latest_date)
     file_candidates = unique_nonempty([f"U%{main_step_code}", main_dir_name, main_step])

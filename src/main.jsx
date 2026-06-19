@@ -677,6 +677,23 @@ function getPrioritizedEqpIds(row) {
   return result;
 }
 
+function getFccChartRowsForEqp(activeRow, eqpId, fccRows) {
+  if (!activeRow) return [];
+
+  const rows = [activeRow];
+
+  if (activeRow.dataKind !== 'fcc') return rows;
+
+  fccRows.forEach((row) => {
+    if (row.key === activeRow.key) return;
+    if (row.chartRoot === activeRow.chartRoot) return;
+    if (!eqpListIncludes(row.centerEqpIds, eqpId)) return;
+    rows.push(row);
+  });
+
+  return rows;
+}
+
 function prepareCanvas(canvas, width, height) {
   if (!canvas) return null;
 
@@ -1637,9 +1654,13 @@ function App() {
 
           <div className="chartGrid">
             {activeSelectedRow && selectedEqpIds.length > 0 ? (
-              selectedEqpIds.map((eqpId) => (
-                <EquipmentChart key={`${activeChartSource}-${eqpId}`} row={activeSelectedRow} eqpId={eqpId} onLatestDate={setChartLatestDate} chartEndpoint={activeChartEndpoint} />
-              ))
+              selectedEqpIds.flatMap((eqpId) => {
+                const chartRows = activeChartSource === 'fcc' ? getFccChartRowsForEqp(activeSelectedRow, eqpId, fccRows) : [activeSelectedRow];
+
+                return chartRows.map((chartRow) => (
+                  <EquipmentChart key={`${activeChartSource}-${eqpId}-${chartRow.key}`} row={chartRow} eqpId={eqpId} onLatestDate={setChartLatestDate} chartEndpoint={activeChartEndpoint} />
+                ));
+              })
             ) : (
               <EmptyChartState selectedRow={activeSelectedRow} />
             )}
