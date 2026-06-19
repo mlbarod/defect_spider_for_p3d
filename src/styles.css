@@ -732,6 +732,35 @@ tr:last-child td {
   line-height: 1.5;
 }
 
+.chartFailurePaths {
+  display: grid;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.chartFailurePaths div {
+  display: grid;
+  gap: 4px;
+}
+
+.chartFailurePaths strong {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.chartFailurePaths code {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  padding: 7px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .chartTitle {
   display: flex;
   align-items: flex-start;

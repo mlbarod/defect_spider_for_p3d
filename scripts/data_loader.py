@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v20"
+LOADER_VERSION = "file-loader-v21"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -798,8 +798,6 @@ def command_fcc_summary(_args):
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
-    extra_by_main_step, _extra_by_step_desc = met_lookup(extra_met_rows, step_normalizer=fcc_mapping_step_code)
-    extra_met_by_key, extra_met_by_main_step = fcc_met_mapping_index(extra_met_rows)
     fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid",))
     merged = {}
     diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(
@@ -832,36 +830,19 @@ def command_fcc_summary(_args):
         chart_root="step",
         source_priority=1,
     )
-    diagnostics["usedRows"]["fcc_extra_met"] = add_fcc_met_rows(
-        merged,
-        extra_met_rows,
-        key_prefix="fcc_extra",
-        chart_root="root",
-        source_priority=0,
-    )
-    extra_mapped_keys = {key for key in merged if key.startswith("fcc_extra::")}
-    diagnostics["usedRows"]["fcc_extra_fail"] = add_fcc_summary_rows(
-        merged,
-        extra_fail_rows,
-        "centerCount",
-        extra_by_main_step,
-        extra_mapped_keys,
-        eqp_columns=("eqpid",),
-        key_prefix="fcc_extra",
-        chart_root="root",
-        source_priority=0,
-        required_eqp_ids=fcc_center_eqp_ids,
-        met_mapping_by_key=extra_met_by_key,
-        met_mapping_by_main_step=extra_met_by_main_step,
-        use_mapping_met_step=True,
+    diagnostics["usedRows"]["fcc_extra_met"] = len(extra_met_rows)
+    diagnostics["usedRows"]["fcc_extra_fail"] = sum(
+        1
+        for row in extra_fail_rows
+        if set(parse_eqp_ids(get_first(row, ("eqpid",)))) & fcc_center_eqp_ids
     )
 
     rows = [
         row
         for row in merged.values()
-        if row["centerCount"] != 0 or row["stdCount"] != 0
+        if row["centerCount"] != 0
     ]
-    rows.sort(key=lambda row: (row.get("sourcePriority", 1), row["mainStep"], row["centerCount"] == 0, row["metStep"]))
+    rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
 
     if not met_rows and not fail_rows and not std_rows and not extra_met_rows and not extra_fail_rows:
@@ -1367,68 +1348,158 @@ def pm_events_for_eqp(eqp_id):
     return add_time_fields(records(pm_df[["inprg_dt", "work_type"]].head(80)), "inprg_dt")
 
 
-def command_fcc_chart(args):
-    resolved_paths = resolve_fcc_chart_paths(args.main_step, args.chart_met_step, args.chart_root)
+def fcc_chart_payload(resolved_paths, eqp_id, include_std=True, include_pm=True):
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
 
     all_df = split_fcc_drawing_df(read_parquet(all_path))
     fail_df = split_fcc_drawing_df(read_parquet(fail_path))
-    std_df = split_fcc_drawing_df(read_parquet(std_path)) if std_path else fail_df.head(0)
+    std_df = split_fcc_drawing_df(read_parquet(std_path)) if include_std and std_path else fail_df.head(0)
 
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")
     std_df = sort_frame(std_df, "tkout_time")
-    all_background = exclude_frame_eqp(all_df, args.eqp_id)
-    fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
-    std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
+    all_background = exclude_frame_eqp(all_df, eqp_id)
+    fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
+    std_for_eqp = filter_frame_eqp(std_df, eqp_id)
     all_fab_values = numeric_column_values(all_df, "fab_value")
     chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
 
-    write_json(
-        {
-            "ok": True,
-            "diagnostics": {
-                "version": LOADER_VERSION,
-                "resolvedPaths": resolved_paths,
-                "inputRows": {
-                    "all": frame_height(all_df),
-                    "allBackground": frame_height(all_background),
-                    "fail": frame_height(fail_df),
-                    "failForEqp": frame_height(fail_for_eqp),
-                    "std": frame_height(std_df),
-                    "stdForEqp": frame_height(std_for_eqp),
-                },
+    return {
+        "ok": True,
+        "diagnostics": {
+            "version": LOADER_VERSION,
+            "resolvedPaths": resolved_paths,
+            "inputRows": {
+                "all": frame_height(all_df),
+                "allBackground": frame_height(all_background),
+                "fail": frame_height(fail_df),
+                "failForEqp": frame_height(fail_for_eqp),
+                "std": frame_height(std_df),
+                "stdForEqp": frame_height(std_for_eqp),
             },
-            "paths": {
-                "all": all_path,
-                "fail": fail_path,
-                "std": std_path,
-                "pm": CONFIG["pmCodePath"],
-            },
-            "latestDate": resolved_paths["latestDate"],
-            "domains": {
-                "x": time_domain(all_df, "tkout_time"),
-                "yFull": numeric_domain(chart_fab_values),
+        },
+        "paths": {
+            "all": all_path,
+            "fail": fail_path,
+            "std": std_path if include_std else None,
+            "pm": CONFIG["pmCodePath"] if include_pm else None,
+        },
+        "latestDate": resolved_paths["latestDate"],
+        "domains": {
+            "x": time_domain(all_df, "tkout_time"),
+            "yFull": numeric_domain(chart_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values),
+            "center": {
+                "yFull": numeric_domain(chart_fab_values_center),
                 "yInitial": outlier_display_domain(all_fab_values),
-                "center": {
-                    "yFull": numeric_domain(chart_fab_values_center),
-                    "yInitial": outlier_display_domain(all_fab_values),
-                },
-                "std": {
-                    "yFull": numeric_domain(chart_fab_values_std),
-                    "yInitial": outlier_display_domain(all_fab_values),
-                },
             },
-            "allPoints": chart_records(all_background, None),
-            "failPoints": chart_records(fail_for_eqp, None, "center"),
-            "stdPoints": chart_records(std_for_eqp, None, "std"),
-            "pmEvents": pm_events_for_eqp(args.eqp_id),
-        }
-    )
+            "std": {
+                "yFull": numeric_domain(chart_fab_values_std),
+                "yInitial": outlier_display_domain(all_fab_values),
+            },
+        },
+        "allPoints": chart_records(all_background, None),
+        "failPoints": chart_records(fail_for_eqp, None, "center"),
+        "stdPoints": chart_records(std_for_eqp, None, "std"),
+        "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
+    }
+
+
+def fcc_extra_chart_specs_for_eqp(eqp_id):
+    extra_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_met")
+    extra_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_fail")
+    fcc_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_fail")
+
+    try:
+        fcc_fail_rows = frame_records(read_parquet(fcc_fail_source["path"]))
+        if eqp_id not in collect_eqp_ids(fcc_fail_rows, ("eqpid",)):
+            return []
+        extra_fail_rows = frame_records(read_parquet(extra_fail_source["path"]))
+        extra_met_rows = read_met_rows(extra_met_source["path"], device=None)
+    except Exception:
+        return []
+
+    extra_met_by_key, extra_met_by_main_step = fcc_met_mapping_index(extra_met_rows)
+    specs = []
+    seen = set()
+    for row in extra_fail_rows:
+        if eqp_id not in parse_eqp_ids(get_first(row, ("eqpid",))):
+            continue
+
+        main_step_raw = str(get_first(row, ("main_seq",)) or "").strip()
+        met_seq_raw = str(get_first(row, ("met_seq",)) or "").strip()
+        main_step = fcc_mapping_step_code(main_step_raw)
+        fail_met_step = fcc_mapping_step_code(met_seq_raw)
+        item_id = fcc_item_id_from_met_seq(met_seq_raw)
+        if not main_step or not fail_met_step or not item_id:
+            continue
+
+        mapped_entry = extra_met_by_key.get((main_step, fail_met_step))
+        candidates = extra_met_by_main_step.get(main_step, [])
+        if mapped_entry is None and len(candidates) == 1:
+            mapped_entry = candidates[0]
+        if mapped_entry is None:
+            continue
+
+        met_seq = f"{mapped_entry['metStep']}_{item_id}"
+        key = (mapped_entry["mainStepPath"], met_seq)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        specs.append(
+            {
+                "key": f"fcc_extra::{mapped_entry['mainStep']}::{met_seq}",
+                "dataKind": "fcc",
+                "chartRoot": "root",
+                "sourcePriority": 0,
+                "mainStep": mapped_entry["mainStep"],
+                "mainStepPath": mapped_entry["mainStepPath"],
+                "stepSeq": mapped_entry["mainStep"],
+                "metStep": met_seq,
+                "metStepPath": met_seq,
+                "stepDesc": mapped_entry["stepDesc"],
+                "sdwt": mapped_entry["sdwt"],
+                "centerCount": 1,
+                "stdCount": 0,
+                "centerEqpIds": [eqp_id],
+                "stdEqpIds": [],
+                "eqpIds": [eqp_id],
+            }
+        )
+    return specs
+
+
+def fcc_extra_center_charts(eqp_id):
+    charts = []
+    for spec in fcc_extra_chart_specs_for_eqp(eqp_id):
+        try:
+            resolved_paths = resolve_fcc_chart_paths(spec["mainStepPath"], spec["metStepPath"], "root")
+            payload = fcc_chart_payload(resolved_paths, eqp_id, include_std=False, include_pm=False)
+            payload["row"] = spec
+            charts.append(payload)
+        except Exception as exc:
+            charts.append(
+                {
+                    "ok": False,
+                    "row": spec,
+                    "error": str(exc),
+                    "paths": {},
+                    "diagnostics": {"version": LOADER_VERSION},
+                }
+            )
+    return charts
+
+
+def command_fcc_chart(args):
+    resolved_paths = resolve_fcc_chart_paths(args.main_step, args.chart_met_step, args.chart_root)
+    payload = fcc_chart_payload(resolved_paths, args.eqp_id, include_std=args.chart_root != "root", include_pm=True)
+    payload["extraCenterCharts"] = fcc_extra_center_charts(args.eqp_id) if args.chart_root == "step" else []
+    write_json(payload)
 
 
 def main():

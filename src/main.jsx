@@ -677,23 +677,6 @@ function getPrioritizedEqpIds(row) {
   return result;
 }
 
-function getFccChartRowsForEqp(activeRow, eqpId, fccRows) {
-  if (!activeRow) return [];
-
-  const rows = [activeRow];
-
-  if (activeRow.dataKind !== 'fcc') return rows;
-
-  fccRows.forEach((row) => {
-    if (row.key === activeRow.key) return;
-    if (row.chartRoot === activeRow.chartRoot) return;
-    if (!eqpListIncludes(row.centerEqpIds, eqpId)) return;
-    rows.push(row);
-  });
-
-  return rows;
-}
-
 function prepareCanvas(canvas, width, height) {
   if (!canvas) return null;
 
@@ -1335,6 +1318,52 @@ function ChartTag({ anomalyType }) {
   );
 }
 
+function getChartPathEntries(data) {
+  const paths = data?.paths ?? {};
+  const resolvedPaths = data?.diagnostics?.resolvedPaths ?? {};
+  const entries = [
+    ['all', paths.all ?? resolvedPaths.allPath],
+    ['fail', paths.fail ?? resolvedPaths.failPath],
+    ['std', paths.std ?? resolvedPaths.stdPath],
+  ];
+
+  return entries.filter(([, value]) => value);
+}
+
+function ChartFailurePaths({ data }) {
+  const entries = getChartPathEntries(data);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="chartFailurePaths">
+      {entries.map(([label, path]) => (
+        <div key={label}>
+          <strong>{label}</strong>
+          <code>{path}</code>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChartFailureCard({ row, eqpId, error, data }) {
+  return (
+    <div className="chartShell">
+      <div className="chartTitle">
+        <div className="chartTitleText">
+          <strong>{eqpId}</strong>
+          <span>{getChartHeading(row)}</span>
+        </div>
+        <span className="chartStatusText">read failed</span>
+      </div>
+      <div className="emptyChartBody">
+        <p>{error || '차트 데이터를 찾지 못했습니다.'}</p>
+        <ChartFailurePaths data={data} />
+      </div>
+    </div>
+  );
+}
+
 function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
@@ -1424,14 +1453,14 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
 
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
+  const extraCenterCharts = chartState.data?.extraCenterCharts ?? [];
   const shouldDrawCenter = eqpListIncludes(row.centerEqpIds, eqpId);
   const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
-  const chartConfigs = [
-    { anomalyType: 'center', points: shouldDrawCenter ? failPoints : [] },
-    { anomalyType: 'std', points: shouldDrawStd ? stdPoints : [] },
-  ].filter((config) => config.points.length > 0);
+  const centerPoints = shouldDrawCenter ? failPoints : [];
+  const stdChartPoints = shouldDrawStd ? stdPoints : [];
+  const hasExtraCharts = extraCenterCharts.length > 0;
 
-  if (chartState.loading || chartState.error || chartConfigs.length === 0) {
+  if (chartState.loading || chartState.error || (centerPoints.length === 0 && stdChartPoints.length === 0 && !hasExtraCharts)) {
     return (
       <div className="chartShell">
         <div className="chartTitle">
@@ -1448,9 +1477,10 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             {chartState.loading
               ? '차트 parquet 파일을 읽고 있습니다.'
               : chartState.error
-                ? hideFilePaths(chartState.error)
+                ? chartState.error
                 : '선택한 eqp_id에서 중심치/산포 이상 데이터를 찾지 못했습니다.'}
           </p>
+          {!chartState.loading && <ChartFailurePaths data={chartState.data} />}
         </div>
       </div>
     );
@@ -1458,9 +1488,32 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
 
   return (
     <>
-      {chartConfigs.map((config) => (
-        <AnomalyChartCard key={`${eqpId}-${config.anomalyType}`} row={row} eqpId={eqpId} chartData={chartState.data} {...config} />
-      ))}
+      {centerPoints.length > 0 && (
+        <AnomalyChartCard key={`${eqpId}-center`} row={row} eqpId={eqpId} chartData={chartState.data} anomalyType="center" points={centerPoints} />
+      )}
+      {extraCenterCharts.map((chart, index) =>
+        chart.ok !== false && (chart.failPoints?.length ?? 0) > 0 ? (
+          <AnomalyChartCard
+            key={`${eqpId}-extra-center-${chart.row?.key ?? index}`}
+            row={chart.row ?? row}
+            eqpId={eqpId}
+            chartData={chart}
+            anomalyType="center"
+            points={chart.failPoints}
+          />
+        ) : (
+          <ChartFailureCard
+            key={`${eqpId}-extra-center-failed-${chart.row?.key ?? index}`}
+            row={chart.row ?? row}
+            eqpId={eqpId}
+            error={chart.error || 'FCC 추가 중심치 chart 데이터를 찾지 못했습니다.'}
+            data={chart}
+          />
+        ),
+      )}
+      {stdChartPoints.length > 0 && (
+        <AnomalyChartCard key={`${eqpId}-std`} row={row} eqpId={eqpId} chartData={chartState.data} anomalyType="std" points={stdChartPoints} />
+      )}
     </>
   );
 }
@@ -1577,7 +1630,7 @@ function App() {
   const activeLoadState = activeChartSource === 'fcc' ? fccLoadState : loadState;
   const activeChartEndpoint = activeChartSource === 'fcc' ? '/api/fcc-chart' : '/api/chart';
   const activeChartEyebrow = activeChartSource === 'fcc' ? 'FCC Equipment Charts' : 'Equipment Charts';
-  const selectedEqpIds = getPrioritizedEqpIds(activeSelectedRow);
+  const selectedEqpIds = activeChartSource === 'fcc' ? (activeSelectedRow?.centerEqpIds ?? []) : getPrioritizedEqpIds(activeSelectedRow);
   const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
   const fccMetStepCount = fccStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
@@ -1654,13 +1707,9 @@ function App() {
 
           <div className="chartGrid">
             {activeSelectedRow && selectedEqpIds.length > 0 ? (
-              selectedEqpIds.flatMap((eqpId) => {
-                const chartRows = activeChartSource === 'fcc' ? getFccChartRowsForEqp(activeSelectedRow, eqpId, fccRows) : [activeSelectedRow];
-
-                return chartRows.map((chartRow) => (
-                  <EquipmentChart key={`${activeChartSource}-${eqpId}-${chartRow.key}`} row={chartRow} eqpId={eqpId} onLatestDate={setChartLatestDate} chartEndpoint={activeChartEndpoint} />
-                ));
-              })
+              selectedEqpIds.map((eqpId) => (
+                <EquipmentChart key={`${activeChartSource}-${eqpId}`} row={activeSelectedRow} eqpId={eqpId} onLatestDate={setChartLatestDate} chartEndpoint={activeChartEndpoint} />
+              ))
             ) : (
               <EmptyChartState selectedRow={activeSelectedRow} />
             )}
