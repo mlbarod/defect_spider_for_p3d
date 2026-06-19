@@ -583,6 +583,7 @@ def add_fcc_summary_rows(
     key_prefix="fcc",
     chart_root="step",
     source_priority=1,
+    required_eqp_ids=None,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
@@ -604,6 +605,8 @@ def add_fcc_summary_rows(
         key = f"{key_prefix}::{main_step}::{met_seq}"
         step_desc, sdwt = find_step_desc(main_step, by_main_step)
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
+        if required_eqp_ids is not None:
+            eqp_ids = [eqp_id for eqp_id in eqp_ids if eqp_id in required_eqp_ids]
         if not eqp_ids:
             continue
 
@@ -645,6 +648,13 @@ def add_fcc_summary_rows(
         added += 1
 
     return added
+
+
+def collect_eqp_ids(rows, eqp_columns=("eqpid",)):
+    eqp_ids = set()
+    for row in rows:
+        eqp_ids.update(parse_eqp_ids(get_first(row, eqp_columns)))
+    return eqp_ids
 
 
 def load_optional_parquet(source, diagnostics):
@@ -745,6 +755,7 @@ def command_fcc_summary(_args):
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
     extra_by_main_step, _extra_by_step_desc = met_lookup(extra_met_rows, step_normalizer=fcc_mapping_step_code)
+    fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid",))
     merged = {}
     diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(
         merged,
@@ -794,6 +805,7 @@ def command_fcc_summary(_args):
         key_prefix="fcc_extra",
         chart_root="root",
         source_priority=0,
+        required_eqp_ids=fcc_center_eqp_ids,
     )
 
     rows = [

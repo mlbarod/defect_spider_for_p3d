@@ -1408,8 +1408,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
   const shouldDrawCenter = eqpListIncludes(row.centerEqpIds, eqpId);
-  const matchedFccCenterScatter = row?.dataKind === 'fcc' && row?.chartRoot === 'root' && shouldDrawCenter && failPoints.length > 0;
-  const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId) || matchedFccCenterScatter;
+  const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
   const chartConfigs = [
     { anomalyType: 'center', points: shouldDrawCenter ? failPoints : [] },
     { anomalyType: 'std', points: shouldDrawStd ? stdPoints : [] },
