@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v18"
+LOADER_VERSION = "file-loader-v19"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -573,6 +573,32 @@ def add_fcc_met_rows(target, met_rows, key_prefix="fcc", chart_root="step", sour
     return added
 
 
+def fcc_met_mapping_index(met_rows):
+    by_key = {}
+    by_main_step = {}
+
+    for row in met_rows:
+        main_step_raw = str(row.get("main_step") or "").strip()
+        met_step_raw = str(row.get("met_step") or "").strip()
+        main_step = fcc_mapping_step_code(main_step_raw)
+        met_step = fcc_mapping_step_code(met_step_raw)
+        if not main_step or not met_step:
+            continue
+
+        entry = {
+            "mainStep": main_step,
+            "mainStepPath": main_step_raw or main_step,
+            "metStep": met_step,
+            "metStepPath": met_step_raw or met_step,
+            "stepDesc": row.get("step_desc") or "",
+            "sdwt": row.get("sdwt") or "",
+        }
+        by_key[(main_step, met_step)] = entry
+        by_main_step.setdefault(main_step, []).append(entry)
+
+    return by_key, by_main_step
+
+
 def add_fcc_summary_rows(
     target,
     source_rows,
@@ -584,6 +610,9 @@ def add_fcc_summary_rows(
     chart_root="step",
     source_priority=1,
     required_eqp_ids=None,
+    met_mapping_by_key=None,
+    met_mapping_by_main_step=None,
+    use_mapping_met_step=False,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
@@ -592,11 +621,21 @@ def add_fcc_summary_rows(
         main_step_raw = str(get_first(row, ("main_seq",)) or "").strip()
         met_seq_raw = str(get_first(row, ("met_seq",)) or "").strip()
         main_step = fcc_mapping_step_code(main_step_raw)
-        met_step = fcc_mapping_step_code(met_seq_raw)
+        fail_met_step = fcc_mapping_step_code(met_seq_raw)
         item_id = fcc_item_id_from_met_seq(met_seq_raw)
-        if not main_step or not met_step or not item_id:
+        if not main_step or not fail_met_step or not item_id:
             continue
 
+        mapped_entry = None
+        if use_mapping_met_step:
+            mapped_entry = (met_mapping_by_key or {}).get((main_step, fail_met_step))
+            candidates = (met_mapping_by_main_step or {}).get(main_step, [])
+            if mapped_entry is None and len(candidates) == 1:
+                mapped_entry = candidates[0]
+            if mapped_entry is None:
+                continue
+
+        met_step = mapped_entry["metStep"] if mapped_entry else fail_met_step
         mapping_key = f"{key_prefix}::{main_step}::{met_step}"
         if mapping_key not in mapped_keys:
             continue
@@ -604,6 +643,11 @@ def add_fcc_summary_rows(
         met_seq = f"{met_step}_{item_id}"
         key = f"{key_prefix}::{main_step}::{met_seq}"
         step_desc, sdwt = find_step_desc(main_step, by_main_step)
+        if mapped_entry:
+            main_step_raw = mapped_entry["mainStepPath"]
+            met_seq_raw = met_seq
+            step_desc = mapped_entry["stepDesc"] or step_desc
+            sdwt = mapped_entry["sdwt"] or sdwt
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
         if required_eqp_ids is not None:
             eqp_ids = [eqp_id for eqp_id in eqp_ids if eqp_id in required_eqp_ids]
@@ -755,6 +799,7 @@ def command_fcc_summary(_args):
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
     extra_by_main_step, _extra_by_step_desc = met_lookup(extra_met_rows, step_normalizer=fcc_mapping_step_code)
+    extra_met_by_key, extra_met_by_main_step = fcc_met_mapping_index(extra_met_rows)
     fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid",))
     merged = {}
     diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(
@@ -806,6 +851,9 @@ def command_fcc_summary(_args):
         chart_root="root",
         source_priority=0,
         required_eqp_ids=fcc_center_eqp_ids,
+        met_mapping_by_key=extra_met_by_key,
+        met_mapping_by_main_step=extra_met_by_main_step,
+        use_mapping_met_step=True,
     )
 
     rows = [
