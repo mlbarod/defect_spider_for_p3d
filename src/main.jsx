@@ -100,6 +100,11 @@ const EMPTY_FCC_LOAD_STATE = {
   error: '',
   apiPath: '/api/fcc-summary',
   rows: [],
+  metrics: {
+    extraMetMainStepCount: 0,
+    extraMetStepCount: 0,
+    centerEqpCount: 0,
+  },
   sources: FCC_DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
   diagnostics: {
     version: 'browser-init',
@@ -1634,7 +1639,7 @@ const SPIDER_SUITE_CARDS = [
     category: 'L0',
     icon: 'chart',
     badge: 'Open',
-    href: '/go/spider',
+    href: 'https://go/spider',
   },
   {
     key: 'l1',
@@ -1643,7 +1648,7 @@ const SPIDER_SUITE_CARDS = [
     category: 'L1',
     icon: 'activity',
     badge: 'Open',
-    href: '/go/spider1',
+    href: 'https://go/spider1',
   },
 ];
 
@@ -1696,7 +1701,8 @@ function SpiderHomeMark() {
 function HomeCategoryCard({ card, onSelect }) {
   const handleClick = () => {
     if (card.href) {
-      window.location.assign(card.href);
+      const popup = window.open(card.href, '_blank', 'noopener,noreferrer');
+      if (popup) popup.opener = null;
       return;
     }
 
@@ -1829,6 +1835,7 @@ function App() {
           error: '',
           apiPath: '/api/fcc-summary',
           rows: payload.rows ?? [],
+          metrics: payload.metrics ?? EMPTY_FCC_LOAD_STATE.metrics,
           sources: payload.sources ?? EMPTY_FCC_LOAD_STATE.sources,
           diagnostics: payload.diagnostics ?? EMPTY_FCC_LOAD_STATE.diagnostics,
         });
@@ -1839,6 +1846,7 @@ function App() {
           error: error.message,
           apiPath: error.requestUrl ?? '/api/fcc-summary',
           rows: [],
+          metrics: error.payload?.metrics ?? EMPTY_FCC_LOAD_STATE.metrics,
           sources: error.payload?.sources ?? EMPTY_FCC_LOAD_STATE.sources,
           diagnostics: error.payload?.diagnostics ?? EMPTY_FCC_LOAD_STATE.diagnostics,
         });
@@ -1875,6 +1883,20 @@ function App() {
   const fccMetStepCount = fccStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const fccEqpCount = filteredFccRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
   const activeChartLabel = activeChartSource === 'fcc' ? 'FCC 차트' : 'Main 차트';
+  const fccMetrics = fccLoadState.metrics ?? EMPTY_FCC_LOAD_STATE.metrics;
+  const metricCards =
+    activeChartSource === 'fcc'
+      ? [
+          { label: '메인스탭', value: Number(fccMetrics.extraMetMainStepCount ?? 0).toLocaleString() },
+          { label: '계측 스탭', value: Number(fccMetrics.extraMetStepCount ?? 0).toLocaleString() },
+          { label: '감지 댓수', value: Number(fccMetrics.centerEqpCount ?? 0).toLocaleString() },
+        ]
+      : [
+          { label: '메인 스탭', value: mainStepGroups.length.toLocaleString() },
+          { label: 'MET 스탭', value: metStepCount.toLocaleString() },
+          { label: '감지 댓수', value: eqpCount.toLocaleString() },
+          { label: 'FCC 스탭 / 댓수', value: `${fccMetStepCount.toLocaleString()} / ${fccEqpCount.toLocaleString()}` },
+        ];
 
   const handleHomeSelect = (key) => {
     setChartLatestDate('');
@@ -1928,11 +1950,10 @@ function App() {
         latestDate={chartLatestDate}
       />
 
-      <div className="topMetrics">
-        <Metric label="메인 스탭" value={mainStepGroups.length.toLocaleString()} />
-        <Metric label="MET 스탭" value={metStepCount.toLocaleString()} />
-        <Metric label="감지 댓수" value={eqpCount.toLocaleString()} />
-        <Metric label="FCC 스탭 / 댓수" value={`${fccMetStepCount.toLocaleString()} / ${fccEqpCount.toLocaleString()}`} />
+      <div className={`topMetrics ${activeChartSource === 'fcc' ? 'threeColumns' : ''}`}>
+        {metricCards.map((metric) => (
+          <Metric key={metric.label} label={metric.label} value={metric.value} />
+        ))}
       </div>
 
       <section className="workspace">

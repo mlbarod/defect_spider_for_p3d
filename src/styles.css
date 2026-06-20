@@ -536,6 +536,10 @@ code {
   margin: 0 auto 12px;
 }
 
+.topMetrics.threeColumns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .leftRail {
   display: grid;
   grid-template-rows: auto auto auto;
@@ -1573,6 +1577,10 @@ tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .topMetrics.threeColumns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .chartGrid {
     grid-template-columns: 1fr;
   }
@@ -1608,6 +1616,10 @@ tr:last-child td {
   .topMetrics,
   .chartGrid,
   .logicGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .topMetrics.threeColumns {
     grid-template-columns: 1fr;
   }
 

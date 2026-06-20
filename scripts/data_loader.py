@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v22"
+LOADER_VERSION = "file-loader-v23"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -701,6 +701,22 @@ def collect_eqp_ids(rows, eqp_columns=("eqpid",)):
     return eqp_ids
 
 
+def fcc_met_unique_counts(met_rows):
+    main_steps = set()
+    met_steps = set()
+    for row in met_rows:
+        main_step = fcc_mapping_step_code(str(row.get("main_step") or "").strip())
+        met_step = fcc_mapping_step_code(str(row.get("met_step") or "").strip())
+        if main_step:
+            main_steps.add(main_step)
+        if met_step:
+            met_steps.add(met_step)
+    return {
+        "extraMetMainStepCount": len(main_steps),
+        "extraMetStepCount": len(met_steps),
+    }
+
+
 def load_optional_parquet(source, diagnostics):
     try:
         dataframe = read_parquet(source["path"])
@@ -799,6 +815,10 @@ def command_fcc_summary(_args):
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
     fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid",))
+    metrics = {
+        **fcc_met_unique_counts(extra_met_rows),
+        "centerEqpCount": len(fcc_center_eqp_ids),
+    }
     merged = {}
     diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(
         merged,
@@ -847,6 +867,7 @@ def command_fcc_summary(_args):
                 "config": CONFIG,
                 "sources": source_status(FCC_DATA_SOURCES),
                 "diagnostics": diagnostics,
+                "metrics": metrics,
                 "rows": [],
             }
         )
@@ -858,6 +879,7 @@ def command_fcc_summary(_args):
             "config": CONFIG,
             "sources": source_status(FCC_DATA_SOURCES),
             "diagnostics": diagnostics,
+            "metrics": metrics,
             "rows": rows,
         }
     )
