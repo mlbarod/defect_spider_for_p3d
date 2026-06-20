@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v23"
+LOADER_VERSION = "file-loader-v24"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1341,12 +1341,12 @@ def command_chart(args):
                 pl = load_polars()
                 pm_df = pm_df.with_columns(pl.col("asset").cast(pl.Utf8).str.replace_all("-", "_").alias("asset"))
                 pm_df = pm_df.filter(pl.col("asset").str.contains(str(args.eqp_id), literal=True))
-                pm_events = add_time_fields(records(pm_df.select(["inprg_dt", "work_type"]).head(80)), "inprg_dt")
+                pm_events = add_time_fields(records(pm_df.select(["asset", "inprg_dt", "work_type"]).head(80)), "inprg_dt")
             else:
                 pm_df = pm_df.copy()
                 pm_df["asset"] = pm_df["asset"].astype(str).str.replace("-", "_", regex=False)
                 pm_df = pm_df[pm_df["asset"].str.contains(str(args.eqp_id), regex=False, na=False)]
-                pm_events = add_time_fields(records(pm_df[["inprg_dt", "work_type"]].head(80)), "inprg_dt")
+                pm_events = add_time_fields(records(pm_df[["asset", "inprg_dt", "work_type"]].head(80)), "inprg_dt")
 
     write_json(
         {
@@ -1403,12 +1403,12 @@ def pm_events_for_eqp(eqp_id):
         pl = load_polars()
         pm_df = pm_df.with_columns(pl.col("asset").cast(pl.Utf8).str.replace_all("-", "_").alias("asset"))
         pm_df = pm_df.filter(pl.col("asset").str.contains(str(eqp_id), literal=True))
-        return add_time_fields(records(pm_df.select(["inprg_dt", "work_type"]).head(80)), "inprg_dt")
+        return add_time_fields(records(pm_df.select(["asset", "inprg_dt", "work_type"]).head(80)), "inprg_dt")
 
     pm_df = pm_df.copy()
     pm_df["asset"] = pm_df["asset"].astype(str).str.replace("-", "_", regex=False)
     pm_df = pm_df[pm_df["asset"].str.contains(str(eqp_id), regex=False, na=False)]
-    return add_time_fields(records(pm_df[["inprg_dt", "work_type"]].head(80)), "inprg_dt")
+    return add_time_fields(records(pm_df[["asset", "inprg_dt", "work_type"]].head(80)), "inprg_dt")
 
 
 def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=True, include_pm=True, require_std=False):

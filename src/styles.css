@@ -1449,10 +1449,18 @@ tr:last-child td {
   stroke-dasharray: 4 4;
 }
 
+.pmLine.warning {
+  stroke: var(--destructive);
+}
+
 .pmText {
   fill: hsl(152 57% 32%);
   font-size: 7px;
   font-weight: 700;
+}
+
+.pmText.warning {
+  fill: var(--destructive);
 }
 
 .readOk {

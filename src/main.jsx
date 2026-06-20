@@ -490,17 +490,13 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
 
       {groups.length === 0 ? (
         <div className="emptyPanel">
-          <strong>표시할 main_step이 없습니다.</strong>
+          <strong>이상감지된 STEP이 없습니다.</strong>
           <span>
             {loading
               ? '원본 파일을 읽고 있습니다.'
               : hideFilePaths(error) ||
                 `파일 입력 ${Object.values(diagnostics?.inputRows ?? {}).reduce((sum, value) => sum + Number(value || 0), 0).toLocaleString()}행 중 화면에 표시할 대상이 0건입니다.`}
           </span>
-          {diagnostics?.warnings?.slice(0, 3).map((warning) => (
-            <span key={warning}>{hideFilePaths(warning)}</span>
-          ))}
-          <SourceReferenceList apiPath={apiPath} sources={sources} />
         </div>
       ) : (
         <div className="mainStepList secondaryStepList">
@@ -567,6 +563,12 @@ function toTime(value, point) {
   if (Number.isFinite(epoch)) return epoch;
   const parsed = new Date(value).getTime();
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function hasPmAssetSeparator(asset) {
+  const text = String(asset ?? '').trim();
+  if (!text) return true;
+  return text.includes('-') || text.includes('_');
 }
 
 function formatShortDate(value, points = []) {
@@ -1220,14 +1222,18 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
             {pmEvents
               .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
               .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
-              .map((event, index) => (
-                <g key={`${event.inprg_dt}-${index}`}>
-                  <line className="pmLine" x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
-                  <text className="pmText" x={xScale(event.x) + 4} y={padding.top + 12}>
-                    {event.work_type}
-                  </text>
-                </g>
-              ))}
+              .map((event, index) => {
+                const isWarningAsset = !hasPmAssetSeparator(event.asset);
+
+                return (
+                  <g key={`${event.inprg_dt}-${index}`}>
+                    <line className={`pmLine ${isWarningAsset ? 'warning' : ''}`} x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
+                    <text className={`pmText ${isWarningAsset ? 'warning' : ''}`} x={xScale(event.x) + 4} y={padding.top + 12}>
+                      {event.work_type}
+                    </text>
+                  </g>
+                );
+              })}
             {scatterPathItems.map((item) => (
               <path key={`${item.className}-border`} className="pointBorderLayer" d={item.borderD} pointerEvents="none" />
             ))}
