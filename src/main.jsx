@@ -747,7 +747,7 @@ function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
   );
 }
 
-const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType }) {
+const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType, highlightRange = null }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -935,6 +935,20 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
   const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
   const yTicks = [viewMinY, viewMinY + (viewMaxY - viewMinY) / 2, viewMaxY];
+  const timeHighlight = useMemo(() => {
+    const min = toNumber(highlightRange?.min);
+    const max = toNumber(highlightRange?.max);
+    if (min === null || max === null || max < viewMinX || min > viewMaxX) return null;
+
+    const startX = xScale(Math.max(min, viewMinX));
+    const endX = xScale(Math.min(max, viewMaxX));
+    const widthValue = Math.max(1.5, Math.abs(endX - startX));
+
+    return {
+      x: Math.min(startX, endX),
+      width: widthValue,
+    };
+  }, [highlightRange, viewMinX, viewMaxX, plotWidth]);
   const visibleAllScreenPoints = useMemo(
     () =>
       visibleAllScatterPoints.filter(isVisible).map((point) => {
@@ -1195,6 +1209,9 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
           <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
           <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
           <g clipPath={`url(#${clipId})`}>
+            {timeHighlight && (
+              <rect className="timeHighlightBand" x={timeHighlight.x} y={padding.top} width={timeHighlight.width} height={plotHeight} pointerEvents="none" />
+            )}
             {pmEvents
               .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
               .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
@@ -1252,6 +1269,38 @@ function isNgPoint(point, ngIdentitySet = null) {
 
 function isDrawablePoint(point) {
   return toTime(point?.tkout_time, point) !== null && toNumber(point?.fab_value) !== null;
+}
+
+function getNgTablePoints(points, ngIdentitySet, eqpId) {
+  const seen = new Set();
+
+  return points
+    .filter((point) => isNgPoint(point, ngIdentitySet) && isDrawablePoint(point))
+    .filter((point) => {
+      const key = [
+        getPointIdentity(point),
+        point.tkout_time_ms ?? point.tkout_time ?? '',
+        point.fab_value ?? '',
+        getEquipmentId(point, eqpId),
+      ].join('|');
+
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function getTkoutTimeRange(points) {
+  const times = points
+    .map((point) => toTime(point?.tkout_time, point))
+    .filter((value) => Number.isFinite(value));
+
+  if (times.length === 0) return null;
+
+  return {
+    min: Math.min(...times),
+    max: Math.max(...times),
+  };
 }
 
 function formatTableValue(value) {
@@ -1365,29 +1414,12 @@ function ChartFailureCard({ row, eqpId, error, data }) {
   );
 }
 
-function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
+function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points, highlightRange = null }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
   const isFccCenterSourceChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step' && anomalyType === 'center';
   const ngIdentitySet = useMemo(() => buildNgIdentitySet(points), [points]);
-  const ngTablePoints = useMemo(() => {
-    const seen = new Set();
-
-    return points
-      .filter((point) => isNgPoint(point, ngIdentitySet) && isDrawablePoint(point))
-      .filter((point) => {
-        const key = [
-          getPointIdentity(point),
-          point.tkout_time_ms ?? point.tkout_time ?? '',
-          point.fab_value ?? '',
-          getEquipmentId(point, eqpId),
-        ].join('|');
-
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-  }, [points, ngIdentitySet, eqpId]);
+  const ngTablePoints = useMemo(() => getNgTablePoints(points, ngIdentitySet, eqpId), [points, ngIdentitySet, eqpId]);
   const tableId = `ng-table-${String(`${eqpId}-${anomalyType}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
   return (
@@ -1409,6 +1441,7 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
         domains={getTypedDomains(chartData.domains ?? null, anomalyType)}
         eqpId={eqpId}
         anomalyType={anomalyType}
+        highlightRange={highlightRange}
       />
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
@@ -1461,6 +1494,9 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
   const centerPoints = shouldDrawCenter ? failPoints : [];
   const stdChartPoints = shouldDrawStd ? stdPoints : [];
+  const centerNgIdentitySet = useMemo(() => buildNgIdentitySet(centerPoints), [centerPoints]);
+  const centerNgTablePoints = useMemo(() => getNgTablePoints(centerPoints, centerNgIdentitySet, eqpId), [centerPoints, centerNgIdentitySet, eqpId]);
+  const extraCenterHighlightRange = useMemo(() => getTkoutTimeRange(centerNgTablePoints), [centerNgTablePoints]);
   const hasExtraCharts = extraCenterCharts.length > 0 || extraStdCharts.length > 0;
 
   if (chartState.loading || chartState.error || (centerPoints.length === 0 && stdChartPoints.length === 0 && !hasExtraCharts)) {
@@ -1503,6 +1539,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             chartData={chart}
             anomalyType="center"
             points={chart.failPoints}
+            highlightRange={extraCenterHighlightRange}
           />
         ) : (
           <ChartFailureCard

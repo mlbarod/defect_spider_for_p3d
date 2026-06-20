@@ -990,6 +990,12 @@ tr:last-child td {
   stroke-width: 1.3;
 }
 
+.timeHighlightBand {
+  fill: color-mix(in srgb, var(--destructive) 16%, transparent);
+  stroke: color-mix(in srgb, var(--destructive) 22%, transparent);
+  stroke-width: 1;
+}
+
 .axisText {
   fill: var(--muted-foreground);
   font-size: 7.5px;
