@@ -1599,6 +1599,142 @@ function EmptyChartState({ selectedRow }) {
   );
 }
 
+const HOME_CARDS = [
+  {
+    key: 'chamber',
+    title: 'P3D 챔버별 이상감지',
+    subtitle: '챔버 기준 이상감지 화면입니다.',
+    category: 'Chamber',
+    icon: 'network',
+  },
+  {
+    key: 'main',
+    title: 'P3D MAIN 설비별 이상감지',
+    subtitle: '대상스탭 기준으로 MAIN 설비별 이상 chart를 확인합니다.',
+    category: 'Main',
+    icon: 'activity',
+  },
+  {
+    key: 'fcc',
+    title: 'P3D FCC지수 이상감지',
+    subtitle: 'FCC지수 연관 이상감지 항목과 추가 chart를 확인합니다.',
+    category: 'FCC',
+    icon: 'chart',
+  },
+];
+
+function HomeIcon({ type }) {
+  if (type === 'activity') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
+      </svg>
+    );
+  }
+
+  if (type === 'chart') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 16v5" />
+        <path d="M16 14v7" />
+        <path d="M20 10v11" />
+        <path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.708 0L2 15" />
+        <path d="M4 18v3" />
+        <path d="M8 14v7" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="16" y="16" width="6" height="6" rx="1" />
+      <rect x="2" y="16" width="6" height="6" rx="1" />
+      <rect x="9" y="2" width="6" height="6" rx="1" />
+      <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" />
+      <path d="M12 8v8" />
+    </svg>
+  );
+}
+
+function SpiderHomeMark() {
+  return (
+    <div className="spiderHomeMark">
+      <svg aria-hidden="true" viewBox="0 0 120 120">
+        <circle cx="60" cy="62" r="18" strokeWidth="6" />
+        <circle cx="60" cy="36" r="10" strokeWidth="6" />
+        <path d="M44 54 22 38M43 64 18 64M45 74 24 91M76 54 98 38M77 64 102 64M75 74 96 91" strokeWidth="6" />
+        <path d="M51 31 40 18M69 31 80 18M50 78 40 104M70 78 80 104" strokeWidth="5" />
+      </svg>
+    </div>
+  );
+}
+
+function HomeCategoryCard({ card, onSelect }) {
+  return (
+    <button className="spiderAppCard" type="button" onClick={() => onSelect(card.key)}>
+      <span className="spiderAppBadge">Open</span>
+      <span className="spiderAppIcon">
+        <HomeIcon type={card.icon} />
+      </span>
+      <span className="spiderAppBody">
+        <strong>{card.title}</strong>
+        <span>{card.subtitle}</span>
+      </span>
+      <span className="spiderAppCategory">{card.category}</span>
+    </button>
+  );
+}
+
+function HomePage({ onSelect }) {
+  return (
+    <main className="spiderHome">
+      <section className="spiderHomeHero">
+        <div className="spiderHomeHeroInner">
+          <div className="spiderHomeTitleBlock">
+            <span className="homeBadge">P3D Defect</span>
+            <h1>Defect SPIDER</h1>
+            <p>P3D 이상감지 메뉴를 한 화면에서 시작합니다.</p>
+          </div>
+          <SpiderHomeMark />
+        </div>
+      </section>
+
+      <section className="spiderHomeContent">
+        <div className="spiderHomeSectionTitle">
+          <h2>Defect SPIDER App</h2>
+          <p>분석 기준별 이상감지 화면입니다.</p>
+        </div>
+        <div className="spiderAppGrid">
+          {HOME_CARDS.map((card) => (
+            <HomeCategoryCard key={card.key} card={card} onSelect={onSelect} />
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ConstructionView({ onBack }) {
+  return (
+    <main className="app">
+      <header className="topBar">
+        <div>
+          <p className="eyebrow">P3D Defect Spider</p>
+          <h1>Defect SPIDER</h1>
+        </div>
+        <button className="homeBackButton" type="button" onClick={onBack}>
+          메인
+        </button>
+      </header>
+      <section className="constructionPanel">
+        <span className="homeBadge">Chamber</span>
+        <h2>P3D 챔버별 이상감지</h2>
+        <p>공사중입니다.</p>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   const [loadState, setLoadState] = useState(EMPTY_LOAD_STATE);
   const [fccLoadState, setFccLoadState] = useState(EMPTY_FCC_LOAD_STATE);
@@ -1613,6 +1749,7 @@ function App() {
   const [selectedMetStep, setSelectedMetStep] = useState(null);
   const [selectedAdditionalMetStep, setSelectedAdditionalMetStep] = useState(null);
   const [activeChartSource, setActiveChartSource] = useState('main');
+  const [currentView, setCurrentView] = useState('home');
   const [chartLatestDate, setChartLatestDate] = useState('');
 
   useEffect(() => {
@@ -1679,12 +1816,7 @@ function App() {
 
   useEffect(() => {
     setChartLatestDate('');
-  }, [activeChartSource, activeChartSource === 'fcc' ? selectedAdditionalMetStep?.key : selectedMetStep?.key]);
-
-  useEffect(() => {
-    if (activeChartSource === 'fcc' && !selectedAdditionalMetStep && selectedMetStep) setActiveChartSource('main');
-    if (activeChartSource === 'main' && !selectedMetStep && selectedAdditionalMetStep) setActiveChartSource('fcc');
-  }, [activeChartSource, selectedAdditionalMetStep, selectedMetStep]);
+  }, [currentView, activeChartSource, activeChartSource === 'fcc' ? selectedAdditionalMetStep?.key : selectedMetStep?.key]);
 
   const activeSelectedRow = activeChartSource === 'fcc' ? selectedAdditionalMetStep : selectedMetStep;
   const activeLoadState = activeChartSource === 'fcc' ? fccLoadState : loadState;
@@ -1695,6 +1827,32 @@ function App() {
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
   const fccMetStepCount = fccStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const fccEqpCount = filteredFccRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
+  const activeChartLabel = activeChartSource === 'fcc' ? 'FCC 차트' : 'Main 차트';
+
+  const handleHomeSelect = (key) => {
+    setChartLatestDate('');
+
+    if (key === 'chamber') {
+      setCurrentView('chamber');
+      return;
+    }
+
+    setActiveChartSource(key);
+    setCurrentView(key);
+  };
+
+  const handleBackHome = () => {
+    setChartLatestDate('');
+    setCurrentView('home');
+  };
+
+  if (currentView === 'home') {
+    return <HomePage onSelect={handleHomeSelect} />;
+  }
+
+  if (currentView === 'chamber') {
+    return <ConstructionView onBack={handleBackHome} />;
+  }
 
   return (
     <main className="app">
@@ -1708,7 +1866,10 @@ function App() {
           <span>선택 라인 {CONFIG.selectLine}</span>
           <span>Device {CONFIG.device}</span>
           <span>SDWT {selectedSdwt}</span>
-          <span>{activeChartSource === 'fcc' ? 'FCC 차트' : 'Main 차트'}</span>
+          <span>{activeChartLabel}</span>
+          <button className="homeBackButton" type="button" onClick={handleBackHome}>
+            메인
+          </button>
         </div>
       </header>
 
@@ -1730,30 +1891,35 @@ function App() {
       <section className="workspace">
         <div className="leftRail">
           <SdwtSelector options={sdwtOptions} selectedSdwt={selectedSdwt} onSelect={setSelectedSdwt} disabled={rows.length === 0 && fccRows.length === 0} />
-          <MainStepTree
-            groups={mainStepGroups}
-            selectedMetStepKey={selectedMetStep?.key}
-            onSelectMetStep={(row) => {
-              setSelectedMetStep(row);
-              setActiveChartSource('main');
-            }}
-            loading={loadState.loading}
-            error={loadState.error}
-            diagnostics={loadState.diagnostics}
-          />
-          <AdditionalAnomalyStepTree
-            groups={fccStepGroups}
-            selectedMetStepKey={selectedAdditionalMetStep?.key}
-            onSelectMetStep={(row) => {
-              setSelectedAdditionalMetStep(row);
-              setActiveChartSource('fcc');
-            }}
-            loading={fccLoadState.loading}
-            error={fccLoadState.error}
-            diagnostics={fccLoadState.diagnostics}
-            sources={fccLoadState.sources}
-            apiPath={fccLoadState.apiPath}
-          />
+          {activeChartSource === 'main' ? (
+            <MainStepTree
+              groups={mainStepGroups}
+              selectedMetStepKey={selectedMetStep?.key}
+              onSelectMetStep={(row) => {
+                setSelectedMetStep(row);
+                setActiveChartSource('main');
+                setCurrentView('main');
+              }}
+              loading={loadState.loading}
+              error={loadState.error}
+              diagnostics={loadState.diagnostics}
+            />
+          ) : (
+            <AdditionalAnomalyStepTree
+              groups={fccStepGroups}
+              selectedMetStepKey={selectedAdditionalMetStep?.key}
+              onSelectMetStep={(row) => {
+                setSelectedAdditionalMetStep(row);
+                setActiveChartSource('fcc');
+                setCurrentView('fcc');
+              }}
+              loading={fccLoadState.loading}
+              error={fccLoadState.error}
+              diagnostics={fccLoadState.diagnostics}
+              sources={fccLoadState.sources}
+              apiPath={fccLoadState.apiPath}
+            />
+          )}
         </div>
 
         <section className="detailPanel">
