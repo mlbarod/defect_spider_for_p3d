@@ -1606,6 +1606,7 @@ const HOME_CARDS = [
     subtitle: '챔버 기준 이상감지 화면입니다.',
     category: 'Chamber',
     icon: 'network',
+    badge: '공사중',
   },
   {
     key: 'main',
@@ -1613,6 +1614,7 @@ const HOME_CARDS = [
     subtitle: '대상스탭 기준으로 MAIN 설비별 이상 chart를 확인합니다.',
     category: 'Main',
     icon: 'activity',
+    badge: 'Open',
   },
   {
     key: 'fcc',
@@ -1620,6 +1622,28 @@ const HOME_CARDS = [
     subtitle: 'FCC지수 연관 이상감지 항목과 추가 chart를 확인합니다.',
     category: 'FCC',
     icon: 'chart',
+    badge: 'Open',
+  },
+];
+
+const SPIDER_SUITE_CARDS = [
+  {
+    key: 'l0',
+    title: 'L0 SPIDER',
+    subtitle: 'FDC Trend기반 이상 패턴을 탐색합니다.',
+    category: 'L0',
+    icon: 'chart',
+    badge: 'Open',
+    href: '/go/spider',
+  },
+  {
+    key: 'l1',
+    title: 'L1 SPIDER',
+    subtitle: 'L1 Trend 기반 이상 패턴을 탐색 합니다.',
+    category: 'L1',
+    icon: 'activity',
+    badge: 'Open',
+    href: '/go/spider1',
   },
 ];
 
@@ -1670,9 +1694,18 @@ function SpiderHomeMark() {
 }
 
 function HomeCategoryCard({ card, onSelect }) {
+  const handleClick = () => {
+    if (card.href) {
+      window.location.assign(card.href);
+      return;
+    }
+
+    onSelect(card.key);
+  };
+
   return (
-    <button className="spiderAppCard" type="button" onClick={() => onSelect(card.key)}>
-      <span className="spiderAppBadge">Open</span>
+    <button className="spiderAppCard" type="button" onClick={handleClick}>
+      <span className={card.badge === '공사중' ? 'spiderAppBadge isConstruction' : 'spiderAppBadge'}>{card.badge ?? 'Open'}</span>
       <span className="spiderAppIcon">
         <HomeIcon type={card.icon} />
       </span>
@@ -1700,15 +1733,29 @@ function HomePage({ onSelect }) {
       </section>
 
       <section className="spiderHomeContent">
-        <div className="spiderHomeSectionTitle">
-          <h2>Defect SPIDER App</h2>
-          <p>분석 기준별 이상감지 화면입니다.</p>
-        </div>
-        <div className="spiderAppGrid">
-          {HOME_CARDS.map((card) => (
-            <HomeCategoryCard key={card.key} card={card} onSelect={onSelect} />
-          ))}
-        </div>
+        <section className="spiderHomeSection">
+          <div className="spiderHomeSectionTitle">
+            <h2>Defect SPIDER App</h2>
+            <p>분석 기준별 이상감지 화면입니다.</p>
+          </div>
+          <div className="spiderAppGrid">
+            {HOME_CARDS.map((card) => (
+              <HomeCategoryCard key={card.key} card={card} onSelect={onSelect} />
+            ))}
+          </div>
+        </section>
+
+        <section className="spiderHomeSection">
+          <div className="spiderHomeSectionTitle">
+            <h2>L0, L1 이상감지 App</h2>
+            <p>L0와 L3 데이터를 활용한 이상감지 App입니다</p>
+          </div>
+          <div className="spiderAppGrid">
+            {SPIDER_SUITE_CARDS.map((card) => (
+              <HomeCategoryCard key={card.key} card={card} onSelect={onSelect} />
+            ))}
+          </div>
+        </section>
       </section>
     </main>
   );
