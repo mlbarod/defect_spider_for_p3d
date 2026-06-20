@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v21"
+LOADER_VERSION = "file-loader-v22"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -68,11 +68,6 @@ FCC_DATA_SOURCES = [
         "path": f"{FCC_STEP_PATH}/fail_list.parquet",
     },
     {
-        "key": "fcc_std",
-        "label": "FCC 산포 이상 목록",
-        "path": f"{FCC_STEP_PATH}/fail_list_std.parquet",
-    },
-    {
         "key": "fcc_extra_met",
         "label": "FCC 추가 MET 매핑",
         "path": f"{FCC_FOLDER_PATH}/met_fcc.txt",
@@ -81,6 +76,11 @@ FCC_DATA_SOURCES = [
         "key": "fcc_extra_fail",
         "label": "FCC 추가 중심치 이상 목록",
         "path": f"{FCC_FOLDER_PATH}/fail_list.parquet",
+    },
+    {
+        "key": "fcc_extra_std",
+        "label": "FCC 추가 산포 이상 목록",
+        "path": f"{FCC_FOLDER_PATH}/fail_list_std.parquet",
     },
 ]
 
@@ -788,13 +788,13 @@ def command_fcc_summary(_args):
     }
     fcc_step_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_step_met")
     fcc_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_fail")
-    fcc_std_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_std")
     fcc_extra_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_met")
     fcc_extra_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_fail")
+    fcc_extra_std_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_std")
     fail_rows = load_optional_parquet(fcc_fail_source, diagnostics)
-    std_rows = load_optional_parquet(fcc_std_source, diagnostics)
     met_rows = load_optional_met_rows(fcc_step_met_source, diagnostics, device=None)
     extra_fail_rows = load_optional_parquet(fcc_extra_fail_source, diagnostics)
+    extra_std_rows = load_optional_parquet(fcc_extra_std_source, diagnostics)
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
@@ -819,21 +819,15 @@ def command_fcc_summary(_args):
         chart_root="step",
         source_priority=1,
     )
-    diagnostics["usedRows"]["fcc_std"] = add_fcc_summary_rows(
-        merged,
-        std_rows,
-        "stdCount",
-        by_main_step,
-        mapped_keys,
-        eqp_columns=("eqpch", "eqpid"),
-        key_prefix="fcc_step",
-        chart_root="step",
-        source_priority=1,
-    )
     diagnostics["usedRows"]["fcc_extra_met"] = len(extra_met_rows)
     diagnostics["usedRows"]["fcc_extra_fail"] = sum(
         1
         for row in extra_fail_rows
+        if set(parse_eqp_ids(get_first(row, ("eqpid",)))) & fcc_center_eqp_ids
+    )
+    diagnostics["usedRows"]["fcc_extra_std"] = sum(
+        1
+        for row in extra_std_rows
         if set(parse_eqp_ids(get_first(row, ("eqpid",)))) & fcc_center_eqp_ids
     )
 
@@ -845,11 +839,11 @@ def command_fcc_summary(_args):
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
 
-    if not met_rows and not fail_rows and not std_rows and not extra_met_rows and not extra_fail_rows:
+    if not met_rows and not fail_rows and not extra_met_rows and not extra_fail_rows and not extra_std_rows:
         write_json(
             {
                 "ok": False,
-                "error": "FCC 스탭 MET/중심치/산포 파일에서 읽은 행이 없습니다. 파일 경로, 권한, 입력 컬럼을 확인하세요.",
+                "error": "FCC 스탭 MET/중심치 또는 FCC 추가 파일에서 읽은 행이 없습니다. 파일 경로, 권한, 입력 컬럼을 확인하세요.",
                 "config": CONFIG,
                 "sources": source_status(FCC_DATA_SOURCES),
                 "diagnostics": diagnostics,
@@ -1050,6 +1044,40 @@ def fcc_item_id_from_met_seq(value):
     return digits or item_id
 
 
+def normalize_item_id(value):
+    if is_missing_value(value):
+        return ""
+    text = str(value or "").strip()
+    digits = "".join(char for char in text if char.isdigit())
+    return digits or text
+
+
+def clean_text(value):
+    if is_missing_value(value):
+        return ""
+    return str(value or "").strip()
+
+
+def item_desc_for_item_id(dataframe, item_id):
+    columns = frame_columns(dataframe)
+    if "item_desc" not in columns:
+        return ""
+
+    descriptions = column_values(dataframe, "item_desc")
+    if "item_id" in columns:
+        target = normalize_item_id(item_id)
+        for current_item_id, description in zip(column_values(dataframe, "item_id"), descriptions):
+            if normalize_item_id(current_item_id) != target:
+                continue
+            text = clean_text(description)
+            if text:
+                return text
+        return ""
+
+    unique_descriptions = unique_nonempty(clean_text(description) for description in descriptions)
+    return unique_descriptions[0] if len(unique_descriptions) == 1 else ""
+
+
 def fcc_item_id_for_met_seq(met_seq):
     item_id = fcc_item_id_from_met_seq(met_seq)
     if not item_id:
@@ -1081,7 +1109,7 @@ def resolve_fcc_met_dir(main_dir, met_candidates, item_id, chart_root):
         return os.path.join(main_dir, fallback_name), fallback_name, attempts
 
 
-def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step"):
+def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step", require_fail=True, resolve_std=True, require_std=False):
     main_step_code = fcc_mapping_step_code(main_step)
     met_step_code = fcc_mapping_step_code(chart_met_step)
     if not main_step_code or not met_step_code:
@@ -1097,12 +1125,24 @@ def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step"):
     data_dir = os.path.join(met_dir, latest_date)
     file_candidates = unique_nonempty([f"U%{main_step_code}", main_dir_name, main_step])
     all_path, all_attempts = resolve_parquet_file(data_dir, "all", file_candidates)
-    fail_path, fail_attempts = resolve_parquet_file(data_dir, "fail", file_candidates)
     try:
-        std_path, std_attempts = resolve_parquet_file(data_dir, "fail_std", file_candidates)
+        fail_path, fail_attempts = resolve_parquet_file(data_dir, "fail", file_candidates)
     except FileNotFoundError:
+        if require_fail:
+            raise
+        fail_path = None
+        fail_attempts = [f"fail_{candidate}.parquet" for candidate in file_candidates]
+    if resolve_std:
+        try:
+            std_path, std_attempts = resolve_parquet_file(data_dir, "fail_std", file_candidates)
+        except FileNotFoundError:
+            if require_std:
+                raise
+            std_path = None
+            std_attempts = [f"fail_std_{candidate}.parquet" for candidate in file_candidates]
+    else:
         std_path = None
-        std_attempts = [f"fail_std_{candidate}.parquet" for candidate in file_candidates]
+        std_attempts = []
 
     return {
         "mainDir": main_dir,
@@ -1172,6 +1212,7 @@ def select_columns(dataframe):
         "eqp_id",
         "eqpid",
         "item_id",
+        "item_desc",
         "final_decision",
         "std_result",
     ]
@@ -1348,14 +1389,24 @@ def pm_events_for_eqp(eqp_id):
     return add_time_fields(records(pm_df[["inprg_dt", "work_type"]].head(80)), "inprg_dt")
 
 
-def fcc_chart_payload(resolved_paths, eqp_id, include_std=True, include_pm=True):
+def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=True, include_pm=True, require_std=False):
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
 
     all_df = split_fcc_drawing_df(read_parquet(all_path))
-    fail_df = split_fcc_drawing_df(read_parquet(fail_path))
-    std_df = split_fcc_drawing_df(read_parquet(std_path)) if include_std and std_path else fail_df.head(0)
+    if include_center:
+        if not fail_path:
+            raise FileNotFoundError(f"FCC fail parquet 파일을 찾지 못했습니다: {resolved_paths.get('dataDir', '')}")
+        fail_df = split_fcc_drawing_df(read_parquet(fail_path))
+    else:
+        fail_df = all_df.head(0)
+    if include_std and std_path:
+        std_df = split_fcc_drawing_df(read_parquet(std_path))
+    elif include_std and require_std:
+        raise FileNotFoundError(f"FCC fail_std parquet 파일을 찾지 못했습니다: {resolved_paths.get('dataDir', '')}")
+    else:
+        std_df = all_df.head(0)
 
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")
@@ -1384,11 +1435,12 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_std=True, include_pm=True)
         },
         "paths": {
             "all": all_path,
-            "fail": fail_path,
+            "fail": fail_path if include_center else None,
             "std": std_path if include_std else None,
             "pm": CONFIG["pmCodePath"] if include_pm else None,
         },
         "latestDate": resolved_paths["latestDate"],
+        "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),
         "domains": {
             "x": time_domain(all_df, "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
@@ -1409,16 +1461,17 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_std=True, include_pm=True)
     }
 
 
-def fcc_extra_chart_specs_for_eqp(eqp_id):
+def fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_type="center"):
     extra_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_met")
-    extra_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_fail")
+    extra_source = next(source for source in FCC_DATA_SOURCES if source["key"] == source_key)
     fcc_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_fail")
+    is_std = anomaly_type == "std"
 
     try:
         fcc_fail_rows = frame_records(read_parquet(fcc_fail_source["path"]))
         if eqp_id not in collect_eqp_ids(fcc_fail_rows, ("eqpid",)):
             return []
-        extra_fail_rows = frame_records(read_parquet(extra_fail_source["path"]))
+        extra_rows = frame_records(read_parquet(extra_source["path"]))
         extra_met_rows = read_met_rows(extra_met_source["path"], device=None)
     except Exception:
         return []
@@ -1426,7 +1479,7 @@ def fcc_extra_chart_specs_for_eqp(eqp_id):
     extra_met_by_key, extra_met_by_main_step = fcc_met_mapping_index(extra_met_rows)
     specs = []
     seen = set()
-    for row in extra_fail_rows:
+    for row in extra_rows:
         if eqp_id not in parse_eqp_ids(get_first(row, ("eqpid",))):
             continue
 
@@ -1453,7 +1506,7 @@ def fcc_extra_chart_specs_for_eqp(eqp_id):
 
         specs.append(
             {
-                "key": f"fcc_extra::{mapped_entry['mainStep']}::{met_seq}",
+                "key": f"fcc_extra_{anomaly_type}::{mapped_entry['mainStep']}::{met_seq}",
                 "dataKind": "fcc",
                 "chartRoot": "root",
                 "sourcePriority": 0,
@@ -1464,10 +1517,10 @@ def fcc_extra_chart_specs_for_eqp(eqp_id):
                 "metStepPath": met_seq,
                 "stepDesc": mapped_entry["stepDesc"],
                 "sdwt": mapped_entry["sdwt"],
-                "centerCount": 1,
-                "stdCount": 0,
-                "centerEqpIds": [eqp_id],
-                "stdEqpIds": [],
+                "centerCount": 0 if is_std else 1,
+                "stdCount": 1 if is_std else 0,
+                "centerEqpIds": [] if is_std else [eqp_id],
+                "stdEqpIds": [eqp_id] if is_std else [],
                 "eqpIds": [eqp_id],
             }
         )
@@ -1476,10 +1529,45 @@ def fcc_extra_chart_specs_for_eqp(eqp_id):
 
 def fcc_extra_center_charts(eqp_id):
     charts = []
-    for spec in fcc_extra_chart_specs_for_eqp(eqp_id):
+    for spec in fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_type="center"):
         try:
-            resolved_paths = resolve_fcc_chart_paths(spec["mainStepPath"], spec["metStepPath"], "root")
-            payload = fcc_chart_payload(resolved_paths, eqp_id, include_std=False, include_pm=False)
+            resolved_paths = resolve_fcc_chart_paths(spec["mainStepPath"], spec["metStepPath"], "root", resolve_std=False)
+            payload = fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=False, include_pm=False)
+            payload["row"] = spec
+            charts.append(payload)
+        except Exception as exc:
+            charts.append(
+                {
+                    "ok": False,
+                    "row": spec,
+                    "error": str(exc),
+                    "paths": {},
+                    "diagnostics": {"version": LOADER_VERSION},
+                }
+            )
+    return charts
+
+
+def fcc_extra_std_charts(eqp_id):
+    charts = []
+    for spec in fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_std", anomaly_type="std"):
+        try:
+            resolved_paths = resolve_fcc_chart_paths(
+                spec["mainStepPath"],
+                spec["metStepPath"],
+                "root",
+                require_fail=False,
+                resolve_std=True,
+                require_std=True,
+            )
+            payload = fcc_chart_payload(
+                resolved_paths,
+                eqp_id,
+                include_center=False,
+                include_std=True,
+                include_pm=False,
+                require_std=True,
+            )
             payload["row"] = spec
             charts.append(payload)
         except Exception as exc:
@@ -1496,9 +1584,10 @@ def fcc_extra_center_charts(eqp_id):
 
 
 def command_fcc_chart(args):
-    resolved_paths = resolve_fcc_chart_paths(args.main_step, args.chart_met_step, args.chart_root)
-    payload = fcc_chart_payload(resolved_paths, args.eqp_id, include_std=args.chart_root != "root", include_pm=True)
+    resolved_paths = resolve_fcc_chart_paths(args.main_step, args.chart_met_step, args.chart_root, resolve_std=False)
+    payload = fcc_chart_payload(resolved_paths, args.eqp_id, include_center=True, include_std=False, include_pm=True)
     payload["extraCenterCharts"] = fcc_extra_center_charts(args.eqp_id) if args.chart_root == "step" else []
+    payload["extraStdCharts"] = fcc_extra_std_charts(args.eqp_id) if args.chart_root == "step" else []
     write_json(payload)
 
 

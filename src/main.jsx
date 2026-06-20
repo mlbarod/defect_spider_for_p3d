@@ -62,12 +62,6 @@ const FCC_DATA_SOURCES = [
     requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
   },
   {
-    key: 'fcc_std',
-    label: 'FCC 산포 이상 목록',
-    path: `${fccStepPath}/fail_list_std.parquet`,
-    requiredColumns: ['main_seq', 'met_seq', 'eqpch'],
-  },
-  {
     key: 'fcc_extra_met',
     label: 'FCC 추가 MET 매핑',
     path: `${fccFolderPath}/met_fcc.txt`,
@@ -77,6 +71,12 @@ const FCC_DATA_SOURCES = [
     key: 'fcc_extra_fail',
     label: 'FCC 추가 중심치 이상 목록',
     path: `${fccFolderPath}/fail_list.parquet`,
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
+  },
+  {
+    key: 'fcc_extra_std',
+    label: 'FCC 추가 산포 이상 목록',
+    path: `${fccFolderPath}/fail_list_std.parquet`,
     requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
   },
 ];
@@ -202,10 +202,11 @@ function getChartMetStep(row) {
   return isMainLine ? `${metStep}_main` : metStep;
 }
 
-function getChartHeading(row) {
+function getChartHeading(row, chartData = null) {
   if (!row) return CONFIG.lineName;
   const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
-  return [row.stepDesc || 'step_desc 확인 필요', metStepNo, metItem].filter(Boolean).join(' / ');
+  const itemDisplay = row.dataKind === 'fcc' ? String(chartData?.itemDesc ?? '').trim() || metItem : metItem;
+  return [row.stepDesc || 'step_desc 확인 필요', metStepNo, itemDisplay].filter(Boolean).join(' / ');
 }
 
 function filterRowsBySdwt(rows, selectedSdwt) {
@@ -1352,7 +1353,7 @@ function ChartFailureCard({ row, eqpId, error, data }) {
       <div className="chartTitle">
         <div className="chartTitleText">
           <strong>{eqpId}</strong>
-          <span>{getChartHeading(row)}</span>
+          <span>{getChartHeading(row, data)}</span>
         </div>
         <span className="chartStatusText">read failed</span>
       </div>
@@ -1367,6 +1368,7 @@ function ChartFailureCard({ row, eqpId, error, data }) {
 function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
+  const isFccCenterSourceChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step' && anomalyType === 'center';
   const ngIdentitySet = useMemo(() => buildNgIdentitySet(points), [points]);
   const ngTablePoints = useMemo(() => {
     const seen = new Set();
@@ -1389,12 +1391,12 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points }) {
   const tableId = `ng-table-${String(`${eqpId}-${anomalyType}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
   return (
-    <div className="chartShell">
+    <div className={`chartShell ${isFccCenterSourceChart ? 'fccCenterSourceChart' : ''}`}>
       <div className="chartTitle">
         <div className="chartTitleText">
           <strong>{eqpId}</strong>
           <span>
-            {getChartHeading(row)} / {meta.label}
+            {getChartHeading(row, chartData)} / {meta.label}
           </span>
         </div>
         <ChartTag anomalyType={anomalyType} />
@@ -1454,11 +1456,12 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
   const extraCenterCharts = chartState.data?.extraCenterCharts ?? [];
+  const extraStdCharts = chartState.data?.extraStdCharts ?? [];
   const shouldDrawCenter = eqpListIncludes(row.centerEqpIds, eqpId);
   const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
   const centerPoints = shouldDrawCenter ? failPoints : [];
   const stdChartPoints = shouldDrawStd ? stdPoints : [];
-  const hasExtraCharts = extraCenterCharts.length > 0;
+  const hasExtraCharts = extraCenterCharts.length > 0 || extraStdCharts.length > 0;
 
   if (chartState.loading || chartState.error || (centerPoints.length === 0 && stdChartPoints.length === 0 && !hasExtraCharts)) {
     return (
@@ -1507,6 +1510,26 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             row={chart.row ?? row}
             eqpId={eqpId}
             error={chart.error || 'FCC 추가 중심치 chart 데이터를 찾지 못했습니다.'}
+            data={chart}
+          />
+        ),
+      )}
+      {extraStdCharts.map((chart, index) =>
+        chart.ok !== false && (chart.stdPoints?.length ?? 0) > 0 ? (
+          <AnomalyChartCard
+            key={`${eqpId}-extra-std-${chart.row?.key ?? index}`}
+            row={chart.row ?? row}
+            eqpId={eqpId}
+            chartData={chart}
+            anomalyType="std"
+            points={chart.stdPoints}
+          />
+        ) : (
+          <ChartFailureCard
+            key={`${eqpId}-extra-std-failed-${chart.row?.key ?? index}`}
+            row={chart.row ?? row}
+            eqpId={eqpId}
+            error={chart.error || 'FCC 추가 산포 chart 데이터를 찾지 못했습니다.'}
             data={chart}
           />
         ),
