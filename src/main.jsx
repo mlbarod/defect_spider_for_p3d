@@ -1775,15 +1775,15 @@ function HomePage({ onSelect }) {
 
 function ConstructionView({ onBack }) {
   return (
-    <main className="app">
+    <main className="app hasFloatingHomeButton">
+      <button className="homeBackButton" type="button" onClick={onBack}>
+        메인 메뉴
+      </button>
       <header className="topBar">
         <div>
           <p className="eyebrow">P3D Defect Spider</p>
           <h1>Defect SPIDER</h1>
         </div>
-        <button className="homeBackButton" type="button" onClick={onBack}>
-          메인
-        </button>
       </header>
       <section className="constructionPanel">
         <span className="homeBadge">Chamber</span>
@@ -1930,21 +1930,23 @@ function App() {
   }
 
   return (
-    <main className="app">
+    <main className="app hasFloatingHomeButton">
+      <button className="homeBackButton" type="button" onClick={handleBackHome}>
+        메인 메뉴
+      </button>
       <header className="topBar">
         <div>
           <p className="eyebrow">P3D Defect Spider</p>
           <h1>Defect SPIDER</h1>
         </div>
-        <div className="summaryPills">
-          <span>감지 라인 {CONFIG.lineName}</span>
-          <span>선택 라인 {CONFIG.selectLine}</span>
-          <span>Device {CONFIG.device}</span>
-          <span>SDWT {selectedSdwt}</span>
-          <span>{activeChartLabel}</span>
-          <button className="homeBackButton" type="button" onClick={handleBackHome}>
-            메인
-          </button>
+        <div className="topBarActions">
+          <div className="summaryPills">
+            <span>감지 라인 {CONFIG.lineName}</span>
+            <span>선택 라인 {CONFIG.selectLine}</span>
+            <span>Device {CONFIG.device}</span>
+            <span>SDWT {selectedSdwt}</span>
+            <span>{activeChartLabel}</span>
+          </div>
         </div>
       </header>
 
