@@ -77,6 +77,11 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (url.pathname === '/api/chamber-lines') {
+    runLoader(['chamber-lines'], res);
+    return true;
+  }
+
   if (url.pathname === '/api/chart') {
     const mainStep = url.searchParams.get('mainStep');
     const chartMetStep = url.searchParams.get('chartMetStep');

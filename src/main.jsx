@@ -115,6 +115,12 @@ const EMPTY_FCC_LOAD_STATE = {
   },
 };
 
+const EMPTY_CHAMBER_LINES_STATE = {
+  loading: true,
+  error: '',
+  rows: [],
+};
+
 async function fetchJson(url, options) {
   const response = await fetch(url, {
     ...options,
@@ -1617,7 +1623,7 @@ const HOME_CARDS = [
     subtitle: '챔버 기준 이상감지 화면입니다.',
     category: 'Chamber',
     icon: 'network',
-    badge: '공사중',
+    badge: 'Open',
   },
   {
     key: 'main',
@@ -1774,6 +1780,39 @@ function HomePage({ onSelect }) {
 }
 
 function ConstructionView({ onBack }) {
+  const [lineState, setLineState] = useState(EMPTY_CHAMBER_LINES_STATE);
+  const [selectedLineName, setSelectedLineName] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchJson(`/api/chamber-lines?t=${Date.now()}`)
+      .then((payload) => {
+        if (cancelled) return;
+
+        const rows = payload.rows ?? [];
+        setLineState({
+          loading: false,
+          error: '',
+          rows,
+        });
+        setSelectedLineName((current) => current || rows[0]?.lineName || '');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        setLineState({
+          loading: false,
+          error: error.message,
+          rows: error.payload?.rows ?? [],
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <main className="app hasFloatingHomeButton">
       <button className="homeBackButton" type="button" onClick={onBack}>
@@ -1785,10 +1824,51 @@ function ConstructionView({ onBack }) {
           <h1>Defect SPIDER</h1>
         </div>
       </header>
-      <section className="constructionPanel">
-        <span className="homeBadge">Chamber</span>
-        <h2>P3D 챔버별 이상감지</h2>
-        <p>공사중입니다.</p>
+      <section className="constructionPanel chamberLinePanel">
+        <div className="chamberLineHeading">
+          <div>
+            <span className="homeBadge">Chamber</span>
+            <h2>P3D 챔버별 이상감지</h2>
+          </div>
+          <span className="countBadge">{lineState.loading ? '-' : lineState.rows.length.toLocaleString()}</span>
+        </div>
+
+        {lineState.loading && (
+          <div className="emptyPanel">
+            <strong>라인 매핑 파일 읽는 중</strong>
+            <span>개별 챔버 이상감지 라인 매핑파일을 확인하고 있습니다.</span>
+          </div>
+        )}
+
+        {!lineState.loading && lineState.error && (
+          <div className="emptyPanel">
+            <strong>라인 매핑 파일 읽기 실패</strong>
+            <span>{hideFilePaths(lineState.error)}</span>
+          </div>
+        )}
+
+        {!lineState.loading && !lineState.error && lineState.rows.length === 0 && (
+          <div className="emptyPanel">
+            <strong>라인 없음</strong>
+            <span>line_mapping.txt에서 선택 가능한 라인명을 찾지 못했습니다.</span>
+          </div>
+        )}
+
+        {!lineState.loading && !lineState.error && lineState.rows.length > 0 && (
+          <div className="chamberLineGrid" aria-label="챔버 라인 선택">
+            {lineState.rows.map((line) => (
+              <button
+                key={line.lineName}
+                className={selectedLineName === line.lineName ? 'chamberLineButton active' : 'chamberLineButton'}
+                type="button"
+                onClick={() => setSelectedLineName(line.lineName)}
+              >
+                <strong>{line.lineName}</strong>
+                {line.device && <span>Device {line.device}</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

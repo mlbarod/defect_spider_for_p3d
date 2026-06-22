@@ -16,11 +16,12 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v24"
+LOADER_VERSION = "file-loader-v25"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
 FCC_STEP_PATH = f"{FCC_FOLDER_PATH}/fcc_step"
+LINE_MAPPING_PATH = f"{CONFIG['eadsRoot']}/line_mapping.txt"
 COMPACT_TIME_FORMATS = (
     "%Y%m%d%H%M%S",
     "%Y%m%d%H%M",
@@ -81,6 +82,14 @@ FCC_DATA_SOURCES = [
         "key": "fcc_extra_std",
         "label": "FCC 추가 산포 이상 목록",
         "path": f"{FCC_FOLDER_PATH}/fail_list_std.parquet",
+    },
+]
+
+CHAMBER_DATA_SOURCES = [
+    {
+        "key": "line_mapping",
+        "label": "개별 챔버 이상감지 라인 매핑파일",
+        "path": LINE_MAPPING_PATH,
     },
 ]
 
@@ -250,6 +259,63 @@ def read_met_rows(path, device=CONFIG["device"]):
         row["met_step"] = strip_percent_prefix(row.get("met_step", ""))
         rows.append(row)
     return rows
+
+
+def literal_dict_from_python_file(path):
+    require_file(path)
+
+    with open(path, "r", encoding="utf-8") as file:
+        content = file.read().strip()
+
+    if not content:
+        return {}
+
+    try:
+        value = ast.literal_eval(content)
+    except Exception:
+        module = ast.parse(content, filename=path)
+        value = None
+        for node in module.body:
+            if isinstance(node, ast.Assign):
+                try:
+                    candidate = ast.literal_eval(node.value)
+                except Exception:
+                    continue
+                if isinstance(candidate, dict):
+                    value = candidate
+                    break
+        if value is None:
+            raise ValueError(f"Python dict 형식으로 읽을 수 없습니다: {path}")
+
+    if not isinstance(value, dict):
+        raise ValueError(f"Python dict 형식이 아닙니다: {path}")
+
+    return value
+
+
+def command_chamber_lines(_args):
+    mapping = literal_dict_from_python_file(LINE_MAPPING_PATH)
+    rows = [
+        {
+            "key": str(line_name).strip(),
+            "lineName": str(line_name).strip(),
+            "device": "" if device is None else str(device).strip(),
+        }
+        for line_name, device in mapping.items()
+        if str(line_name).strip()
+    ]
+    write_json(
+        {
+            "ok": True,
+            "rows": rows,
+            "sources": source_status(CHAMBER_DATA_SOURCES),
+            "diagnostics": {
+                "version": LOADER_VERSION,
+                "inputRows": {"line_mapping": len(mapping)},
+                "outputRows": len(rows),
+            },
+        }
+    )
 
 
 def strip_percent_prefix(value):
@@ -1618,6 +1684,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("summary")
     subparsers.add_parser("fcc-summary")
+    subparsers.add_parser("chamber-lines")
     chart_parser = subparsers.add_parser("chart")
     chart_parser.add_argument("--main-step", required=True)
     chart_parser.add_argument("--chart-met-step", required=True)
@@ -1634,12 +1701,19 @@ def main():
             command_summary(args)
         elif args.command == "fcc-summary":
             command_fcc_summary(args)
+        elif args.command == "chamber-lines":
+            command_chamber_lines(args)
         elif args.command == "chart":
             command_chart(args)
         elif args.command == "fcc-chart":
             command_fcc_chart(args)
     except Exception as exc:
-        sources = source_status(FCC_DATA_SOURCES) if args.command.startswith("fcc") else source_status()
+        if args.command.startswith("fcc"):
+            sources = source_status(FCC_DATA_SOURCES)
+        elif args.command.startswith("chamber"):
+            sources = source_status(CHAMBER_DATA_SOURCES)
+        else:
+            sources = source_status()
         write_json(
             {
                 "ok": False,

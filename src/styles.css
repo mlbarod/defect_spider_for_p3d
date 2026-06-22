@@ -491,6 +491,86 @@ code {
   box-shadow: var(--shadow-sm);
 }
 
+.chamberLinePanel {
+  width: min(980px, 100%);
+  min-height: 320px;
+}
+
+.chamberLineHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chamberLineHeading h2 {
+  margin-top: 12px;
+}
+
+.chamberLineGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chamberLineButton {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 82px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  padding: 14px;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.chamberLineButton:hover {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+  background: var(--accent);
+  color: var(--accent-foreground);
+  transform: translateY(-1px);
+}
+
+.chamberLineButton.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow:
+    0 10px 15px -3px hsl(268 60% 32% / 0.14),
+    0 4px 6px -4px hsl(268 60% 32% / 0.14);
+}
+
+.chamberLineButton strong,
+.chamberLineButton span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chamberLineButton strong {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.chamberLineButton span {
+  color: currentColor;
+  opacity: 0.75;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
 .constructionPanel p {
   margin: 0;
   color: var(--muted-foreground);
@@ -803,6 +883,7 @@ code {
 .sdwtButtons button:focus-visible,
 .subStepButton:focus-visible,
 .ngTableToggle:focus-visible,
+.chamberLineButton:focus-visible,
 .spiderAppCard:focus-visible,
 .homeBackButton:focus-visible,
 .scrollTopButton:focus-visible {
@@ -1581,6 +1662,10 @@ tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .chamberLineGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topBar {
     align-items: stretch;
     flex-direction: column;
@@ -1654,6 +1739,14 @@ tr:last-child td {
   }
 
   .spiderAppGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .chamberLineHeading {
+    flex-direction: column;
+  }
+
+  .chamberLineGrid {
     grid-template-columns: 1fr;
   }
 
