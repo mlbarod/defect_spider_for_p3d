@@ -33,7 +33,7 @@ function sendJson(res, statusCode, payload) {
 }
 
 function runLoader(args, res) {
-  const child = spawn('python3', [loaderPath, ...args], {
+  const child = spawn('python3', ['-B', loaderPath, ...args], {
     cwd: rootDir,
     stdio: ['ignore', 'pipe', 'pipe'],
   });

@@ -1864,7 +1864,7 @@ function ConstructionView({ onBack }) {
                 onClick={() => setSelectedLineName(line.lineName)}
               >
                 <strong>{line.lineName}</strong>
-                {line.device && <span>Device {line.device}</span>}
+                {(line.lineCode || line.device) && <span>{[line.lineCode, line.device && `Device ${line.device}`].filter(Boolean).join(' / ')}</span>}
               </button>
             ))}
           </div>

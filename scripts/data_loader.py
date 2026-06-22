@@ -270,15 +270,38 @@ def literal_dict_from_python_file(path):
     if not content:
         return {}
 
+    def node_value(node):
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Tuple):
+            return tuple(node_value(item) for item in node.elts)
+        if isinstance(node, ast.List):
+            return [node_value(item) for item in node.elts]
+        if isinstance(node, ast.Set):
+            return {node_value(item) for item in node.elts}
+        if isinstance(node, ast.Dict):
+            return {node_value(key): node_value(value) for key, value in zip(node.keys, node.values)}
+        raise ValueError(f"지원하지 않는 Python literal 형식입니다: {type(node).__name__}")
+
     try:
         value = ast.literal_eval(content)
     except Exception:
         module = ast.parse(content, filename=path)
         value = None
         for node in module.body:
+            if isinstance(node, ast.Expr):
+                try:
+                    candidate = node_value(node.value)
+                except Exception:
+                    continue
+                if isinstance(candidate, dict):
+                    value = candidate
+                    break
             if isinstance(node, ast.Assign):
                 try:
-                    candidate = ast.literal_eval(node.value)
+                    candidate = node_value(node.value)
                 except Exception:
                     continue
                 if isinstance(candidate, dict):
@@ -293,15 +316,48 @@ def literal_dict_from_python_file(path):
     return value
 
 
+def mapping_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        parts = [mapping_text(item) for item in value]
+        return ", ".join(part for part in parts if part)
+    return str(value).strip()
+
+
+def chamber_line_row(line_name, mapping_value):
+    line_code = ""
+    device = ""
+
+    if isinstance(mapping_value, dict):
+        line_code = mapping_text(
+            mapping_value.get("lineCode")
+            or mapping_value.get("line_code")
+            or mapping_value.get("line")
+            or mapping_value.get("code")
+        )
+        device = mapping_text(mapping_value.get("device") or mapping_value.get("deviceName") or mapping_value.get("device_name"))
+    elif isinstance(mapping_value, (list, tuple)):
+        if len(mapping_value) > 0:
+            line_code = mapping_text(mapping_value[0])
+        if len(mapping_value) > 1:
+            device = mapping_text(mapping_value[1])
+    else:
+        device = mapping_text(mapping_value)
+
+    return {
+        "key": str(line_name).strip(),
+        "lineName": str(line_name).strip(),
+        "lineCode": line_code,
+        "device": device,
+    }
+
+
 def command_chamber_lines(_args):
     mapping = literal_dict_from_python_file(LINE_MAPPING_PATH)
     rows = [
-        {
-            "key": str(line_name).strip(),
-            "lineName": str(line_name).strip(),
-            "device": "" if device is None else str(device).strip(),
-        }
-        for line_name, device in mapping.items()
+        chamber_line_row(line_name, mapping_value)
+        for line_name, mapping_value in mapping.items()
         if str(line_name).strip()
     ]
     write_json(
