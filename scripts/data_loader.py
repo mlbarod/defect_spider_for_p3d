@@ -16,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v25"
+LOADER_VERSION = "file-loader-v26"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -207,14 +207,24 @@ def load_polars():
 
 
 def source_status(sources=DATA_SOURCES):
-    return [
-        {
-            **source,
-            "exists": os.path.exists(source["path"]),
-            "readable": os.access(source["path"], os.R_OK),
-        }
-        for source in sources
-    ]
+    statuses = []
+    for source in sources:
+        path = source["path"]
+        statuses.append(
+            {
+                **source,
+                "absolutePath": os.path.abspath(path),
+                "exists": os.path.exists(path),
+                "readable": os.access(path, os.R_OK),
+            }
+        )
+    return statuses
+
+
+def resolved_paths_for_command(command):
+    if command.startswith("chamber"):
+        return {"lineMappingPath": os.path.abspath(LINE_MAPPING_PATH)}
+    return {}
 
 
 def require_file(path):
@@ -367,6 +377,7 @@ def command_chamber_lines(_args):
             "sources": source_status(CHAMBER_DATA_SOURCES),
             "diagnostics": {
                 "version": LOADER_VERSION,
+                "resolvedPaths": resolved_paths_for_command("chamber-lines"),
                 "inputRows": {"line_mapping": len(mapping)},
                 "outputRows": len(rows),
             },
@@ -1775,7 +1786,7 @@ def main():
                 "ok": False,
                 "error": str(exc),
                 "config": CONFIG,
-                "diagnostics": {"version": LOADER_VERSION},
+                "diagnostics": {"version": LOADER_VERSION, "resolvedPaths": resolved_paths_for_command(args.command)},
                 "sources": sources,
             }
         )

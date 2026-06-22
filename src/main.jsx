@@ -81,6 +81,14 @@ const FCC_DATA_SOURCES = [
   },
 ];
 
+const CHAMBER_DATA_SOURCES = [
+  {
+    key: 'line_mapping',
+    label: '개별 챔버 이상감지 라인 매핑파일',
+    path: `${CONFIG.eadsRoot}/line_mapping.txt`,
+  },
+];
+
 const EMPTY_LOAD_STATE = {
   loading: true,
   error: '',
@@ -118,7 +126,17 @@ const EMPTY_FCC_LOAD_STATE = {
 const EMPTY_CHAMBER_LINES_STATE = {
   loading: true,
   error: '',
+  apiPath: '/api/chamber-lines',
   rows: [],
+  sources: CHAMBER_DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
+  diagnostics: {
+    version: 'browser-init',
+    resolvedPaths: {
+      lineMappingPath: CHAMBER_DATA_SOURCES[0].path,
+    },
+    inputRows: {},
+    outputRows: 0,
+  },
 };
 
 async function fetchJson(url, options) {
@@ -1794,7 +1812,10 @@ function ConstructionView({ onBack }) {
         setLineState({
           loading: false,
           error: '',
+          apiPath: '/api/chamber-lines',
           rows,
+          sources: payload.sources ?? EMPTY_CHAMBER_LINES_STATE.sources,
+          diagnostics: payload.diagnostics ?? EMPTY_CHAMBER_LINES_STATE.diagnostics,
         });
         setSelectedLineName((current) => current || rows[0]?.lineName || '');
       })
@@ -1804,7 +1825,10 @@ function ConstructionView({ onBack }) {
         setLineState({
           loading: false,
           error: error.message,
+          apiPath: error.requestUrl ?? '/api/chamber-lines',
           rows: error.payload?.rows ?? [],
+          sources: error.payload?.sources ?? EMPTY_CHAMBER_LINES_STATE.sources,
+          diagnostics: error.payload?.diagnostics ?? EMPTY_CHAMBER_LINES_STATE.diagnostics,
         });
       });
 
@@ -1843,7 +1867,8 @@ function ConstructionView({ onBack }) {
         {!lineState.loading && lineState.error && (
           <div className="emptyPanel">
             <strong>라인 매핑 파일 읽기 실패</strong>
-            <span>{hideFilePaths(lineState.error)}</span>
+            <span>{lineState.error}</span>
+            <code>{lineState.diagnostics?.resolvedPaths?.lineMappingPath ?? lineState.sources?.[0]?.path}</code>
           </div>
         )}
 
@@ -1853,6 +1878,8 @@ function ConstructionView({ onBack }) {
             <span>line_mapping.txt에서 선택 가능한 라인명을 찾지 못했습니다.</span>
           </div>
         )}
+
+        <SourceReferenceList apiPath={lineState.apiPath} sources={lineState.sources} />
 
         {!lineState.loading && !lineState.error && lineState.rows.length > 0 && (
           <div className="chamberLineGrid" aria-label="챔버 라인 선택">

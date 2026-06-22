@@ -785,6 +785,14 @@ code {
   line-height: 1.45;
 }
 
+.emptyPanel code {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .sourceReferenceList {
   display: grid;
   gap: 8px;
