@@ -1800,6 +1800,11 @@ function HomePage({ onSelect }) {
 function ConstructionView({ onBack }) {
   const [lineState, setLineState] = useState(EMPTY_CHAMBER_LINES_STATE);
   const [selectedLineName, setSelectedLineName] = useState('');
+  const lineMappingContent = lineState.diagnostics?.lineMappingContent ?? '';
+  const lineMappingPath =
+    lineState.diagnostics?.resolvedPaths?.lineMappingPath ??
+    lineState.sources?.find((source) => source.exists && source.readable)?.path ??
+    lineState.sources?.[0]?.path;
 
   useEffect(() => {
     let cancelled = false;
@@ -1868,7 +1873,7 @@ function ConstructionView({ onBack }) {
           <div className="emptyPanel">
             <strong>라인 매핑 파일 읽기 실패</strong>
             <span>{lineState.error}</span>
-            <code>{lineState.diagnostics?.resolvedPaths?.lineMappingPath ?? lineState.sources?.[0]?.path}</code>
+            <code>{lineMappingPath}</code>
           </div>
         )}
 
@@ -1879,7 +1884,15 @@ function ConstructionView({ onBack }) {
           </div>
         )}
 
-        <SourceReferenceList apiPath={lineState.apiPath} sources={lineState.sources} />
+        {!lineState.loading && <SourceReferenceList apiPath={lineState.apiPath} sources={lineState.sources} />}
+
+        {!lineState.loading && lineMappingContent && (
+          <div className="lineMappingContentPanel">
+            <strong>line_mapping.txt 본문</strong>
+            <code>{lineMappingPath}</code>
+            <pre>{lineMappingContent}</pre>
+          </div>
+        )}
 
         {!lineState.loading && !lineState.error && lineState.rows.length > 0 && (
           <div className="chamberLineGrid" aria-label="챔버 라인 선택">

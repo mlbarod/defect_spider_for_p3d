@@ -16,12 +16,23 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v26"
+LOADER_VERSION = "file-loader-v27"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
 FCC_STEP_PATH = f"{FCC_FOLDER_PATH}/fcc_step"
-LINE_MAPPING_PATH = f"{CONFIG['eadsRoot']}/line_mapping.txt"
+LINE_MAPPING_PATH = os.environ.get("LINE_MAPPING_PATH") or f"{CONFIG['eadsRoot']}/line_mapping.txt"
+LINE_MAPPING_CANDIDATE_PATHS = tuple(
+    dict.fromkeys(
+        [
+            LINE_MAPPING_PATH,
+            f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/line_mapping.txt",
+            f"{FOLDER_PATH}/line_mapping.txt",
+            f"{FCC_FOLDER_PATH}/line_mapping.txt",
+            f"{FCC_STEP_PATH}/line_mapping.txt",
+        ]
+    )
+)
 COMPACT_TIME_FORMATS = (
     "%Y%m%d%H%M%S",
     "%Y%m%d%H%M",
@@ -87,10 +98,11 @@ FCC_DATA_SOURCES = [
 
 CHAMBER_DATA_SOURCES = [
     {
-        "key": "line_mapping",
-        "label": "개별 챔버 이상감지 라인 매핑파일",
-        "path": LINE_MAPPING_PATH,
-    },
+        "key": f"line_mapping_{index}",
+        "label": "개별 챔버 이상감지 라인 매핑파일" if index == 0 else f"개별 챔버 이상감지 라인 매핑파일 후보 {index + 1}",
+        "path": path,
+    }
+    for index, path in enumerate(LINE_MAPPING_CANDIDATE_PATHS)
 ]
 
 
@@ -221,9 +233,12 @@ def source_status(sources=DATA_SOURCES):
     return statuses
 
 
-def resolved_paths_for_command(command):
+def resolved_paths_for_command(command, line_mapping_path=None):
     if command.startswith("chamber"):
-        return {"lineMappingPath": os.path.abspath(LINE_MAPPING_PATH)}
+        return {
+            "lineMappingPath": os.path.abspath(line_mapping_path or LINE_MAPPING_PATH),
+            "lineMappingCandidates": [os.path.abspath(path) for path in LINE_MAPPING_CANDIDATE_PATHS],
+        }
     return {}
 
 
@@ -232,6 +247,27 @@ def require_file(path):
         raise FileNotFoundError(f"파일이 없습니다: {path}")
     if not os.access(path, os.R_OK):
         raise PermissionError(f"파일을 읽을 권한이 없습니다: {path}")
+
+
+def resolve_line_mapping_path():
+    first_existing = None
+    for path in LINE_MAPPING_CANDIDATE_PATHS:
+        if os.path.isfile(path):
+            if os.access(path, os.R_OK):
+                return path
+            first_existing = first_existing or path
+
+    if first_existing:
+        raise PermissionError(f"파일을 읽을 권한이 없습니다: {first_existing}")
+
+    candidates = ", ".join(os.path.abspath(path) for path in LINE_MAPPING_CANDIDATE_PATHS)
+    raise FileNotFoundError(f"라인 매핑 파일이 없습니다. 확인한 후보: {candidates}")
+
+
+def read_text_file(path):
+    require_file(path)
+    with open(path, "r", encoding="utf-8") as file:
+        return file.read()
 
 
 def read_parquet(path):
@@ -271,12 +307,8 @@ def read_met_rows(path, device=CONFIG["device"]):
     return rows
 
 
-def literal_dict_from_python_file(path):
-    require_file(path)
-
-    with open(path, "r", encoding="utf-8") as file:
-        content = file.read().strip()
-
+def literal_dict_from_python_text(content, path):
+    content = content.strip()
     if not content:
         return {}
 
@@ -326,6 +358,10 @@ def literal_dict_from_python_file(path):
     return value
 
 
+def literal_dict_from_python_file(path):
+    return literal_dict_from_python_text(read_text_file(path), path)
+
+
 def mapping_text(value):
     if value is None:
         return ""
@@ -364,7 +400,9 @@ def chamber_line_row(line_name, mapping_value):
 
 
 def command_chamber_lines(_args):
-    mapping = literal_dict_from_python_file(LINE_MAPPING_PATH)
+    line_mapping_path = resolve_line_mapping_path()
+    line_mapping_content = read_text_file(line_mapping_path)
+    mapping = literal_dict_from_python_text(line_mapping_content, line_mapping_path)
     rows = [
         chamber_line_row(line_name, mapping_value)
         for line_name, mapping_value in mapping.items()
@@ -377,7 +415,8 @@ def command_chamber_lines(_args):
             "sources": source_status(CHAMBER_DATA_SOURCES),
             "diagnostics": {
                 "version": LOADER_VERSION,
-                "resolvedPaths": resolved_paths_for_command("chamber-lines"),
+                "resolvedPaths": resolved_paths_for_command("chamber-lines", line_mapping_path),
+                "lineMappingContent": line_mapping_content,
                 "inputRows": {"line_mapping": len(mapping)},
                 "outputRows": len(rows),
             },

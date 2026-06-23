@@ -829,6 +829,43 @@ code {
   overflow-wrap: anywhere;
 }
 
+.lineMappingContentPanel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  padding: 14px;
+}
+
+.lineMappingContentPanel strong {
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.lineMappingContentPanel code {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.lineMappingContentPanel pre {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 12px;
+  font-family: var(--font-geist-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .stepNameRow {
   display: flex;
   align-items: center;

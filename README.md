@@ -15,7 +15,7 @@
 | FCC 추가 MET 매핑 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/met_fcc.txt` | `device`, `main_step`, `met_step`, `step_desc`, `sdwt` |
 | FCC 추가 중심치 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fail_list.parquet` | `main_seq`, `met_seq`, `eqpid` |
 | FCC 추가 산포 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fail_list_std.parquet` | `main_seq`, `met_seq`, `eqpid` |
-| 개별 챔버 이상감지 라인 매핑파일 | `/appdata/hadoop/code/eads/line_mapping.txt` | Python dict key: 라인명, value: `(라인코드, device명)` |
+| 개별 챔버 이상감지 라인 매핑파일 | `/appdata/hadoop/code/eads/line_mapping.txt` 우선, 없으면 `/appdata/hadoop/code/eads/PFB3/line_mapping.txt`, `/appdata/hadoop/code/eads/PFB3/D1c/line_mapping.txt`, `/appdata/hadoop/code/eads/PFB3/D1c_fcc/line_mapping.txt`, `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fcc_step/line_mapping.txt` 순서로 확인 | Python dict key: 라인명, value: `(라인코드, device명)` |
 | PM 이력 | `/appdata/abnormal_trend/pic/pm_code_info.parquet` | `asset`, `inprg_dt`, `work_type` |
 
 ## Chart Data
