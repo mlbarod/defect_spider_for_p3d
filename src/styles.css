@@ -575,6 +575,21 @@ code {
   line-height: 1.25;
 }
 
+.chamberDeviceSection {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding-top: 12px;
+}
+
+.chamberDeviceHeader {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
 .chamberDeviceRow {
   display: flex;
   flex-wrap: wrap;

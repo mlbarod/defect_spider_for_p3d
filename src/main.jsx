@@ -1820,6 +1820,7 @@ function ConstructionView({ onBack }) {
   const [chamberLoadState, setChamberLoadState] = useState(EMPTY_CHAMBER_LOAD_STATE);
   const [selectedLineName, setSelectedLineName] = useState('');
   const [selectedDeviceKey, setSelectedDeviceKey] = useState('');
+  const [selectedChamberSdwt, setSelectedChamberSdwt] = useState('ALL');
   const [selectedChamberMetStep, setSelectedChamberMetStep] = useState(null);
   const [chamberLatestDate, setChamberLatestDate] = useState('');
   const selectedLine = lineState.rows.find((line) => line.lineName === selectedLineName) ?? lineState.rows[0] ?? null;
@@ -1829,10 +1830,12 @@ function ConstructionView({ onBack }) {
     return [];
   }, [selectedLine]);
   const selectedDevice = selectedLineDevices.find((device) => device.key === selectedDeviceKey) ?? selectedLineDevices[0] ?? null;
-  const chamberStepGroups = useMemo(() => groupRowsByMainStep(chamberLoadState.rows), [chamberLoadState.rows]);
+  const chamberSdwtOptions = useMemo(() => buildSdwtOptions(chamberLoadState.rows), [chamberLoadState.rows]);
+  const filteredChamberRows = useMemo(() => filterRowsBySdwt(chamberLoadState.rows, selectedChamberSdwt), [chamberLoadState.rows, selectedChamberSdwt]);
+  const chamberStepGroups = useMemo(() => groupRowsByMainStep(filteredChamberRows), [filteredChamberRows]);
   const selectedChamberEqpIds = getPrioritizedEqpIds(selectedChamberMetStep);
   const chamberMetStepCount = chamberStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
-  const chamberEqpCount = chamberLoadState.rows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
+  const chamberEqpCount = filteredChamberRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
   const chamberMetricCards = [
     { label: '메인 스탭', value: chamberStepGroups.length.toLocaleString() },
     { label: '계측 스탭', value: chamberMetStepCount.toLocaleString() },
@@ -1881,6 +1884,10 @@ function ConstructionView({ onBack }) {
       return selectedLineDevices[0]?.key ?? '';
     });
   }, [selectedLineDevices]);
+
+  useEffect(() => {
+    setSelectedChamberSdwt((current) => (chamberSdwtOptions.includes(current) ? current : 'ALL'));
+  }, [chamberSdwtOptions]);
 
   useEffect(() => {
     setChamberLatestDate('');
@@ -1962,7 +1969,7 @@ function ConstructionView({ onBack }) {
         <div className="chamberLineHeading">
           <div>
             <span className="homeBadge">Chamber</span>
-            <h2>P3D 챔버별 이상감지</h2>
+            <h2>전라인 챔버별 이상감지</h2>
           </div>
           <span className="countBadge">{lineState.loading ? '-' : lineState.rows.length.toLocaleString()}</span>
         </div>
@@ -2004,17 +2011,20 @@ function ConstructionView({ onBack }) {
             </div>
 
             {selectedLineDevices.length > 0 && (
-              <div className="chamberDeviceRow" aria-label="챔버 device 선택">
-                {selectedLineDevices.map((device) => (
-                  <button
-                    key={device.key}
-                    className={selectedDevice?.key === device.key ? 'active' : ''}
-                    type="button"
-                    onClick={() => setSelectedDeviceKey(device.key)}
-                  >
-                    <strong>{device.device}</strong>
-                  </button>
-                ))}
+              <div className="chamberDeviceSection">
+                <div className="chamberDeviceHeader">제품 선택</div>
+                <div className="chamberDeviceRow" aria-label="챔버 device 선택">
+                  {selectedLineDevices.map((device) => (
+                    <button
+                      key={device.key}
+                      className={selectedDevice?.key === device.key ? 'active' : ''}
+                      type="button"
+                      onClick={() => setSelectedDeviceKey(device.key)}
+                    >
+                      <strong>{device.device}</strong>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </>
@@ -2039,6 +2049,7 @@ function ConstructionView({ onBack }) {
 
           <section className="workspace chamberWorkspace">
             <div className="leftRail">
+              <SdwtSelector options={chamberSdwtOptions} selectedSdwt={selectedChamberSdwt} onSelect={setSelectedChamberSdwt} disabled={chamberLoadState.rows.length === 0} />
               <MainStepTree
                 groups={chamberStepGroups}
                 selectedMetStepKey={selectedChamberMetStep?.key}
