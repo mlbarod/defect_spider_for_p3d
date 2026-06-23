@@ -182,27 +182,68 @@ async function fetchJson(url, options) {
   return payload;
 }
 
-const recentClickHistoryUploads = new Map();
-
-function uploadClickHistory(lineName, row) {
+function uploadClickHistory(lineName, row, onDebug) {
   const normalizedLineName = String(lineName ?? '').trim();
   const selectStep = String(row?.metStep ?? row?.metStepPath ?? '').trim();
 
   if (!normalizedLineName || !selectStep) return;
 
-  const historyKey = `${normalizedLineName}::${selectStep}`;
   const now = Date.now();
-  const lastUploadedAt = recentClickHistoryUploads.get(historyKey) ?? 0;
-  if (now - lastUploadedAt < 1500) return;
+  const historyDataPreview = [normalizedLineName, selectStep, new Date(now).toISOString(), '서버 knox_id 조회 전'];
+  const pendingDebug = {
+    status: 'requesting',
+    lineName: normalizedLineName,
+    selectStep,
+    historyData: historyDataPreview,
+    diagnostics: {},
+    error: '',
+  };
 
-  recentClickHistoryUploads.set(historyKey, now);
+  onDebug?.(pendingDebug);
+
   const params = new URLSearchParams({
     lineName: normalizedLineName,
     selectStep,
     t: String(now),
   });
 
-  fetchJson(`/api/click-history?${params.toString()}`).catch(() => {});
+  fetchJson(`/api/click-history?${params.toString()}`)
+    .then((payload) => {
+      onDebug?.({
+        ...pendingDebug,
+        status: 'uploaded',
+        historyData: payload.historyData ?? historyDataPreview,
+        diagnostics: payload.diagnostics ?? {},
+        error: '',
+      });
+    })
+    .catch((error) => {
+      onDebug?.({
+        ...pendingDebug,
+        status: 'failed',
+        historyData: error.payload?.historyData ?? historyDataPreview,
+        diagnostics: error.payload?.diagnostics ?? {},
+        error: error.message,
+      });
+    });
+}
+
+function HistoryDebugPanel({ data }) {
+  if (!data) return null;
+
+  const statusLabel = data.status === 'uploaded' ? 'DB 업로드 성공' : data.status === 'failed' ? 'DB 업로드 실패' : 'DB 업로드 요청 중';
+
+  return (
+    <div className={`historyDebugPanel ${data.status === 'failed' ? 'error' : ''}`}>
+      <div className="historyDebugHeader">
+        <strong>history_data debug</strong>
+        <span>{statusLabel}</span>
+      </div>
+      <code>history_data = {JSON.stringify(data.historyData, null, 2)}</code>
+      {data.error && <span>{hideFilePaths(data.error)}</span>}
+      {Object.keys(data.diagnostics ?? {}).length > 0 && <code>diagnostics = {JSON.stringify(data.diagnostics, null, 2)}</code>}
+    </div>
+  );
 }
 
 function hideFilePaths(value) {
@@ -1756,17 +1797,6 @@ function HomeIcon({ type }) {
   );
 }
 
-function SpiderHomeMark() {
-  return (
-    <div className="spiderHomeMark">
-      <img
-        src="https://www.sec.gov/Archives/edgar/data/1041130/000119312518045025/g472619logo_06.jpg"
-        alt="L1 SPIDER"
-      />
-    </div>
-  );
-}
-
 function HomeCategoryCard({ card, onSelect }) {
   const handleClick = () => {
     if (card.href) {
@@ -1803,7 +1833,6 @@ function HomePage({ onSelect }) {
             <h1>Defect SPIDER</h1>
             <p>Defect및 L1, L0 이상감지 메뉴를 한 화면에서 시작합니다.</p>
           </div>
-          <SpiderHomeMark />
         </div>
       </section>
 
@@ -1844,6 +1873,7 @@ function ConstructionView({ onBack }) {
   const [selectedChamberSdwt, setSelectedChamberSdwt] = useState('ALL');
   const [selectedChamberMetStep, setSelectedChamberMetStep] = useState(null);
   const [chamberLatestDate, setChamberLatestDate] = useState('');
+  const [historyDebug, setHistoryDebug] = useState(null);
   const selectedLine = lineState.rows.find((line) => line.lineName === selectedLineName) ?? lineState.rows[0] ?? null;
   const selectedLineDevices = useMemo(() => {
     if (selectedLine?.devices?.length > 0) return selectedLine.devices;
@@ -1975,11 +2005,6 @@ function ConstructionView({ onBack }) {
     setChamberLatestDate('');
   }, [selectedChamberMetStep?.key, selectedDevice?.key]);
 
-  useEffect(() => {
-    if (!selectedLine?.lineName || !selectedChamberMetStep || selectedChamberEqpIds.length === 0) return;
-    uploadClickHistory(selectedLine.lineName, selectedChamberMetStep);
-  }, [selectedLine?.lineName, selectedChamberMetStep?.key, selectedChamberEqpIds.length]);
-
   return (
     <main className="app hasFloatingHomeButton chamberView">
       <button className="homeBackButton" type="button" onClick={onBack}>
@@ -2081,7 +2106,10 @@ function ConstructionView({ onBack }) {
               <MainStepTree
                 groups={chamberStepGroups}
                 selectedMetStepKey={selectedChamberMetStep?.key}
-                onSelectMetStep={setSelectedChamberMetStep}
+                onSelectMetStep={(row) => {
+                  setSelectedChamberMetStep(row);
+                  uploadClickHistory(selectedLine?.lineName, row, setHistoryDebug);
+                }}
                 loading={chamberLoadState.loading}
                 error={chamberLoadState.error}
                 diagnostics={chamberLoadState.diagnostics}
@@ -2096,6 +2124,8 @@ function ConstructionView({ onBack }) {
                 </div>
                 <div className="statusChip">{chamberLoadState.error ? '파일 읽기 실패' : chamberLoadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
               </div>
+
+              <HistoryDebugPanel data={historyDebug} />
 
               <div className="chartGrid">
                 {selectedChamberMetStep && selectedChamberEqpIds.length > 0 ? (
@@ -2130,6 +2160,7 @@ function App() {
   const [activeChartSource, setActiveChartSource] = useState('main');
   const [currentView, setCurrentView] = useState('home');
   const [chartLatestDate, setChartLatestDate] = useState('');
+  const [historyDebug, setHistoryDebug] = useState(null);
 
   useEffect(() => {
     fetchJson(`/api/summary?t=${Date.now()}`)
@@ -2204,11 +2235,6 @@ function App() {
   const activeChartEndpoint = activeChartSource === 'fcc' ? '/api/fcc-chart' : '/api/chart';
   const activeChartEyebrow = activeChartSource === 'fcc' ? 'FCC Equipment Charts' : 'Equipment Charts';
   const selectedEqpIds = activeChartSource === 'fcc' ? (activeSelectedRow?.centerEqpIds ?? []) : getPrioritizedEqpIds(activeSelectedRow);
-
-  useEffect(() => {
-    if (!['main', 'fcc'].includes(currentView) || !activeSelectedRow || selectedEqpIds.length === 0) return;
-    uploadClickHistory(CONFIG.lineName, activeSelectedRow);
-  }, [currentView, activeChartSource, activeSelectedRow?.key, selectedEqpIds.length]);
 
   const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
@@ -2301,6 +2327,7 @@ function App() {
                 setSelectedMetStep(row);
                 setActiveChartSource('main');
                 setCurrentView('main');
+                uploadClickHistory(CONFIG.lineName, row, setHistoryDebug);
               }}
               loading={loadState.loading}
               error={loadState.error}
@@ -2314,6 +2341,7 @@ function App() {
                 setSelectedAdditionalMetStep(row);
                 setActiveChartSource('fcc');
                 setCurrentView('fcc');
+                uploadClickHistory(CONFIG.lineName, row, setHistoryDebug);
               }}
               loading={fccLoadState.loading}
               error={fccLoadState.error}
@@ -2332,6 +2360,8 @@ function App() {
             </div>
             <div className="statusChip">{activeLoadState.error ? '파일 읽기 실패' : activeLoadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
           </div>
+
+          <HistoryDebugPanel data={historyDebug} />
 
           <div className="chartGrid">
             {activeSelectedRow && selectedEqpIds.length > 0 ? (

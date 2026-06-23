@@ -360,15 +360,31 @@ def command_click_history(args):
         raise RuntimeError(f"승인된 접속자 정보를 찾지 못했습니다: {ip_addr}")
     knox_id = first_ip_info_value(ip_info, "knox_id")
     history_data = (args.line_name, args.select_step, datetime.now(), knox_id)
-    result = ClickedCategoryUpLoad(history_data, db_info, ip_info)
+    diagnostics = {
+        "version": LOADER_VERSION,
+        "remoteIp": ip_addr,
+        "ipInfoRows": len(ip_info),
+        "knoxIdFound": bool(knox_id),
+    }
+    try:
+        result = ClickedCategoryUpLoad(history_data, db_info, ip_info)
+    except Exception as exc:
+        write_json(
+            {
+                "ok": False,
+                "error": str(exc),
+                "historyData": history_data,
+                "diagnostics": diagnostics,
+            }
+        )
+        return
+
     write_json(
         {
             "ok": True,
+            "historyData": history_data,
             "diagnostics": {
-                "version": LOADER_VERSION,
-                "remoteIp": ip_addr,
-                "ipInfoRows": len(ip_info),
-                "knoxIdFound": bool(knox_id),
+                **diagnostics,
                 **result,
             },
         }
