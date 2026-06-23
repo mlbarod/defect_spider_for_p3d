@@ -492,7 +492,7 @@ code {
 }
 
 .chamberLinePanel {
-  width: min(980px, 100%);
+  width: 100%;
   min-height: 320px;
 }
 
@@ -508,17 +508,21 @@ code {
 }
 
 .chamberLineGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .chamberLineButton {
   display: grid;
   align-content: center;
   gap: 7px;
-  min-width: 0;
-  min-height: 82px;
+  flex: 1 0 180px;
+  min-width: 180px;
+  min-height: 56px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
@@ -561,6 +565,7 @@ code {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .chamberLineButton span {
@@ -569,6 +574,43 @@ code {
   font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
+}
+
+.chamberDeviceRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chamberDeviceRow button {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.chamberDeviceRow button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.chamberDeviceRow strong {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.chamberDeviceRow span {
+  opacity: 0.76;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .chamberLineDetailPanel {
@@ -615,6 +657,10 @@ code {
   font-size: 13px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.chamberWorkspace {
+  margin-top: 14px;
 }
 
 .constructionPanel p {
@@ -872,43 +918,6 @@ code {
   color: var(--foreground);
   font-size: 10px;
   line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.lineMappingContentPanel {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--background);
-  padding: 14px;
-}
-
-.lineMappingContentPanel strong {
-  color: var(--foreground);
-  font-size: 13px;
-}
-
-.lineMappingContentPanel code {
-  color: var(--muted-foreground);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-}
-
-.lineMappingContentPanel pre {
-  max-height: 320px;
-  margin: 0;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--muted);
-  color: var(--foreground);
-  padding: 12px;
-  font-family: var(--font-geist-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
@@ -1754,7 +1763,7 @@ tr:last-child td {
   }
 
   .chamberLineGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-wrap: nowrap;
   }
 
   .topBar {
@@ -1838,6 +1847,10 @@ tr:last-child td {
   }
 
   .chamberLineGrid {
+    flex-wrap: nowrap;
+  }
+
+  .chamberLineDetailGrid {
     grid-template-columns: 1fr;
   }
 

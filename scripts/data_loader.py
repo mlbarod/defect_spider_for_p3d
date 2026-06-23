@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import ast
 import json
 import math
 import os
@@ -15,7 +16,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v29"
+LOADER_VERSION = "file-loader-v30"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -339,12 +340,19 @@ def chamber_line_rows_from_text(content):
             {
                 "key": line_name,
                 "lineName": line_name,
+                "devices": [],
                 "lineCodeValues": [],
                 "deviceValues": [],
             },
         )
-        add_unique_text(current["lineCodeValues"], row.get(line_code_column))
-        add_unique_text(current["deviceValues"], row.get(device_column))
+        line_code = str(row.get(line_code_column, "") or "").strip()
+        device = str(row.get(device_column, "") or "").strip()
+        add_unique_text(current["lineCodeValues"], line_code)
+        add_unique_text(current["deviceValues"], device)
+        if line_code and device:
+            device_key = f"{line_code}::{device}"
+            if not any(item["key"] == device_key for item in current["devices"]):
+                current["devices"].append({"key": device_key, "lineCode": line_code, "device": device})
 
     rows = []
     for row in grouped.values():
@@ -356,6 +364,28 @@ def chamber_line_rows_from_text(content):
             }
         )
     return rows, len(raw_rows), warnings
+
+
+def chamber_data_sources(line_code, device):
+    line_root = f"{CONFIG['eadsRoot']}/{line_code}"
+    device_root = f"{line_root}/{device}"
+    return [
+        {
+            "key": "chamber_met",
+            "label": "개별챔버 MET 매핑",
+            "path": f"{line_root}/met.txt",
+        },
+        {
+            "key": "chamber_fail",
+            "label": "개별챔버 중심치 이상목록",
+            "path": f"{device_root}/fail_list.parquet",
+        },
+        {
+            "key": "chamber_std",
+            "label": "개별챔버 산포 이상목록",
+            "path": f"{device_root}/fail_list_std.parquet",
+        },
+    ]
 
 
 def command_chamber_lines(_args):
@@ -370,11 +400,91 @@ def command_chamber_lines(_args):
             "diagnostics": {
                 "version": LOADER_VERSION,
                 "resolvedPaths": resolved_paths_for_command("chamber-lines", line_mapping_path),
-                "lineMappingContent": line_mapping_content,
                 "inputRows": {"line_mapping": input_row_count},
                 "outputRows": len(rows),
                 "warnings": warnings,
             },
+        }
+    )
+
+
+def command_chamber_summary(args):
+    line_code = str(args.line_code or "").strip()
+    device = str(args.device or "").strip()
+    if not line_code or not device:
+        raise ValueError("lineCode와 device가 필요합니다.")
+
+    sources = chamber_data_sources(line_code, device)
+    diagnostics = {
+        "version": LOADER_VERSION,
+        "lineCode": line_code,
+        "device": device,
+        "inputRows": {},
+        "columns": {},
+        "usedRows": {},
+        "outputRows": 0,
+        "warnings": [],
+    }
+    met_source, fail_source, std_source = sources
+    fail_rows = load_optional_parquet(fail_source, diagnostics)
+    std_rows = load_optional_parquet(std_source, diagnostics)
+    met_rows = load_optional_met_rows(met_source, diagnostics, device=device)
+
+    by_main_step, _by_step_desc = met_lookup(met_rows)
+    merged = {}
+    key_prefix = f"chamber::{line_code}::{device}::"
+    diagnostics["usedRows"]["fail"] = add_summary_rows(
+        merged,
+        fail_rows,
+        "centerCount",
+        by_main_step,
+        data_kind="chamber",
+        key_prefix=key_prefix,
+        filter_cross_line_eqp=False,
+    )
+    diagnostics["usedRows"]["std"] = add_summary_rows(
+        merged,
+        std_rows,
+        "stdCount",
+        by_main_step,
+        data_kind="chamber",
+        key_prefix=key_prefix,
+        filter_cross_line_eqp=False,
+    )
+
+    rows = [
+        {
+            **row,
+            "lineCode": line_code,
+            "device": device,
+            "chartRoot": "chamber",
+        }
+        for row in merged.values()
+        if row["centerCount"] != 0 or row["stdCount"] != 0
+    ]
+    rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
+    diagnostics["outputRows"] = len(rows)
+
+    if not fail_rows and not std_rows:
+        write_json(
+            {
+                "ok": False,
+                "error": "개별챔버 중심치/산포 이상 parquet에서 읽은 행이 없습니다. 파일 경로와 권한을 확인하세요.",
+                "config": CONFIG,
+                "sources": source_status(sources),
+                "diagnostics": diagnostics,
+                "rows": [],
+            }
+        )
+        return
+
+    write_json(
+        {
+            "ok": True,
+            "config": CONFIG,
+            "sources": source_status(sources),
+            "diagnostics": diagnostics,
+            "rows": rows,
         }
     )
 
@@ -1169,6 +1279,71 @@ def resolve_chart_paths(main_step, chart_met_step):
     }
 
 
+def generic_item_id_from_met_step(value):
+    text = strip_main_suffix(normalize_step(value)).strip()
+    if "_" not in text:
+        return ""
+    item_id = text.split("_", 1)[1].split("_", 1)[0].strip()
+    digits = "".join(char for char in item_id if char.isdigit())
+    return digits or item_id
+
+
+def resolve_chamber_chart_paths(line_code, device, main_step, chart_met_step):
+    line_code = str(line_code or "").strip()
+    device = str(device or "").strip()
+    if not line_code or not device:
+        raise ValueError("개별챔버 chart 경로에 필요한 lineCode/device가 없습니다.")
+
+    root_path = f"{CONFIG['eadsRoot']}/{line_code}/{device}"
+    main_candidates = unique_nonempty([main_step, normalize_step(main_step)])
+    main_dir, main_dir_name, main_attempts = resolve_child_dir(root_path, main_candidates, "chamber main_step")
+
+    met_candidates = unique_nonempty([normalize_step(chart_met_step), chart_met_step])
+    met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, met_candidates, "chamber met_step", is_met=True)
+
+    latest_date = latest_child_dir(met_dir)
+    data_dir = os.path.join(met_dir, latest_date)
+    main_file_candidates = unique_nonempty([main_dir_name, main_step, normalize_step(main_step)])
+    all_path, all_attempts = resolve_parquet_file(data_dir, "all", main_file_candidates)
+    fail_path, fail_attempts = resolve_parquet_file(data_dir, "fail", main_file_candidates)
+    try:
+        std_path, std_attempts = resolve_parquet_file(data_dir, "fail_std", main_file_candidates)
+    except FileNotFoundError:
+        std_path = None
+        std_attempts = [f"fail_std_{candidate}.parquet" for candidate in main_file_candidates]
+
+    return {
+        "rootPath": root_path,
+        "mainDir": main_dir,
+        "metDir": met_dir,
+        "dataDir": data_dir,
+        "latestDate": latest_date,
+        "allPath": all_path,
+        "failPath": fail_path,
+        "stdPath": std_path,
+        "requested": {
+            "lineCode": line_code,
+            "device": device,
+            "mainStep": main_step,
+            "chartMetStep": chart_met_step,
+        },
+        "resolved": {
+            "lineCode": line_code,
+            "device": device,
+            "mainStep": main_dir_name,
+            "chartMetStep": met_dir_name,
+            "itemId": generic_item_id_from_met_step(chart_met_step),
+        },
+        "attempts": {
+            "mainDirs": main_attempts,
+            "metDirs": met_attempts,
+            "allFiles": all_attempts,
+            "failFiles": fail_attempts,
+            "stdFiles": std_attempts,
+        },
+    }
+
+
 def strip_fcc_prefix(value):
     value = str(value or "").strip()
     return value[4:] if value.lower().startswith("fcc_") else value
@@ -1518,6 +1693,70 @@ def command_chart(args):
     )
 
 
+def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
+    all_path = resolved_paths["allPath"]
+    fail_path = resolved_paths["failPath"]
+    std_path = resolved_paths["stdPath"]
+
+    all_df = sort_frame(read_parquet(all_path), "tkout_time")
+    fail_df = sort_frame(read_parquet(fail_path), "tkout_time")
+    std_df = sort_frame(read_parquet(std_path), "tkout_time") if std_path else fail_df.head(0)
+
+    all_background = exclude_frame_eqp(all_df, eqp_id)
+    fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
+    std_for_eqp = filter_frame_eqp(std_df, eqp_id)
+    all_fab_values = numeric_column_values(all_df, "fab_value")
+    chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
+    chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
+    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
+
+    return {
+        "ok": True,
+        "diagnostics": {
+            "version": LOADER_VERSION,
+            "resolvedPaths": resolved_paths,
+            "inputRows": {
+                "all": frame_height(all_df),
+                "allBackground": frame_height(all_background),
+                "fail": frame_height(fail_df),
+                "failForEqp": frame_height(fail_for_eqp),
+                "std": frame_height(std_df),
+                "stdForEqp": frame_height(std_for_eqp),
+            },
+        },
+        "paths": {
+            "all": all_path,
+            "fail": fail_path,
+            "std": std_path,
+            "pm": CONFIG["pmCodePath"] if include_pm else None,
+        },
+        "latestDate": resolved_paths["latestDate"],
+        "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),
+        "domains": {
+            "x": time_domain(all_df, "tkout_time"),
+            "yFull": numeric_domain(chart_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values),
+            "center": {
+                "yFull": numeric_domain(chart_fab_values_center),
+                "yInitial": outlier_display_domain(all_fab_values),
+            },
+            "std": {
+                "yFull": numeric_domain(chart_fab_values_std),
+                "yInitial": outlier_display_domain(all_fab_values),
+            },
+        },
+        "allPoints": chart_records(all_background, None),
+        "failPoints": chart_records(fail_for_eqp, None, "center"),
+        "stdPoints": chart_records(std_for_eqp, None, "std"),
+        "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
+    }
+
+
+def command_chamber_chart(args):
+    resolved_paths = resolve_chamber_chart_paths(args.line_code, args.device, args.main_step, args.chart_met_step)
+    write_json(generic_chart_payload(resolved_paths, args.eqp_id, include_pm=True))
+
+
 def pm_events_for_eqp(eqp_id):
     if not os.path.isfile(CONFIG["pmCodePath"]) or not os.access(CONFIG["pmCodePath"], os.R_OK):
         return []
@@ -1746,10 +1985,19 @@ def main():
     subparsers.add_parser("summary")
     subparsers.add_parser("fcc-summary")
     subparsers.add_parser("chamber-lines")
+    chamber_summary_parser = subparsers.add_parser("chamber-summary")
+    chamber_summary_parser.add_argument("--line-code", required=True)
+    chamber_summary_parser.add_argument("--device", required=True)
     chart_parser = subparsers.add_parser("chart")
     chart_parser.add_argument("--main-step", required=True)
     chart_parser.add_argument("--chart-met-step", required=True)
     chart_parser.add_argument("--eqp-id", required=True)
+    chamber_chart_parser = subparsers.add_parser("chamber-chart")
+    chamber_chart_parser.add_argument("--line-code", required=True)
+    chamber_chart_parser.add_argument("--device", required=True)
+    chamber_chart_parser.add_argument("--main-step", required=True)
+    chamber_chart_parser.add_argument("--chart-met-step", required=True)
+    chamber_chart_parser.add_argument("--eqp-id", required=True)
     fcc_chart_parser = subparsers.add_parser("fcc-chart")
     fcc_chart_parser.add_argument("--main-step", required=True)
     fcc_chart_parser.add_argument("--chart-met-step", required=True)
@@ -1764,13 +2012,19 @@ def main():
             command_fcc_summary(args)
         elif args.command == "chamber-lines":
             command_chamber_lines(args)
+        elif args.command == "chamber-summary":
+            command_chamber_summary(args)
         elif args.command == "chart":
             command_chart(args)
+        elif args.command == "chamber-chart":
+            command_chamber_chart(args)
         elif args.command == "fcc-chart":
             command_fcc_chart(args)
     except Exception as exc:
         if args.command.startswith("fcc"):
             sources = source_status(FCC_DATA_SOURCES)
+        elif args.command in ("chamber-summary", "chamber-chart") and getattr(args, "line_code", None) and getattr(args, "device", None):
+            sources = source_status(chamber_data_sources(args.line_code, args.device))
         elif args.command.startswith("chamber"):
             sources = source_status(CHAMBER_DATA_SOURCES)
         else:

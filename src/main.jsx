@@ -139,6 +139,21 @@ const EMPTY_CHAMBER_LINES_STATE = {
   },
 };
 
+const EMPTY_CHAMBER_LOAD_STATE = {
+  loading: false,
+  error: '',
+  apiPath: '/api/chamber-summary',
+  rows: [],
+  sources: [],
+  diagnostics: {
+    version: 'browser-init',
+    inputRows: {},
+    usedRows: {},
+    outputRows: 0,
+    warnings: [],
+  },
+};
+
 async function fetchJson(url, options) {
   const response = await fetch(url, {
     ...options,
@@ -220,6 +235,7 @@ function stripFccPrefix(value) {
 
 function getChartMetStep(row) {
   if (row?.dataKind === 'fcc') return stripFccPrefix(stripPercentPrefix(row.metStepPath ?? row.metStep));
+  if (row?.dataKind === 'chamber') return stripPercentPrefix(row.metStepPath ?? row.metStep);
 
   let rawMetStep = stripPercentPrefix(row.metStepPath ?? row.metStep);
   while (rawMetStep.endsWith('_main_main')) rawMetStep = rawMetStep.replace(/_main_main$/, '_main');
@@ -1506,6 +1522,10 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
       chartRoot: row.chartRoot ?? 'step',
       t: String(Date.now()),
     });
+    if (row.dataKind === 'chamber') {
+      params.set('lineCode', row.lineCode ?? '');
+      params.set('device', row.device ?? '');
+    }
 
     setChartState({ loading: true, error: '', data: null });
     fetchJson(`${chartEndpoint}?${params.toString()}`, { signal: controller.signal })
@@ -1799,13 +1819,24 @@ function HomePage({ onSelect }) {
 
 function ConstructionView({ onBack }) {
   const [lineState, setLineState] = useState(EMPTY_CHAMBER_LINES_STATE);
+  const [chamberLoadState, setChamberLoadState] = useState(EMPTY_CHAMBER_LOAD_STATE);
   const [selectedLineName, setSelectedLineName] = useState('');
-  const lineMappingContent = lineState.diagnostics?.lineMappingContent ?? '';
+  const [selectedDeviceKey, setSelectedDeviceKey] = useState('');
+  const [selectedChamberMetStep, setSelectedChamberMetStep] = useState(null);
+  const [chamberLatestDate, setChamberLatestDate] = useState('');
   const lineMappingPath =
     lineState.diagnostics?.resolvedPaths?.lineMappingPath ??
     lineState.sources?.find((source) => source.exists && source.readable)?.path ??
     lineState.sources?.[0]?.path;
   const selectedLine = lineState.rows.find((line) => line.lineName === selectedLineName) ?? lineState.rows[0] ?? null;
+  const selectedLineDevices = useMemo(() => {
+    if (selectedLine?.devices?.length > 0) return selectedLine.devices;
+    if (selectedLine?.lineCode && selectedLine?.device) return [{ key: `${selectedLine.lineCode}::${selectedLine.device}`, lineCode: selectedLine.lineCode, device: selectedLine.device }];
+    return [];
+  }, [selectedLine]);
+  const selectedDevice = selectedLineDevices.find((device) => device.key === selectedDeviceKey) ?? selectedLineDevices[0] ?? null;
+  const chamberStepGroups = useMemo(() => groupRowsByMainStep(chamberLoadState.rows), [chamberLoadState.rows]);
+  const selectedChamberEqpIds = getPrioritizedEqpIds(selectedChamberMetStep);
 
   useEffect(() => {
     let cancelled = false;
@@ -1842,6 +1873,78 @@ function ConstructionView({ onBack }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    setSelectedDeviceKey((current) => {
+      if (current && selectedLineDevices.some((device) => device.key === current)) return current;
+      return selectedLineDevices[0]?.key ?? '';
+    });
+  }, [selectedLineDevices]);
+
+  useEffect(() => {
+    setChamberLatestDate('');
+    setSelectedChamberMetStep(null);
+
+    if (!selectedDevice) {
+      setChamberLoadState(EMPTY_CHAMBER_LOAD_STATE);
+      return;
+    }
+
+    let cancelled = false;
+    const params = new URLSearchParams({
+      lineCode: selectedDevice.lineCode,
+      device: selectedDevice.device,
+      t: String(Date.now()),
+    });
+
+    setChamberLoadState({
+      ...EMPTY_CHAMBER_LOAD_STATE,
+      loading: true,
+      apiPath: `/api/chamber-summary?lineCode=${encodeURIComponent(selectedDevice.lineCode)}&device=${encodeURIComponent(selectedDevice.device)}`,
+    });
+
+    fetchJson(`/api/chamber-summary?${params.toString()}`)
+      .then((payload) => {
+        if (cancelled) return;
+
+        setChamberLoadState({
+          loading: false,
+          error: '',
+          apiPath: `/api/chamber-summary?lineCode=${encodeURIComponent(selectedDevice.lineCode)}&device=${encodeURIComponent(selectedDevice.device)}`,
+          rows: payload.rows ?? [],
+          sources: payload.sources ?? [],
+          diagnostics: payload.diagnostics ?? EMPTY_CHAMBER_LOAD_STATE.diagnostics,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        setChamberLoadState({
+          loading: false,
+          error: error.message,
+          apiPath: error.requestUrl ?? `/api/chamber-summary?lineCode=${encodeURIComponent(selectedDevice.lineCode)}&device=${encodeURIComponent(selectedDevice.device)}`,
+          rows: error.payload?.rows ?? [],
+          sources: error.payload?.sources ?? [],
+          diagnostics: error.payload?.diagnostics ?? EMPTY_CHAMBER_LOAD_STATE.diagnostics,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDevice]);
+
+  useEffect(() => {
+    const firstMetStep = chamberStepGroups[0]?.metSteps[0] ?? null;
+    setSelectedChamberMetStep((current) => {
+      if (current && chamberStepGroups.some((group) => group.metSteps.some((row) => row.key === current.key))) return current;
+      return firstMetStep;
+    });
+  }, [chamberStepGroups]);
+
+  useEffect(() => {
+    setChamberLatestDate('');
+  }, [selectedChamberMetStep?.key, selectedDevice?.key]);
 
   return (
     <main className="app hasFloatingHomeButton">
@@ -1881,23 +1984,11 @@ function ConstructionView({ onBack }) {
         {!lineState.loading && !lineState.error && lineState.rows.length === 0 && (
           <div className="emptyPanel">
             <strong>라인 없음</strong>
-            <span>
-              {lineMappingContent
-                ? lineState.diagnostics?.warnings?.[0] || 'line_mapping.txt 본문은 읽었지만 선택 가능한 라인명을 찾지 못했습니다.'
-                : 'line_mapping.txt에서 선택 가능한 라인명을 찾지 못했습니다.'}
-            </span>
+            <span>{lineState.diagnostics?.warnings?.[0] || 'line_mapping.txt에서 선택 가능한 line 값을 찾지 못했습니다.'}</span>
           </div>
         )}
 
         {!lineState.loading && <SourceReferenceList apiPath={lineState.apiPath} sources={lineState.sources} />}
-
-        {!lineState.loading && lineMappingContent && (
-          <div className="lineMappingContentPanel">
-            <strong>line_mapping.txt 본문</strong>
-            <code>{lineMappingPath}</code>
-            <pre>{lineMappingContent}</pre>
-          </div>
-        )}
 
         {!lineState.loading && !lineState.error && lineState.rows.length > 0 && (
           <>
@@ -1914,17 +2005,33 @@ function ConstructionView({ onBack }) {
               ))}
             </div>
 
-            {selectedLine && (
+            {selectedLineDevices.length > 0 && (
+              <div className="chamberDeviceRow" aria-label="챔버 device 선택">
+                {selectedLineDevices.map((device) => (
+                  <button
+                    key={device.key}
+                    className={selectedDevice?.key === device.key ? 'active' : ''}
+                    type="button"
+                    onClick={() => setSelectedDeviceKey(device.key)}
+                  >
+                    <strong>{device.device}</strong>
+                    <span>{device.lineCode}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedLine && selectedDevice && (
               <div className="chamberLineDetailPanel">
                 <strong>{selectedLine.lineName}</strong>
                 <div className="chamberLineDetailGrid">
                   <div>
                     <span>line_code</span>
-                    <code>{selectedLine.lineCode || '-'}</code>
+                    <code>{selectedDevice.lineCode || '-'}</code>
                   </div>
                   <div>
                     <span>device</span>
-                    <code>{selectedLine.device || '-'}</code>
+                    <code>{selectedDevice.device || '-'}</code>
                   </div>
                 </div>
               </div>
@@ -1932,6 +2039,51 @@ function ConstructionView({ onBack }) {
           </>
         )}
       </section>
+
+      {selectedDevice && (
+        <>
+          <SourceStatusBanner
+            loading={chamberLoadState.loading}
+            error={chamberLoadState.error}
+            sources={chamberLoadState.sources}
+            diagnostics={chamberLoadState.diagnostics}
+            latestDate={chamberLatestDate}
+          />
+
+          <section className="workspace chamberWorkspace">
+            <div className="leftRail">
+              <MainStepTree
+                groups={chamberStepGroups}
+                selectedMetStepKey={selectedChamberMetStep?.key}
+                onSelectMetStep={setSelectedChamberMetStep}
+                loading={chamberLoadState.loading}
+                error={chamberLoadState.error}
+                diagnostics={chamberLoadState.diagnostics}
+              />
+            </div>
+
+            <section className="detailPanel">
+              <div className="detailHeader">
+                <div>
+                  <p className="eyebrow">Chamber Equipment Charts</p>
+                  <h2>{getChartHeading(selectedChamberMetStep)}</h2>
+                </div>
+                <div className="statusChip">{chamberLoadState.error ? '파일 읽기 실패' : chamberLoadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
+              </div>
+
+              <div className="chartGrid">
+                {selectedChamberMetStep && selectedChamberEqpIds.length > 0 ? (
+                  selectedChamberEqpIds.map((eqpId) => (
+                    <EquipmentChart key={`chamber-${selectedDevice.key}-${selectedChamberMetStep.key}-${eqpId}`} row={selectedChamberMetStep} eqpId={eqpId} onLatestDate={setChamberLatestDate} chartEndpoint="/api/chamber-chart" />
+                  ))
+                ) : (
+                  <EmptyChartState selectedRow={selectedChamberMetStep} />
+                )}
+              </div>
+            </section>
+          </section>
+        </>
+      )}
     </main>
   );
 }
