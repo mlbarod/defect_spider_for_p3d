@@ -15,7 +15,7 @@
 | FCC 추가 MET 매핑 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/met_fcc.txt` | `device`, `main_step`, `met_step`, `step_desc`, `sdwt` |
 | FCC 추가 중심치 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fail_list.parquet` | `main_seq`, `met_seq`, `eqpid` |
 | FCC 추가 산포 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fail_list_std.parquet` | `main_seq`, `met_seq`, `eqpid` |
-| 개별 챔버 이상감지 라인 매핑파일 | `/appdata/hadoop/code/eads/line_mapping.txt` | txt 본문을 그대로 읽고, Python dict로 해석 가능한 경우 라인명 버튼을 구성 |
+| 개별 챔버 이상감지 라인 매핑파일 | `/appdata/hadoop/code/eads/line_mapping.txt` | 탭 구분 txt 헤더 `line`, `line_code`, `device` |
 | PM 이력 | `/appdata/abnormal_trend/pic/pm_code_info.parquet` | `asset`, `inprg_dt`, `work_type` |
 
 ## Chart Data

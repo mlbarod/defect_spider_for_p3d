@@ -1805,6 +1805,7 @@ function ConstructionView({ onBack }) {
     lineState.diagnostics?.resolvedPaths?.lineMappingPath ??
     lineState.sources?.find((source) => source.exists && source.readable)?.path ??
     lineState.sources?.[0]?.path;
+  const selectedLine = lineState.rows.find((line) => line.lineName === selectedLineName) ?? lineState.rows[0] ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -1882,7 +1883,7 @@ function ConstructionView({ onBack }) {
             <strong>라인 없음</strong>
             <span>
               {lineMappingContent
-                ? lineState.diagnostics?.lineMappingParseError || 'line_mapping.txt 본문은 읽었지만 선택 가능한 라인명을 찾지 못했습니다.'
+                ? lineState.diagnostics?.warnings?.[0] || 'line_mapping.txt 본문은 읽었지만 선택 가능한 라인명을 찾지 못했습니다.'
                 : 'line_mapping.txt에서 선택 가능한 라인명을 찾지 못했습니다.'}
             </span>
           </div>
@@ -1899,19 +1900,36 @@ function ConstructionView({ onBack }) {
         )}
 
         {!lineState.loading && !lineState.error && lineState.rows.length > 0 && (
-          <div className="chamberLineGrid" aria-label="챔버 라인 선택">
-            {lineState.rows.map((line) => (
-              <button
-                key={line.lineName}
-                className={selectedLineName === line.lineName ? 'chamberLineButton active' : 'chamberLineButton'}
-                type="button"
-                onClick={() => setSelectedLineName(line.lineName)}
-              >
-                <strong>{line.lineName}</strong>
-                {(line.lineCode || line.device) && <span>{[line.lineCode, line.device && `Device ${line.device}`].filter(Boolean).join(' / ')}</span>}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="chamberLineGrid" aria-label="챔버 라인 선택">
+              {lineState.rows.map((line) => (
+                <button
+                  key={line.lineName}
+                  className={selectedLine?.lineName === line.lineName ? 'chamberLineButton active' : 'chamberLineButton'}
+                  type="button"
+                  onClick={() => setSelectedLineName(line.lineName)}
+                >
+                  <strong>{line.lineName}</strong>
+                </button>
+              ))}
+            </div>
+
+            {selectedLine && (
+              <div className="chamberLineDetailPanel">
+                <strong>{selectedLine.lineName}</strong>
+                <div className="chamberLineDetailGrid">
+                  <div>
+                    <span>line_code</span>
+                    <code>{selectedLine.lineCode || '-'}</code>
+                  </div>
+                  <div>
+                    <span>device</span>
+                    <code>{selectedLine.device || '-'}</code>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>

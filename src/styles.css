@@ -571,6 +571,52 @@ code {
   line-height: 1.25;
 }
 
+.chamberLineDetailPanel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--border));
+  border-radius: var(--radius);
+  background: var(--background);
+  padding: 14px;
+}
+
+.chamberLineDetailPanel > strong {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.chamberLineDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chamberLineDetailGrid div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+  padding: 10px;
+}
+
+.chamberLineDetailGrid span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.chamberLineDetailGrid code {
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .constructionPanel p {
   margin: 0;
   color: var(--muted-foreground);

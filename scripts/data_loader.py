@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import ast
 import json
 import math
 import os
@@ -16,7 +15,7 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v28"
+LOADER_VERSION = "file-loader-v29"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -279,114 +278,90 @@ def read_met_rows(path, device=CONFIG["device"]):
     return rows
 
 
-def literal_dict_from_python_text(content, path):
-    content = content.strip()
-    if not content:
-        return {}
+def read_tab_rows_from_text(content):
+    lines = [line.rstrip("\r") for line in content.splitlines() if line.strip()]
+    if not lines:
+        return [], []
 
-    def node_value(node):
-        if isinstance(node, ast.Constant):
-            return node.value
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Tuple):
-            return tuple(node_value(item) for item in node.elts)
-        if isinstance(node, ast.List):
-            return [node_value(item) for item in node.elts]
-        if isinstance(node, ast.Set):
-            return {node_value(item) for item in node.elts}
-        if isinstance(node, ast.Dict):
-            return {node_value(key): node_value(value) for key, value in zip(node.keys, node.values)}
-        raise ValueError(f"지원하지 않는 Python literal 형식입니다: {type(node).__name__}")
-
-    try:
-        value = ast.literal_eval(content)
-    except Exception:
-        module = ast.parse(content, filename=path)
-        value = None
-        for node in module.body:
-            if isinstance(node, ast.Expr):
-                try:
-                    candidate = node_value(node.value)
-                except Exception:
-                    continue
-                if isinstance(candidate, dict):
-                    value = candidate
-                    break
-            if isinstance(node, ast.Assign):
-                try:
-                    candidate = node_value(node.value)
-                except Exception:
-                    continue
-                if isinstance(candidate, dict):
-                    value = candidate
-                    break
-        if value is None:
-            raise ValueError(f"Python dict 형식으로 읽을 수 없습니다: {path}")
-
-    if not isinstance(value, dict):
-        raise ValueError(f"Python dict 형식이 아닙니다: {path}")
-
-    return value
+    header = [part.strip().lstrip("\ufeff") for part in lines[0].split("\t")]
+    rows = []
+    for line in lines[1:]:
+        values = [part.strip() for part in line.split("\t")]
+        rows.append({column: values[index] if index < len(values) else "" for index, column in enumerate(header)})
+    return header, rows
 
 
-def literal_dict_from_python_file(path):
-    return literal_dict_from_python_text(read_text_file(path), path)
+def get_column_name(header, target):
+    for column in header:
+        if column == target:
+            return column
+    target_lower = target.lower()
+    for column in header:
+        if column.lower() == target_lower:
+            return column
+    return ""
 
 
-def mapping_text(value):
-    if value is None:
-        return ""
-    if isinstance(value, (list, tuple, set)):
-        parts = [mapping_text(item) for item in value]
-        return ", ".join(part for part in parts if part)
-    return str(value).strip()
+def add_unique_text(values, value):
+    text = str(value or "").strip()
+    if text and text not in values:
+        values.append(text)
 
 
-def chamber_line_row(line_name, mapping_value):
-    line_code = ""
-    device = ""
-
-    if isinstance(mapping_value, dict):
-        line_code = mapping_text(
-            mapping_value.get("lineCode")
-            or mapping_value.get("line_code")
-            or mapping_value.get("line")
-            or mapping_value.get("code")
+def chamber_line_rows_from_text(content):
+    header, raw_rows = read_tab_rows_from_text(content)
+    warnings = []
+    line_column = get_column_name(header, "line")
+    line_code_column = get_column_name(header, "line_code")
+    device_column = get_column_name(header, "device")
+    missing_columns = [
+        name
+        for name, column in (
+            ("line", line_column),
+            ("line_code", line_code_column),
+            ("device", device_column),
         )
-        device = mapping_text(mapping_value.get("device") or mapping_value.get("deviceName") or mapping_value.get("device_name"))
-    elif isinstance(mapping_value, (list, tuple)):
-        if len(mapping_value) > 0:
-            line_code = mapping_text(mapping_value[0])
-        if len(mapping_value) > 1:
-            device = mapping_text(mapping_value[1])
-    else:
-        device = mapping_text(mapping_value)
+        if not column
+    ]
 
-    return {
-        "key": str(line_name).strip(),
-        "lineName": str(line_name).strip(),
-        "lineCode": line_code,
-        "device": device,
-    }
+    if missing_columns:
+        warnings.append(f"line_mapping.txt에서 필수 컬럼을 찾지 못했습니다: {', '.join(missing_columns)}")
+        return [], len(raw_rows), warnings
+
+    grouped = {}
+    for row in raw_rows:
+        line_name = str(row.get(line_column, "")).strip()
+        if not line_name:
+            continue
+
+        current = grouped.setdefault(
+            line_name,
+            {
+                "key": line_name,
+                "lineName": line_name,
+                "lineCodeValues": [],
+                "deviceValues": [],
+            },
+        )
+        add_unique_text(current["lineCodeValues"], row.get(line_code_column))
+        add_unique_text(current["deviceValues"], row.get(device_column))
+
+    rows = []
+    for row in grouped.values():
+        rows.append(
+            {
+                **row,
+                "lineCode": ", ".join(row["lineCodeValues"]),
+                "device": ", ".join(row["deviceValues"]),
+            }
+        )
+    return rows, len(raw_rows), warnings
 
 
 def command_chamber_lines(_args):
     line_mapping_path = LINE_MAPPING_PATH
     line_mapping_content = read_text_file(line_mapping_path)
-    mapping = {}
-    warnings = []
-    parse_error = ""
-    try:
-        mapping = literal_dict_from_python_text(line_mapping_content, line_mapping_path)
-    except Exception as exc:
-        parse_error = str(exc)
-        warnings.append(f"line_mapping.txt 본문은 읽었지만 Python dict로 해석하지 않았습니다: {parse_error}")
-    rows = [
-        chamber_line_row(line_name, mapping_value)
-        for line_name, mapping_value in mapping.items()
-        if str(line_name).strip()
-    ]
+    rows, input_row_count, warnings = chamber_line_rows_from_text(line_mapping_content)
     write_json(
         {
             "ok": True,
@@ -396,8 +371,7 @@ def command_chamber_lines(_args):
                 "version": LOADER_VERSION,
                 "resolvedPaths": resolved_paths_for_command("chamber-lines", line_mapping_path),
                 "lineMappingContent": line_mapping_content,
-                "lineMappingParseError": parse_error,
-                "inputRows": {"line_mapping": len(mapping)},
+                "inputRows": {"line_mapping": input_row_count},
                 "outputRows": len(rows),
                 "warnings": warnings,
             },
