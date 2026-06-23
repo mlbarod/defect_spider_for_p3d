@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import { handleAuthApi, readAuthSession, shouldRequireAuth } from './auth.mjs';
 
 const loaderPath = fileURLToPath(new URL('./scripts/data_loader.py', import.meta.url));
 
@@ -63,15 +62,6 @@ function installApiHandlers(middlewares) {
 
     if (!apiPath) {
       next();
-      return;
-    }
-
-    if (handleAuthApi(req, res, url)) {
-      return;
-    }
-
-    if (shouldRequireAuth() && !readAuthSession(req)) {
-      sendJson(res, 401, { ok: false, error: '로그인이 필요합니다.' });
       return;
     }
 

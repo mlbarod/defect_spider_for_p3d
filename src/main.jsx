@@ -154,7 +154,6 @@ const EMPTY_CHAMBER_LOAD_STATE = {
 
 async function fetchJson(url, options) {
   const response = await fetch(url, {
-    credentials: options?.credentials ?? 'include',
     ...options,
     headers: {
       Accept: 'application/json',
@@ -181,127 +180,6 @@ async function fetchJson(url, options) {
   }
 
   return payload;
-}
-
-async function fetchAuthJson(url, options) {
-  let response;
-
-  try {
-    response = await fetch(url, {
-      credentials: 'include',
-      ...options,
-      headers: {
-        Accept: 'application/json',
-        ...(options?.headers ?? {}),
-      },
-    });
-  } catch (error) {
-    return { ok: false, status: 0, data: null, error: error.message };
-  }
-
-  const contentType = response.headers.get('content-type') ?? '';
-  let data = null;
-
-  try {
-    data = contentType.includes('application/json') ? await response.json() : await response.text();
-  } catch {
-    data = null;
-  }
-
-  return {
-    ok: response.ok && data?.ok !== false,
-    status: response.status,
-    data,
-    error: data?.error || '',
-  };
-}
-
-function redirectToLogin() {
-  if (typeof window === 'undefined') return;
-  window.location.href = `/api/v1/auth/login?next=${encodeURIComponent(window.location.href)}`;
-}
-
-function AuthLoadingScreen({ message = '인증 상태 확인 중' }) {
-  return (
-    <main className="authScreen">
-      <section className="authPanel">
-        <h1>Defect SPIDER</h1>
-        <p>{message}</p>
-      </section>
-    </main>
-  );
-}
-
-function AuthGate({ children }) {
-  const [authState, setAuthState] = useState({
-    loading: true,
-    providerConfigured: false,
-    user: null,
-    error: '',
-  });
-  const redirectingRef = useRef(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadAuth() {
-      const configResult = await fetchAuthJson('/api/v1/auth/config');
-      const config = configResult.data?.data ?? {};
-
-      if (!configResult.ok || config.providerConfigured === false) {
-        if (!cancelled) {
-          setAuthState({
-            loading: false,
-            providerConfigured: false,
-            user: null,
-            error: '',
-          });
-        }
-        return;
-      }
-
-      const meResult = await fetchAuthJson('/api/v1/auth/me');
-      if (cancelled) return;
-
-      if (meResult.ok && meResult.data?.data) {
-        setAuthState({
-          loading: false,
-          providerConfigured: true,
-          user: meResult.data.data,
-          error: '',
-        });
-        return;
-      }
-
-      if (!redirectingRef.current) {
-        redirectingRef.current = true;
-        redirectToLogin();
-      }
-
-      setAuthState({
-        loading: true,
-        providerConfigured: true,
-        user: null,
-        error: meResult.error || '로그인이 필요합니다.',
-      });
-    }
-
-    loadAuth();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (authState.loading) {
-    return <AuthLoadingScreen message={authState.providerConfigured ? '로그인 페이지로 이동 중' : '인증 상태 확인 중'} />;
-  }
-
-  if (authState.error) {
-    return <AuthLoadingScreen message={authState.error} />;
-  }
-
-  return children;
 }
 
 function hideFilePaths(value) {
@@ -1900,9 +1778,9 @@ function HomePage({ onSelect }) {
       <section className="spiderHomeHero">
         <div className="spiderHomeHeroInner">
           <div className="spiderHomeTitleBlock">
-            <span className="homeBadge">P3D Defect</span>
+            <span className="homeBadge">L1 SPIDER</span>
             <h1>Defect SPIDER</h1>
-            <p>P3D 이상감지 메뉴를 한 화면에서 시작합니다.</p>
+            <p>Defect및 L1, L0 이상감지 메뉴를 한 화면에서 시작합니다.</p>
           </div>
           <SpiderHomeMark />
         </div>
@@ -2443,8 +2321,6 @@ function App() {
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AuthGate>
-      <App />
-    </AuthGate>
+    <App />
   </React.StrictMode>,
 );

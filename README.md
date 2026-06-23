@@ -1,20 +1,5 @@
 # defect_spider_for_p3d
 
-## OpenID Authentication
-
-OpenID 설정이 없으면 인증은 비활성화되고 기존처럼 앱이 바로 열린다. OpenID를 켜려면 서버 실행 환경에 아래 값을 설정한다.
-
-| 환경변수 | 설명 |
-| --- | --- |
-| `OIDC_ISSUER` 또는 `OPENID_ISSUER` | OpenID Provider issuer URL |
-| `OIDC_CLIENT_ID` 또는 `OPENID_CLIENT_ID` | OpenID client id |
-| `OIDC_CLIENT_SECRET` 또는 `OPENID_CLIENT_SECRET` | OpenID client secret. public client면 생략 가능 |
-| `OIDC_REDIRECT_URI` 또는 `OPENID_REDIRECT_URI` | Provider에 등록한 callback URL. 기본값은 현재 origin의 `/api/v1/auth/callback` |
-| `SESSION_SECRET` 또는 `AUTH_SESSION_SECRET` | 세션 쿠키 서명 secret |
-| `OIDC_SCOPE` 또는 `OPENID_SCOPE` | 기본값 `openid profile email` |
-| `OIDC_CLIENT_AUTH_METHOD` | `client_secret_post`, `client_secret_basic`, `none` 중 하나. 기본값은 secret이 있으면 `client_secret_post` |
-| `AUTH_REQUIRED` | `0` 또는 `false`면 OpenID 설정이 있어도 데이터 API 보호를 끈다 |
-
 ## Data Sources
 
 웹 화면에서는 원본 파일 경로와 읽기 상태를 표시한다. 파일 경로, 참조 컬럼, chart parquet 경로 규칙이 변경되면 이 README를 함께 업데이트한다.
