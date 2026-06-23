@@ -186,80 +186,20 @@ function getHistorySelectStep(row) {
   return String(row?.metStep ?? row?.metStepPath ?? '').trim().split('_')[0].trim();
 }
 
-async function resolveClientIp(clientIp) {
-  if (clientIp) return clientIp;
-
-  try {
-    const payload = await fetchJson(`/api/client-ip?t=${Date.now()}`);
-    return payload.ip ?? '';
-  } catch {
-    return '';
-  }
-}
-
-async function uploadClickHistory(lineName, row, clientIp, onDebug) {
+async function uploadClickHistory(lineName, row) {
   const normalizedLineName = String(lineName ?? '').trim();
   const selectStep = getHistorySelectStep(row);
 
   if (!normalizedLineName || !selectStep) return;
 
   const now = Date.now();
-  const resolvedClientIp = await resolveClientIp(clientIp);
-  const historyDataPreview = [normalizedLineName, selectStep, new Date(now).toISOString(), resolvedClientIp || 'IP 조회 실패'];
-  const pendingDebug = {
-    status: 'requesting',
-    lineName: normalizedLineName,
-    selectStep,
-    historyData: historyDataPreview,
-    diagnostics: {},
-    error: '',
-  };
-
-  onDebug?.(pendingDebug);
-
   const params = new URLSearchParams({
     lineName: normalizedLineName,
     selectStep,
     t: String(now),
   });
 
-  fetchJson(`/api/click-history?${params.toString()}`)
-    .then((payload) => {
-      onDebug?.({
-        ...pendingDebug,
-        status: 'uploaded',
-        historyData: payload.historyData ?? historyDataPreview,
-        diagnostics: payload.diagnostics ?? {},
-        error: '',
-      });
-    })
-    .catch((error) => {
-      onDebug?.({
-        ...pendingDebug,
-        status: 'failed',
-        historyData: error.payload?.historyData ?? historyDataPreview,
-        diagnostics: error.payload?.diagnostics ?? {},
-        error: error.message,
-      });
-    });
-}
-
-function HistoryDebugPanel({ data }) {
-  if (!data) return null;
-
-  const statusLabel = data.status === 'uploaded' ? 'DB 업로드 성공' : data.status === 'failed' ? 'DB 업로드 실패' : 'DB 업로드 요청 중';
-
-  return (
-    <div className={`historyDebugPanel ${data.status === 'failed' ? 'error' : ''}`}>
-      <div className="historyDebugHeader">
-        <strong>history_data debug</strong>
-        <span>{statusLabel}</span>
-      </div>
-      <code>history_data = {JSON.stringify(data.historyData, null, 2)}</code>
-      {data.error && <span>{hideFilePaths(data.error)}</span>}
-      {Object.keys(data.diagnostics ?? {}).length > 0 && <code>diagnostics = {JSON.stringify(data.diagnostics, null, 2)}</code>}
-    </div>
-  );
+  fetchJson(`/api/click-history?${params.toString()}`).catch(() => {});
 }
 
 function hideFilePaths(value) {
@@ -1881,7 +1821,7 @@ function HomePage({ onSelect }) {
   );
 }
 
-function ConstructionView({ onBack, clientIp }) {
+function ConstructionView({ onBack }) {
   const [lineState, setLineState] = useState(EMPTY_CHAMBER_LINES_STATE);
   const [chamberLoadState, setChamberLoadState] = useState(EMPTY_CHAMBER_LOAD_STATE);
   const [selectedLineName, setSelectedLineName] = useState('');
@@ -1889,7 +1829,6 @@ function ConstructionView({ onBack, clientIp }) {
   const [selectedChamberSdwt, setSelectedChamberSdwt] = useState('ALL');
   const [selectedChamberMetStep, setSelectedChamberMetStep] = useState(null);
   const [chamberLatestDate, setChamberLatestDate] = useState('');
-  const [historyDebug, setHistoryDebug] = useState(null);
   const selectedLine = lineState.rows.find((line) => line.lineName === selectedLineName) ?? lineState.rows[0] ?? null;
   const selectedLineDevices = useMemo(() => {
     if (selectedLine?.devices?.length > 0) return selectedLine.devices;
@@ -2124,7 +2063,7 @@ function ConstructionView({ onBack, clientIp }) {
                 selectedMetStepKey={selectedChamberMetStep?.key}
                 onSelectMetStep={(row) => {
                   setSelectedChamberMetStep(row);
-                  uploadClickHistory(selectedLine?.lineName, row, clientIp, setHistoryDebug);
+                  uploadClickHistory(selectedLine?.lineName, row);
                 }}
                 loading={chamberLoadState.loading}
                 error={chamberLoadState.error}
@@ -2140,8 +2079,6 @@ function ConstructionView({ onBack, clientIp }) {
                 </div>
                 <div className="statusChip">{chamberLoadState.error ? '파일 읽기 실패' : chamberLoadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
               </div>
-
-              <HistoryDebugPanel data={historyDebug} />
 
               <div className="chartGrid">
                 {selectedChamberMetStep && selectedChamberEqpIds.length > 0 ? (
@@ -2176,18 +2113,6 @@ function App() {
   const [activeChartSource, setActiveChartSource] = useState('main');
   const [currentView, setCurrentView] = useState('home');
   const [chartLatestDate, setChartLatestDate] = useState('');
-  const [historyDebug, setHistoryDebug] = useState(null);
-  const [clientIp, setClientIp] = useState('');
-
-  useEffect(() => {
-    fetchJson(`/api/client-ip?t=${Date.now()}`)
-      .then((payload) => {
-        setClientIp(payload.ip ?? '');
-      })
-      .catch(() => {
-        setClientIp('');
-      });
-  }, []);
 
   useEffect(() => {
     fetchJson(`/api/summary?t=${Date.now()}`)
@@ -2305,7 +2230,7 @@ function App() {
   }
 
   if (currentView === 'chamber') {
-    return <ConstructionView onBack={handleBackHome} clientIp={clientIp} />;
+    return <ConstructionView onBack={handleBackHome} />;
   }
 
   return (
@@ -2354,7 +2279,7 @@ function App() {
                 setSelectedMetStep(row);
                 setActiveChartSource('main');
                 setCurrentView('main');
-                uploadClickHistory(CONFIG.lineName, row, clientIp, setHistoryDebug);
+                uploadClickHistory(CONFIG.lineName, row);
               }}
               loading={loadState.loading}
               error={loadState.error}
@@ -2368,7 +2293,7 @@ function App() {
                 setSelectedAdditionalMetStep(row);
                 setActiveChartSource('fcc');
                 setCurrentView('fcc');
-                uploadClickHistory(CONFIG.lineName, row, clientIp, setHistoryDebug);
+                uploadClickHistory(CONFIG.lineName, row);
               }}
               loading={fccLoadState.loading}
               error={fccLoadState.error}
@@ -2387,8 +2312,6 @@ function App() {
             </div>
             <div className="statusChip">{activeLoadState.error ? '파일 읽기 실패' : activeLoadState.loading ? '파일 읽는 중' : '실제 파일 기반'}</div>
           </div>
-
-          <HistoryDebugPanel data={historyDebug} />
 
           <div className="chartGrid">
             {activeSelectedRow && selectedEqpIds.length > 0 ? (

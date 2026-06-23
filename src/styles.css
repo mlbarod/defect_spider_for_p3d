@@ -1065,50 +1065,6 @@ code {
   margin-bottom: 16px;
 }
 
-.historyDebugPanel {
-  display: grid;
-  gap: 8px;
-  margin: 0 0 14px;
-  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--accent) 44%, var(--card));
-  padding: 12px;
-}
-
-.historyDebugPanel.error {
-  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
-  background: var(--destructive-soft);
-}
-
-.historyDebugHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.historyDebugHeader strong {
-  color: var(--foreground);
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.historyDebugHeader span,
-.historyDebugPanel span {
-  color: var(--muted-foreground);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.historyDebugPanel code {
-  display: block;
-  overflow-x: auto;
-  border-radius: calc(var(--radius) - 2px);
-  background: color-mix(in srgb, var(--background) 82%, var(--card));
-  padding: 9px;
-  white-space: pre;
-}
-
 .metric {
   min-height: 70px;
   border: 1px solid var(--border);

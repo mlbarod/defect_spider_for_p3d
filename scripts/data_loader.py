@@ -357,16 +357,50 @@ def ClickedCategoryUpLoad(history_data, db_info, ip_info):
 
 
 def command_click_history(args):
-    db_info = load_db_info()
     ip_addr = get_remote_ip()
-    ip_info = load_ip_info(ip_addr, db_info)
-    if ip_info.empty:
-        raise RuntimeError(f"승인된 접속자 정보를 찾지 못했습니다: {ip_addr}")
-    knox_id = first_ip_info_value(ip_info, "knox_id")
-    history_data = (args.line_name, normalize_history_select_step(args.select_step), datetime.now(), knox_id)
+    select_step = normalize_history_select_step(args.select_step)
     diagnostics = {
         "version": LOADER_VERSION,
         "remoteIp": ip_addr,
+        "ipInHistoryData": False,
+    }
+
+    try:
+        db_info = load_db_info()
+    except Exception as exc:
+        write_json(
+            {
+                "ok": False,
+                "error": str(exc),
+                "diagnostics": diagnostics,
+            }
+        )
+        return
+
+    ip_info = load_ip_info(ip_addr, db_info)
+    if ip_info.empty:
+        write_json(
+            {
+                "ok": False,
+                "error": f"승인된 접속자 정보를 찾지 못했습니다: {ip_addr}",
+                "diagnostics": {**diagnostics, "ipInfoRows": 0, "knoxIdFound": False},
+            }
+        )
+        return
+    knox_id = first_ip_info_value(ip_info, "knox_id")
+    if not knox_id:
+        write_json(
+            {
+                "ok": False,
+                "error": f"접속자 knox_id를 찾지 못했습니다: {ip_addr}",
+                "diagnostics": {**diagnostics, "ipInfoRows": len(ip_info), "knoxIdFound": False},
+            }
+        )
+        return
+
+    history_data = (args.line_name, select_step, datetime.now(), knox_id)
+    diagnostics = {
+        **diagnostics,
         "ipInfoRows": len(ip_info),
         "knoxIdFound": bool(knox_id),
     }
