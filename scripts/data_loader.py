@@ -399,26 +399,125 @@ def first_ip_info_value(ip_info, column, default=""):
         return default
 
 
-def insert_clicked_category_history(conn, values):
-    placeholders = ", ".join(["%s"] * len(values))
-    sql = f"""
-        INSERT INTO `clicked_category_history`
-        VALUES ({placeholders})
-    """
+def quote_db_identifier(value):
+    return f"`{str(value).replace('`', '``')}`"
+
+
+def normalize_db_column(value):
+    return "".join(char for char in str(value or "").lower() if char.isalnum())
+
+
+def clicked_history_columns(conn):
     cursor = conn.cursor()
     try:
-        cursor.execute(sql, values)
-        conn.commit()
+        cursor.execute("SHOW COLUMNS FROM `clicked_category_history`")
+        return [
+            {
+                "field": row[0],
+                "type": row[1],
+                "null": row[2],
+                "key": row[3],
+                "default": row[4],
+                "extra": row[5],
+            }
+            for row in cursor.fetchall()
+        ]
     finally:
         cursor.close()
 
 
-def ClickedCategoryUpLoad(history_data, db_info, ip_info):
-    import pymysql
-
+def clicked_history_value_map(history_data, ip_info):
+    line_name, select_step, update_date, knox_id = history_data
+    ip_addr = first_ip_info_value(ip_info, "ip")
     sdwt = first_ip_info_value(ip_info, "sdwt")
     available = first_ip_info_value(ip_info, "available")
-    expanded_history_data = (*history_data, sdwt, available)
+
+    return {
+        "linename": line_name,
+        "line": line_name,
+        "selectline": line_name,
+        "category": line_name,
+        "selectstep": select_step,
+        "step": select_step,
+        "stepseq": select_step,
+        "updatedate": update_date,
+        "updatedt": update_date,
+        "datetime": update_date,
+        "date": update_date,
+        "createdat": update_date,
+        "createddate": update_date,
+        "createtime": update_date,
+        "regdate": update_date,
+        "insertdate": update_date,
+        "timestamp": update_date,
+        "knoxid": knox_id,
+        "userid": knox_id,
+        "subuserid": knox_id,
+        "updateuser": knox_id,
+        "createuser": knox_id,
+        "reguser": knox_id,
+        "ip": ip_addr,
+        "ipaddr": ip_addr,
+        "ipaddress": ip_addr,
+        "sdwt": sdwt,
+        "available": available,
+    }
+
+
+def insert_clicked_category_history(conn, history_data, ip_info):
+    columns = clicked_history_columns(conn)
+    value_map = clicked_history_value_map(history_data, ip_info)
+    insert_columns = []
+    insert_values = []
+    missing_required_columns = []
+
+    for column in columns:
+        field = column["field"]
+        normalized = normalize_db_column(field)
+        if normalized in value_map:
+            insert_columns.append(field)
+            insert_values.append(value_map[normalized])
+            continue
+
+        extra = str(column.get("extra") or "").lower()
+        has_default = column.get("default") is not None
+        allows_null = str(column.get("null") or "").upper() == "YES"
+        if "auto_increment" not in extra and not has_default and not allows_null:
+            missing_required_columns.append(field)
+
+    if missing_required_columns:
+        raise RuntimeError(
+            "clicked_category_history 필수 컬럼 값을 만들 수 없습니다: "
+            + ", ".join(missing_required_columns)
+        )
+
+    if not insert_columns:
+        raise RuntimeError("clicked_category_history에 매핑 가능한 컬럼이 없습니다.")
+
+    if "update_date" in [column["field"] for column in columns] and "update_date" not in insert_columns:
+        raise RuntimeError("clicked_category_history.update_date 컬럼에 매핑할 update_date 값을 찾지 못했습니다.")
+
+    placeholders = ", ".join(["%s"] * len(insert_values))
+    column_sql = ", ".join(quote_db_identifier(column) for column in insert_columns)
+    sql = f"""
+        INSERT INTO `clicked_category_history` ({column_sql})
+        VALUES ({placeholders})
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql, insert_values)
+        conn.commit()
+    finally:
+        cursor.close()
+
+    return {
+        "insertedValueCount": len(insert_values),
+        "insertedColumns": insert_columns,
+    }
+
+
+def ClickedCategoryUpLoad(history_data, db_info, ip_info):
+    import pymysql
 
     with pymysql.connect(
         host=db_info["DB_HOST"],
@@ -428,33 +527,7 @@ def ClickedCategoryUpLoad(history_data, db_info, ip_info):
         charset="utf8",
         port=db_info["DB_PORT"],
     ) as conn:
-        column_count = None
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SHOW COLUMNS FROM `clicked_category_history`")
-            column_count = len(cursor.fetchall())
-            cursor.close()
-        except Exception:
-            column_count = None
-
-        if column_count == len(expanded_history_data):
-            insert_clicked_category_history(conn, expanded_history_data)
-            return {"insertedValueCount": len(expanded_history_data)}
-
-        if column_count == len(history_data):
-            insert_clicked_category_history(conn, history_data)
-            return {"insertedValueCount": len(history_data)}
-
-        try:
-            insert_clicked_category_history(conn, history_data)
-            return {"insertedValueCount": len(history_data)}
-        except Exception as first_error:
-            conn.rollback()
-            insert_clicked_category_history(conn, expanded_history_data)
-            return {
-                "insertedValueCount": len(expanded_history_data),
-                "fallbackReason": str(first_error),
-            }
+        return insert_clicked_category_history(conn, history_data, ip_info)
 
 
 def command_click_history(args):
