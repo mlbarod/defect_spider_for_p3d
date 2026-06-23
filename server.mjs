@@ -117,13 +117,6 @@ function handleApi(req, res, url) {
     return true;
   }
 
-  if (apiPath === '/db-debug') {
-    runLoader(['db-debug'], res, {
-      remoteIp: getRemoteIp(req),
-    });
-    return true;
-  }
-
   if (apiPath === '/click-history') {
     const lineName = url.searchParams.get('lineName');
     const selectStep = url.searchParams.get('selectStep');
