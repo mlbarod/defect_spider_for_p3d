@@ -499,7 +499,8 @@ def command_click_history(args):
         )
         return
 
-    history_data = (args.line_name, select_step, datetime.now(), knox_id)
+    history_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    history_data = (args.line_name, select_step, history_time, knox_id)
     diagnostics = {
         **diagnostics,
         "ipInfoRows": len(ip_info),
