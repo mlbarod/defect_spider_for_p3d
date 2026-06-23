@@ -32,6 +32,17 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function normalizeApiPath(pathname) {
+  if (pathname === '/api') return '/';
+  if (!pathname.startsWith('/api/')) return null;
+
+  let apiPath = pathname.slice(4) || '/';
+  while (apiPath.startsWith('/api/')) {
+    apiPath = apiPath.slice(4) || '/';
+  }
+  return apiPath.length > 1 ? apiPath.replace(/\/+$/, '') : apiPath;
+}
+
 function runLoader(args, res) {
   const child = spawn('python3', ['-B', loaderPath, ...args], {
     cwd: rootDir,
@@ -67,22 +78,28 @@ function runLoader(args, res) {
 }
 
 function handleApi(req, res, url) {
-  if (url.pathname === '/api/summary') {
+  const apiPath = normalizeApiPath(url.pathname);
+
+  if (!apiPath) {
+    return false;
+  }
+
+  if (apiPath === '/summary') {
     runLoader(['summary'], res);
     return true;
   }
 
-  if (url.pathname === '/api/fcc-summary') {
+  if (apiPath === '/fcc-summary') {
     runLoader(['fcc-summary'], res);
     return true;
   }
 
-  if (url.pathname === '/api/chamber-lines') {
+  if (apiPath === '/chamber-lines') {
     runLoader(['chamber-lines'], res);
     return true;
   }
 
-  if (url.pathname === '/api/chart') {
+  if (apiPath === '/chart') {
     const mainStep = url.searchParams.get('mainStep');
     const chartMetStep = url.searchParams.get('chartMetStep');
     const eqpId = url.searchParams.get('eqpId');
@@ -96,7 +113,7 @@ function handleApi(req, res, url) {
     return true;
   }
 
-  if (url.pathname === '/api/fcc-chart') {
+  if (apiPath === '/fcc-chart') {
     const mainStep = url.searchParams.get('mainStep');
     const chartMetStep = url.searchParams.get('chartMetStep');
     const eqpId = url.searchParams.get('eqpId');
@@ -111,12 +128,8 @@ function handleApi(req, res, url) {
     return true;
   }
 
-  if (url.pathname.startsWith('/api/')) {
-    sendJson(res, 404, { ok: false, error: `알 수 없는 API 경로입니다: ${url.pathname}` });
-    return true;
-  }
-
-  return false;
+  sendJson(res, 404, { ok: false, error: `알 수 없는 API 경로입니다: ${url.pathname}`, apiPath });
+  return true;
 }
 
 async function serveStatic(req, res, url) {
