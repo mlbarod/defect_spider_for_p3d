@@ -84,6 +84,32 @@ button {
   font: inherit;
 }
 
+.authScreen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.authPanel {
+  display: grid;
+  gap: 8px;
+  width: min(420px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 24px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.authPanel p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .app {
   min-height: 100vh;
   padding: 18px;

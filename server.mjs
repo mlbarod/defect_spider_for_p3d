@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import { handleAuthApi, readAuthSession, shouldRequireAuth } from './auth.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const distDir = join(rootDir, 'dist');
@@ -82,6 +83,15 @@ function handleApi(req, res, url) {
 
   if (!apiPath) {
     return false;
+  }
+
+  if (handleAuthApi(req, res, url)) {
+    return true;
+  }
+
+  if (shouldRequireAuth() && !readAuthSession(req)) {
+    sendJson(res, 401, { ok: false, error: '로그인이 필요합니다.' });
+    return true;
   }
 
   if (apiPath === '/summary') {
