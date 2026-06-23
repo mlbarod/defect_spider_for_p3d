@@ -1736,12 +1736,10 @@ function HomeIcon({ type }) {
 function SpiderHomeMark() {
   return (
     <div className="spiderHomeMark">
-      <svg aria-hidden="true" viewBox="0 0 120 120">
-        <circle cx="60" cy="62" r="18" strokeWidth="6" />
-        <circle cx="60" cy="36" r="10" strokeWidth="6" />
-        <path d="M44 54 22 38M43 64 18 64M45 74 24 91M76 54 98 38M77 64 102 64M75 74 96 91" strokeWidth="6" />
-        <path d="M51 31 40 18M69 31 80 18M50 78 40 104M70 78 80 104" strokeWidth="5" />
-      </svg>
+      <img
+        src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3Kz2J3hZTWRESlhfC6h0Zk6WEbolVV2Cy9JLQb2-mK8oA14Qey80G_rfT9CklBMCVWjA&usqp=CAU"
+        alt="L1 SPIDER"
+      />
     </div>
   );
 }
