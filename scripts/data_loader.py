@@ -4,6 +4,7 @@ import ast
 import json
 import math
 import os
+import pickle
 import sys
 from datetime import date, datetime
 
@@ -227,6 +228,151 @@ def resolved_paths_for_command(command, line_mapping_path=None):
             "lineMappingPath": os.path.abspath(line_mapping_path or LINE_MAPPING_PATH),
         }
     return {}
+
+
+def get_remote_ip():
+    ip_addr = str(os.environ.get("REMOTE_ADDR") or "").strip()
+    if ip_addr.startswith("::ffff:"):
+        return ip_addr[7:]
+    return ip_addr
+
+
+def load_db_info():
+    with open("db_info.pkl", "rb") as file:
+        db_info = pickle.load(file)
+
+    return {
+        "DB_HOST": db_info["DB_HOST"],
+        "DB_PORT": int(db_info["DB_PORT"]),
+        "DB_NAME": db_info["DB_NAME"],
+        "DB_USER": db_info["DB_USER"],
+        "DB_PASSWORD": db_info["DB_PASSWORD"],
+        "HDFS_HOST": db_info["HDFS_HOST"],
+        "HDFS_NAME": db_info["HDFS_NAME"],
+        "HDFS_PASSWORD": db_info["HDFS_PASSWORD"],
+    }
+
+
+def load_ip_info(ip_addr, db_info):
+    import pandas as pd
+    import pymysql
+
+    with pymysql.connect(
+        host=db_info["DB_HOST"],
+        user=db_info["DB_USER"],
+        password=db_info["DB_PASSWORD"],
+        db=db_info["DB_NAME"],
+        charset="utf8",
+        port=db_info["DB_PORT"],
+    ) as conn:
+        cursor = conn.cursor()
+        qry = """
+            WITH A AS (
+                SELECT IP_ADDR, SUB_USER_ID, USER_NAME
+                FROM v_ipms_ip_info
+                WHERE IP_ADDR = %s and STATUS = '승인'
+            )
+            SELECT ip, knox_id, sdwt, available
+            FROM user_info
+            JOIN A ON knox_id = SUB_USER_ID
+        """
+        cursor.execute(qry, (ip_addr,))
+        ip_info = pd.DataFrame(cursor.fetchall(), columns=["ip", "knox_id", "sdwt", "available"])
+        cursor.close()
+    return ip_info
+
+
+def first_ip_info_value(ip_info, column, default=""):
+    try:
+        if ip_info.empty or column not in ip_info.columns:
+            return default
+        values = ip_info[column].values
+        if len(values) == 0:
+            return default
+        return "" if is_missing_value(values[0]) else values[0]
+    except Exception:
+        return default
+
+
+def insert_clicked_category_history(conn, values):
+    placeholders = ", ".join(["%s"] * len(values))
+    sql = f"""
+        INSERT INTO `clicked_category_history`
+        VALUES ({placeholders})
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql, values)
+        conn.commit()
+    finally:
+        cursor.close()
+
+
+def ClickedCategoryUpLoad(history_data, db_info, ip_info):
+    import pymysql
+
+    sdwt = first_ip_info_value(ip_info, "sdwt")
+    available = first_ip_info_value(ip_info, "available")
+    expanded_history_data = (*history_data, sdwt, available)
+
+    with pymysql.connect(
+        host=db_info["DB_HOST"],
+        user=db_info["DB_USER"],
+        password=db_info["DB_PASSWORD"],
+        db=db_info["DB_NAME"],
+        charset="utf8",
+        port=db_info["DB_PORT"],
+    ) as conn:
+        column_count = None
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SHOW COLUMNS FROM `clicked_category_history`")
+            column_count = len(cursor.fetchall())
+            cursor.close()
+        except Exception:
+            column_count = None
+
+        if column_count == len(expanded_history_data):
+            insert_clicked_category_history(conn, expanded_history_data)
+            return {"insertedValueCount": len(expanded_history_data)}
+
+        if column_count == len(history_data):
+            insert_clicked_category_history(conn, history_data)
+            return {"insertedValueCount": len(history_data)}
+
+        try:
+            insert_clicked_category_history(conn, history_data)
+            return {"insertedValueCount": len(history_data)}
+        except Exception as first_error:
+            conn.rollback()
+            insert_clicked_category_history(conn, expanded_history_data)
+            return {
+                "insertedValueCount": len(expanded_history_data),
+                "fallbackReason": str(first_error),
+            }
+
+
+def command_click_history(args):
+    db_info = load_db_info()
+    ip_addr = get_remote_ip()
+    ip_info = load_ip_info(ip_addr, db_info)
+    if ip_info.empty:
+        raise RuntimeError(f"승인된 접속자 정보를 찾지 못했습니다: {ip_addr}")
+    knox_id = first_ip_info_value(ip_info, "knox_id")
+    history_data = (args.line_name, args.select_step, datetime.now(), knox_id)
+    result = ClickedCategoryUpLoad(history_data, db_info, ip_info)
+    write_json(
+        {
+            "ok": True,
+            "diagnostics": {
+                "version": LOADER_VERSION,
+                "remoteIp": ip_addr,
+                "ipInfoRows": len(ip_info),
+                "knoxIdFound": bool(knox_id),
+                **result,
+            },
+        }
+    )
 
 
 def require_file(path):
@@ -1985,6 +2131,9 @@ def main():
     subparsers.add_parser("summary")
     subparsers.add_parser("fcc-summary")
     subparsers.add_parser("chamber-lines")
+    click_history_parser = subparsers.add_parser("click-history")
+    click_history_parser.add_argument("--line-name", required=True)
+    click_history_parser.add_argument("--select-step", required=True)
     chamber_summary_parser = subparsers.add_parser("chamber-summary")
     chamber_summary_parser.add_argument("--line-code", required=True)
     chamber_summary_parser.add_argument("--device", required=True)
@@ -2012,6 +2161,8 @@ def main():
             command_fcc_summary(args)
         elif args.command == "chamber-lines":
             command_chamber_lines(args)
+        elif args.command == "click-history":
+            command_click_history(args)
         elif args.command == "chamber-summary":
             command_chamber_summary(args)
         elif args.command == "chart":
@@ -2023,6 +2174,8 @@ def main():
     except Exception as exc:
         if args.command.startswith("fcc"):
             sources = source_status(FCC_DATA_SOURCES)
+        elif args.command == "click-history":
+            sources = []
         elif args.command in ("chamber-summary", "chamber-chart") and getattr(args, "line_code", None) and getattr(args, "device", None):
             sources = source_status(chamber_data_sources(args.line_code, args.device))
         elif args.command.startswith("chamber"):

@@ -182,6 +182,29 @@ async function fetchJson(url, options) {
   return payload;
 }
 
+const recentClickHistoryUploads = new Map();
+
+function uploadClickHistory(lineName, row) {
+  const normalizedLineName = String(lineName ?? '').trim();
+  const selectStep = String(row?.metStep ?? row?.metStepPath ?? '').trim();
+
+  if (!normalizedLineName || !selectStep) return;
+
+  const historyKey = `${normalizedLineName}::${selectStep}`;
+  const now = Date.now();
+  const lastUploadedAt = recentClickHistoryUploads.get(historyKey) ?? 0;
+  if (now - lastUploadedAt < 1500) return;
+
+  recentClickHistoryUploads.set(historyKey, now);
+  const params = new URLSearchParams({
+    lineName: normalizedLineName,
+    selectStep,
+    t: String(now),
+  });
+
+  fetchJson(`/api/click-history?${params.toString()}`).catch(() => {});
+}
+
 function hideFilePaths(value) {
   return String(value ?? '')
     .replace(/(?:\/[^\s,)\]}]+)+/g, (match) => (match.startsWith('/api') ? match : '[숨김]'))
@@ -1737,7 +1760,7 @@ function SpiderHomeMark() {
   return (
     <div className="spiderHomeMark">
       <img
-        src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3Kz2J3hZTWRESlhfC6h0Zk6WEbolVV2Cy9JLQb2-mK8oA14Qey80G_rfT9CklBMCVWjA&usqp=CAU"
+        src="https://www.sec.gov/Archives/edgar/data/1041130/000119312518045025/g472619logo_06.jpg"
         alt="L1 SPIDER"
       />
     </div>
@@ -1951,6 +1974,11 @@ function ConstructionView({ onBack }) {
   useEffect(() => {
     setChamberLatestDate('');
   }, [selectedChamberMetStep?.key, selectedDevice?.key]);
+
+  useEffect(() => {
+    if (!selectedLine?.lineName || !selectedChamberMetStep || selectedChamberEqpIds.length === 0) return;
+    uploadClickHistory(selectedLine.lineName, selectedChamberMetStep);
+  }, [selectedLine?.lineName, selectedChamberMetStep?.key, selectedChamberEqpIds.length]);
 
   return (
     <main className="app hasFloatingHomeButton chamberView">
@@ -2176,6 +2204,12 @@ function App() {
   const activeChartEndpoint = activeChartSource === 'fcc' ? '/api/fcc-chart' : '/api/chart';
   const activeChartEyebrow = activeChartSource === 'fcc' ? 'FCC Equipment Charts' : 'Equipment Charts';
   const selectedEqpIds = activeChartSource === 'fcc' ? (activeSelectedRow?.centerEqpIds ?? []) : getPrioritizedEqpIds(activeSelectedRow);
+
+  useEffect(() => {
+    if (!['main', 'fcc'].includes(currentView) || !activeSelectedRow || selectedEqpIds.length === 0) return;
+    uploadClickHistory(CONFIG.lineName, activeSelectedRow);
+  }, [currentView, activeChartSource, activeSelectedRow?.key, selectedEqpIds.length]);
+
   const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
   const fccMetStepCount = fccStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);

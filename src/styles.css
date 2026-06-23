@@ -293,7 +293,7 @@ code {
   width: 148px;
   height: 96px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 8px;
   background: #ffffff;
   padding: 8px;

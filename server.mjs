@@ -43,9 +43,22 @@ function normalizeApiPath(pathname) {
   return apiPath.length > 1 ? apiPath.replace(/\/+$/, '') : apiPath;
 }
 
-function runLoader(args, res) {
+function normalizeRemoteIp(value) {
+  const ip = String(value ?? '').split(',')[0].trim();
+  return ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+}
+
+function getRemoteIp(req) {
+  return normalizeRemoteIp(req.headers['x-forwarded-for'] ?? req.headers['x-real-ip'] ?? req.socket?.remoteAddress ?? '');
+}
+
+function runLoader(args, res, options = {}) {
   const child = spawn('python3', ['-B', loaderPath, ...args], {
     cwd: rootDir,
+    env: {
+      ...process.env,
+      ...(options.remoteIp ? { REMOTE_ADDR: options.remoteIp } : {}),
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -96,6 +109,21 @@ function handleApi(req, res, url) {
 
   if (apiPath === '/chamber-lines') {
     runLoader(['chamber-lines'], res);
+    return true;
+  }
+
+  if (apiPath === '/click-history') {
+    const lineName = url.searchParams.get('lineName');
+    const selectStep = url.searchParams.get('selectStep');
+
+    if (!lineName || !selectStep) {
+      sendJson(res, 400, { ok: false, error: 'lineName, selectStep이 필요합니다.' });
+      return true;
+    }
+
+    runLoader(['click-history', '--line-name', lineName, '--select-step', selectStep], res, {
+      remoteIp: getRemoteIp(req),
+    });
     return true;
   }
 
