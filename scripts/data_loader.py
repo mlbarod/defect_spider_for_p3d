@@ -16,23 +16,12 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
-LOADER_VERSION = "file-loader-v27"
+LOADER_VERSION = "file-loader-v28"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
 FCC_STEP_PATH = f"{FCC_FOLDER_PATH}/fcc_step"
 LINE_MAPPING_PATH = os.environ.get("LINE_MAPPING_PATH") or f"{CONFIG['eadsRoot']}/line_mapping.txt"
-LINE_MAPPING_CANDIDATE_PATHS = tuple(
-    dict.fromkeys(
-        [
-            LINE_MAPPING_PATH,
-            f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/line_mapping.txt",
-            f"{FOLDER_PATH}/line_mapping.txt",
-            f"{FCC_FOLDER_PATH}/line_mapping.txt",
-            f"{FCC_STEP_PATH}/line_mapping.txt",
-        ]
-    )
-)
 COMPACT_TIME_FORMATS = (
     "%Y%m%d%H%M%S",
     "%Y%m%d%H%M",
@@ -98,11 +87,10 @@ FCC_DATA_SOURCES = [
 
 CHAMBER_DATA_SOURCES = [
     {
-        "key": f"line_mapping_{index}",
-        "label": "개별 챔버 이상감지 라인 매핑파일" if index == 0 else f"개별 챔버 이상감지 라인 매핑파일 후보 {index + 1}",
-        "path": path,
+        "key": "line_mapping",
+        "label": "개별 챔버 이상감지 라인 매핑파일",
+        "path": LINE_MAPPING_PATH,
     }
-    for index, path in enumerate(LINE_MAPPING_CANDIDATE_PATHS)
 ]
 
 
@@ -237,7 +225,6 @@ def resolved_paths_for_command(command, line_mapping_path=None):
     if command.startswith("chamber"):
         return {
             "lineMappingPath": os.path.abspath(line_mapping_path or LINE_MAPPING_PATH),
-            "lineMappingCandidates": [os.path.abspath(path) for path in LINE_MAPPING_CANDIDATE_PATHS],
         }
     return {}
 
@@ -247,21 +234,6 @@ def require_file(path):
         raise FileNotFoundError(f"파일이 없습니다: {path}")
     if not os.access(path, os.R_OK):
         raise PermissionError(f"파일을 읽을 권한이 없습니다: {path}")
-
-
-def resolve_line_mapping_path():
-    first_existing = None
-    for path in LINE_MAPPING_CANDIDATE_PATHS:
-        if os.path.isfile(path):
-            if os.access(path, os.R_OK):
-                return path
-            first_existing = first_existing or path
-
-    if first_existing:
-        raise PermissionError(f"파일을 읽을 권한이 없습니다: {first_existing}")
-
-    candidates = ", ".join(os.path.abspath(path) for path in LINE_MAPPING_CANDIDATE_PATHS)
-    raise FileNotFoundError(f"라인 매핑 파일이 없습니다. 확인한 후보: {candidates}")
 
 
 def read_text_file(path):
@@ -400,9 +372,16 @@ def chamber_line_row(line_name, mapping_value):
 
 
 def command_chamber_lines(_args):
-    line_mapping_path = resolve_line_mapping_path()
+    line_mapping_path = LINE_MAPPING_PATH
     line_mapping_content = read_text_file(line_mapping_path)
-    mapping = literal_dict_from_python_text(line_mapping_content, line_mapping_path)
+    mapping = {}
+    warnings = []
+    parse_error = ""
+    try:
+        mapping = literal_dict_from_python_text(line_mapping_content, line_mapping_path)
+    except Exception as exc:
+        parse_error = str(exc)
+        warnings.append(f"line_mapping.txt 본문은 읽었지만 Python dict로 해석하지 않았습니다: {parse_error}")
     rows = [
         chamber_line_row(line_name, mapping_value)
         for line_name, mapping_value in mapping.items()
@@ -417,8 +396,10 @@ def command_chamber_lines(_args):
                 "version": LOADER_VERSION,
                 "resolvedPaths": resolved_paths_for_command("chamber-lines", line_mapping_path),
                 "lineMappingContent": line_mapping_content,
+                "lineMappingParseError": parse_error,
                 "inputRows": {"line_mapping": len(mapping)},
                 "outputRows": len(rows),
+                "warnings": warnings,
             },
         }
     )

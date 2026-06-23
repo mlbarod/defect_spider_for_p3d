@@ -1880,7 +1880,11 @@ function ConstructionView({ onBack }) {
         {!lineState.loading && !lineState.error && lineState.rows.length === 0 && (
           <div className="emptyPanel">
             <strong>라인 없음</strong>
-            <span>line_mapping.txt에서 선택 가능한 라인명을 찾지 못했습니다.</span>
+            <span>
+              {lineMappingContent
+                ? lineState.diagnostics?.lineMappingParseError || 'line_mapping.txt 본문은 읽었지만 선택 가능한 라인명을 찾지 못했습니다.'
+                : 'line_mapping.txt에서 선택 가능한 라인명을 찾지 못했습니다.'}
+            </span>
           </div>
         )}
 
