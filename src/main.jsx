@@ -131,9 +131,7 @@ const EMPTY_CHAMBER_LINES_STATE = {
   sources: CHAMBER_DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
   diagnostics: {
     version: 'browser-init',
-    resolvedPaths: {
-      lineMappingPath: CHAMBER_DATA_SOURCES[0].path,
-    },
+    resolvedPaths: {},
     inputRows: {},
     outputRows: 0,
   },
@@ -1657,7 +1655,7 @@ function EmptyChartState({ selectedRow }) {
 const HOME_CARDS = [
   {
     key: 'chamber',
-    title: 'P3D 챔버별 이상감지',
+    title: '전라인 챔버별 이상감지',
     subtitle: '챔버 기준 이상감지 화면입니다.',
     category: 'Chamber',
     icon: 'network',
@@ -1824,10 +1822,6 @@ function ConstructionView({ onBack }) {
   const [selectedDeviceKey, setSelectedDeviceKey] = useState('');
   const [selectedChamberMetStep, setSelectedChamberMetStep] = useState(null);
   const [chamberLatestDate, setChamberLatestDate] = useState('');
-  const lineMappingPath =
-    lineState.diagnostics?.resolvedPaths?.lineMappingPath ??
-    lineState.sources?.find((source) => source.exists && source.readable)?.path ??
-    lineState.sources?.[0]?.path;
   const selectedLine = lineState.rows.find((line) => line.lineName === selectedLineName) ?? lineState.rows[0] ?? null;
   const selectedLineDevices = useMemo(() => {
     if (selectedLine?.devices?.length > 0) return selectedLine.devices;
@@ -1837,6 +1831,13 @@ function ConstructionView({ onBack }) {
   const selectedDevice = selectedLineDevices.find((device) => device.key === selectedDeviceKey) ?? selectedLineDevices[0] ?? null;
   const chamberStepGroups = useMemo(() => groupRowsByMainStep(chamberLoadState.rows), [chamberLoadState.rows]);
   const selectedChamberEqpIds = getPrioritizedEqpIds(selectedChamberMetStep);
+  const chamberMetStepCount = chamberStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
+  const chamberEqpCount = chamberLoadState.rows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
+  const chamberMetricCards = [
+    { label: '메인 스탭', value: chamberStepGroups.length.toLocaleString() },
+    { label: '계측 스탭', value: chamberMetStepCount.toLocaleString() },
+    { label: '감지 댓수', value: chamberEqpCount.toLocaleString() },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -1976,8 +1977,7 @@ function ConstructionView({ onBack }) {
         {!lineState.loading && lineState.error && (
           <div className="emptyPanel">
             <strong>라인 매핑 파일 읽기 실패</strong>
-            <span>{lineState.error}</span>
-            <code>{lineMappingPath}</code>
+            <span>{hideFilePaths(lineState.error)}</span>
           </div>
         )}
 
@@ -1987,8 +1987,6 @@ function ConstructionView({ onBack }) {
             <span>{lineState.diagnostics?.warnings?.[0] || 'line_mapping.txt에서 선택 가능한 line 값을 찾지 못했습니다.'}</span>
           </div>
         )}
-
-        {!lineState.loading && <SourceReferenceList apiPath={lineState.apiPath} sources={lineState.sources} />}
 
         {!lineState.loading && !lineState.error && lineState.rows.length > 0 && (
           <>
@@ -2015,25 +2013,8 @@ function ConstructionView({ onBack }) {
                     onClick={() => setSelectedDeviceKey(device.key)}
                   >
                     <strong>{device.device}</strong>
-                    <span>{device.lineCode}</span>
                   </button>
                 ))}
-              </div>
-            )}
-
-            {selectedLine && selectedDevice && (
-              <div className="chamberLineDetailPanel">
-                <strong>{selectedLine.lineName}</strong>
-                <div className="chamberLineDetailGrid">
-                  <div>
-                    <span>line_code</span>
-                    <code>{selectedDevice.lineCode || '-'}</code>
-                  </div>
-                  <div>
-                    <span>device</span>
-                    <code>{selectedDevice.device || '-'}</code>
-                  </div>
-                </div>
               </div>
             )}
           </>
@@ -2049,6 +2030,12 @@ function ConstructionView({ onBack }) {
             diagnostics={chamberLoadState.diagnostics}
             latestDate={chamberLatestDate}
           />
+
+          <div className="topMetrics threeColumns">
+            {chamberMetricCards.map((metric) => (
+              <Metric key={metric.label} label={metric.label} value={metric.value} />
+            ))}
+          </div>
 
           <section className="workspace chamberWorkspace">
             <div className="leftRail">
