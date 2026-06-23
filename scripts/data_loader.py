@@ -516,6 +516,24 @@ def insert_clicked_category_history(conn, history_data, ip_info):
     }
 
 
+def insert_clicked_history_defect(conn, history_data):
+    sql = """
+        INSERT INTO `clicked_history_defect`
+        VALUES (%s, %s, %s, %s)
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql, history_data)
+        conn.commit()
+    finally:
+        cursor.close()
+
+    return {
+        "insertedValueCount": len(history_data),
+        "insertedTable": "clicked_history_defect",
+    }
+
+
 def ClickedCategoryUpLoad(history_data, db_info, ip_info):
     import pymysql
 
@@ -527,7 +545,14 @@ def ClickedCategoryUpLoad(history_data, db_info, ip_info):
         charset="utf8",
         port=db_info["DB_PORT"],
     ) as conn:
-        return insert_clicked_category_history(conn, history_data, ip_info)
+        category_result = insert_clicked_category_history(conn, history_data, ip_info)
+        defect_result = insert_clicked_history_defect(conn, history_data)
+
+    return {
+        "insertedValueCount": defect_result["insertedValueCount"],
+        "categoryHistory": category_result,
+        "defectHistory": defect_result,
+    }
 
 
 def command_click_history(args):
