@@ -1955,11 +1955,11 @@ function ConstructionView({ onBack }) {
   }, [selectedChamberMetStep?.key, selectedDevice?.key]);
 
   return (
-    <main className="app hasFloatingHomeButton">
+    <main className="app hasFloatingHomeButton chamberView">
       <button className="homeBackButton" type="button" onClick={onBack}>
         메인 메뉴
       </button>
-      <header className="topBar">
+      <header className="topBar chamberTopBar">
         <div>
           <h1>Defect SPIDER</h1>
         </div>

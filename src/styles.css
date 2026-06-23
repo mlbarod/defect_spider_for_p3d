@@ -109,6 +109,30 @@ button {
   padding-right: 122px;
 }
 
+.chamberView {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.chamberView .topBar,
+.chamberView .sourceBanner,
+.chamberView .constructionPanel,
+.chamberView .topMetrics,
+.chamberView .workspace {
+  margin: 0 auto;
+}
+
+.chamberTopBar {
+  align-items: center;
+}
+
+.chamberTopBar > div {
+  display: flex;
+  align-items: center;
+  min-height: 100%;
+}
+
 .topBarActions {
   display: flex;
   flex: 1 1 auto;
@@ -621,6 +645,10 @@ code {
 
 .chamberWorkspace {
   margin-top: 14px;
+}
+
+.chamberView .chamberWorkspace {
+  margin-top: 0;
 }
 
 .constructionPanel p {
