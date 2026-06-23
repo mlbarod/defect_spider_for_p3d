@@ -1961,10 +1961,20 @@ function ConstructionView({ onBack }) {
       </button>
       <header className="topBar">
         <div>
-          <p className="eyebrow">P3D Defect Spider</p>
           <h1>Defect SPIDER</h1>
         </div>
       </header>
+
+      {selectedDevice && (
+        <SourceStatusBanner
+          loading={chamberLoadState.loading}
+          error={chamberLoadState.error}
+          sources={chamberLoadState.sources}
+          diagnostics={chamberLoadState.diagnostics}
+          latestDate={chamberLatestDate}
+        />
+      )}
+
       <section className="constructionPanel chamberLinePanel">
         <div className="chamberLineHeading">
           <div>
@@ -2033,14 +2043,6 @@ function ConstructionView({ onBack }) {
 
       {selectedDevice && (
         <>
-          <SourceStatusBanner
-            loading={chamberLoadState.loading}
-            error={chamberLoadState.error}
-            sources={chamberLoadState.sources}
-            diagnostics={chamberLoadState.diagnostics}
-            latestDate={chamberLatestDate}
-          />
-
           <div className="topMetrics threeColumns">
             {chamberMetricCards.map((metric) => (
               <Metric key={metric.label} label={metric.label} value={metric.value} />
