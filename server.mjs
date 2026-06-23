@@ -112,6 +112,11 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (apiPath === '/client-ip') {
+    sendJson(res, 200, { ok: true, ip: getRemoteIp(req) });
+    return true;
+  }
+
   if (apiPath === '/click-history') {
     const lineName = url.searchParams.get('lineName');
     const selectStep = url.searchParams.get('selectStep');

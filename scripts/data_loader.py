@@ -237,6 +237,10 @@ def get_remote_ip():
     return ip_addr
 
 
+def normalize_history_select_step(value):
+    return str(value or "").strip().split("_", 1)[0].strip()
+
+
 def load_db_info():
     with open("db_info.pkl", "rb") as file:
         db_info = pickle.load(file)
@@ -359,7 +363,7 @@ def command_click_history(args):
     if ip_info.empty:
         raise RuntimeError(f"승인된 접속자 정보를 찾지 못했습니다: {ip_addr}")
     knox_id = first_ip_info_value(ip_info, "knox_id")
-    history_data = (args.line_name, args.select_step, datetime.now(), knox_id)
+    history_data = (args.line_name, normalize_history_select_step(args.select_step), datetime.now(), knox_id)
     diagnostics = {
         "version": LOADER_VERSION,
         "remoteIp": ip_addr,

@@ -182,14 +182,30 @@ async function fetchJson(url, options) {
   return payload;
 }
 
-function uploadClickHistory(lineName, row, onDebug) {
+function getHistorySelectStep(row) {
+  return String(row?.metStep ?? row?.metStepPath ?? '').trim().split('_')[0].trim();
+}
+
+async function resolveClientIp(clientIp) {
+  if (clientIp) return clientIp;
+
+  try {
+    const payload = await fetchJson(`/api/client-ip?t=${Date.now()}`);
+    return payload.ip ?? '';
+  } catch {
+    return '';
+  }
+}
+
+async function uploadClickHistory(lineName, row, clientIp, onDebug) {
   const normalizedLineName = String(lineName ?? '').trim();
-  const selectStep = String(row?.metStep ?? row?.metStepPath ?? '').trim();
+  const selectStep = getHistorySelectStep(row);
 
   if (!normalizedLineName || !selectStep) return;
 
   const now = Date.now();
-  const historyDataPreview = [normalizedLineName, selectStep, new Date(now).toISOString(), '서버 knox_id 조회 전'];
+  const resolvedClientIp = await resolveClientIp(clientIp);
+  const historyDataPreview = [normalizedLineName, selectStep, new Date(now).toISOString(), resolvedClientIp || 'IP 조회 실패'];
   const pendingDebug = {
     status: 'requesting',
     lineName: normalizedLineName,
@@ -1865,7 +1881,7 @@ function HomePage({ onSelect }) {
   );
 }
 
-function ConstructionView({ onBack }) {
+function ConstructionView({ onBack, clientIp }) {
   const [lineState, setLineState] = useState(EMPTY_CHAMBER_LINES_STATE);
   const [chamberLoadState, setChamberLoadState] = useState(EMPTY_CHAMBER_LOAD_STATE);
   const [selectedLineName, setSelectedLineName] = useState('');
@@ -2108,7 +2124,7 @@ function ConstructionView({ onBack }) {
                 selectedMetStepKey={selectedChamberMetStep?.key}
                 onSelectMetStep={(row) => {
                   setSelectedChamberMetStep(row);
-                  uploadClickHistory(selectedLine?.lineName, row, setHistoryDebug);
+                  uploadClickHistory(selectedLine?.lineName, row, clientIp, setHistoryDebug);
                 }}
                 loading={chamberLoadState.loading}
                 error={chamberLoadState.error}
@@ -2161,6 +2177,17 @@ function App() {
   const [currentView, setCurrentView] = useState('home');
   const [chartLatestDate, setChartLatestDate] = useState('');
   const [historyDebug, setHistoryDebug] = useState(null);
+  const [clientIp, setClientIp] = useState('');
+
+  useEffect(() => {
+    fetchJson(`/api/client-ip?t=${Date.now()}`)
+      .then((payload) => {
+        setClientIp(payload.ip ?? '');
+      })
+      .catch(() => {
+        setClientIp('');
+      });
+  }, []);
 
   useEffect(() => {
     fetchJson(`/api/summary?t=${Date.now()}`)
@@ -2278,7 +2305,7 @@ function App() {
   }
 
   if (currentView === 'chamber') {
-    return <ConstructionView onBack={handleBackHome} />;
+    return <ConstructionView onBack={handleBackHome} clientIp={clientIp} />;
   }
 
   return (
@@ -2327,7 +2354,7 @@ function App() {
                 setSelectedMetStep(row);
                 setActiveChartSource('main');
                 setCurrentView('main');
-                uploadClickHistory(CONFIG.lineName, row, setHistoryDebug);
+                uploadClickHistory(CONFIG.lineName, row, clientIp, setHistoryDebug);
               }}
               loading={loadState.loading}
               error={loadState.error}
@@ -2341,7 +2368,7 @@ function App() {
                 setSelectedAdditionalMetStep(row);
                 setActiveChartSource('fcc');
                 setCurrentView('fcc');
-                uploadClickHistory(CONFIG.lineName, row, setHistoryDebug);
+                uploadClickHistory(CONFIG.lineName, row, clientIp, setHistoryDebug);
               }}
               loading={fccLoadState.loading}
               error={fccLoadState.error}

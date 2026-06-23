@@ -93,6 +93,11 @@ function installApiHandlers(middlewares) {
       return;
     }
 
+    if (apiPath === '/client-ip') {
+      sendJson(res, 200, { ok: true, ip: getRemoteIp(req) });
+      return;
+    }
+
     if (apiPath === '/click-history') {
       const lineName = url.searchParams.get('lineName');
       const selectStep = url.searchParams.get('selectStep');
