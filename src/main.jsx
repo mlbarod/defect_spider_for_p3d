@@ -152,6 +152,24 @@ const EMPTY_CHAMBER_LOAD_STATE = {
   },
 };
 
+const EMPTY_DB_DEBUG_STATE = {
+  health: {
+    loading: true,
+    checkedAt: '',
+    error: '',
+    payload: null,
+  },
+  click: {
+    status: 'idle',
+    updatedAt: '',
+    requestUrl: '',
+    lineName: '',
+    selectStep: '',
+    error: '',
+    payload: null,
+  },
+};
+
 async function fetchJson(url, options) {
   const response = await fetch(url, {
     ...options,
@@ -186,20 +204,31 @@ function getHistorySelectStep(row) {
   return String(row?.metStep ?? row?.metStepPath ?? '').trim().split('_')[0].trim();
 }
 
-async function uploadClickHistory(lineName, row) {
+function nowText() {
+  return new Date().toLocaleString('ko-KR', { hour12: false });
+}
+
+function getClickHistoryRequest(lineName, row) {
   const normalizedLineName = String(lineName ?? '').trim();
   const selectStep = getHistorySelectStep(row);
 
-  if (!normalizedLineName || !selectStep) return;
+  if (!normalizedLineName || !selectStep) return null;
 
-  const now = Date.now();
   const params = new URLSearchParams({
     lineName: normalizedLineName,
     selectStep,
-    t: String(now),
+    t: String(Date.now()),
   });
 
-  fetchJson(`/api/click-history?${params.toString()}`).catch(() => {});
+  return {
+    lineName: normalizedLineName,
+    selectStep,
+    url: `/api/click-history?${params.toString()}`,
+  };
+}
+
+async function uploadClickHistory(request) {
+  return fetchJson(request.url);
 }
 
 function hideFilePaths(value) {
@@ -373,6 +402,89 @@ function SourceStatusBanner({ loading, error, sources, diagnostics, latestDate }
         )}
         {warningCount > 0 && <span>경고 {warningCount}개: {diagnostics.warnings.slice(0, 2).map(hideFilePaths).join(' / ')}</span>}
       </div>
+    </section>
+  );
+}
+
+function DbDebugPanel({ state, onRefresh }) {
+  const healthPayload = state.health.payload;
+  const healthDiagnostics = healthPayload?.diagnostics ?? {};
+  const clickPayload = state.click.payload;
+  const hasError = Boolean(state.health.error || state.click.error || healthPayload?.ok === false || clickPayload?.ok === false);
+  const healthStatus = state.health.loading ? '확인 중' : healthPayload?.ok === true ? '정상' : '실패';
+  const clickStatus = {
+    idle: '대기',
+    loading: '저장 중',
+    success: '성공',
+    error: '실패',
+    skipped: '건너뜀',
+  }[state.click.status] ?? state.click.status;
+  const dbInfo = healthPayload?.dbInfo;
+  const debugPayload = {
+    dbHealth: healthPayload,
+    lastClickHistory: clickPayload,
+  };
+
+  return (
+    <section className={`dbDebugPanel ${hasError ? 'error' : ''}`}>
+      <div className="dbDebugHeader">
+        <div>
+          <p className="eyebrow">DB Debug</p>
+          <h2>클릭 히스토리 DB 상태</h2>
+        </div>
+        <button className="dbDebugRefresh" type="button" onClick={onRefresh} disabled={state.health.loading}>
+          새로고침
+        </button>
+      </div>
+
+      <div className="dbDebugGrid">
+        <div>
+          <span>헬스체크</span>
+          <strong>{healthStatus}</strong>
+        </div>
+        <div>
+          <span>REMOTE_ADDR</span>
+          <strong>{healthDiagnostics.remoteIp || '-'}</strong>
+        </div>
+        <div>
+          <span>db_info.pkl</span>
+          <strong>{healthDiagnostics.dbInfoExists ? '있음' : '없음'}</strong>
+        </div>
+        <div>
+          <span>접속자 조회</span>
+          <strong>{healthDiagnostics.knoxIdFound ? 'knox 확인' : `${Number(healthDiagnostics.ipInfoRows || 0).toLocaleString()}건`}</strong>
+        </div>
+        <div>
+          <span>마지막 저장</span>
+          <strong>{clickStatus}</strong>
+        </div>
+      </div>
+
+      {(state.health.error || healthPayload?.error || state.click.error || clickPayload?.error) && (
+        <div className="dbDebugError">
+          {hideFilePaths(state.health.error || healthPayload?.error || state.click.error || clickPayload?.error)}
+        </div>
+      )}
+
+      <div className="dbDebugDetails">
+        <div>
+          <strong>DB</strong>
+          <code>{dbInfo ? `${dbInfo.DB_USER}@${dbInfo.DB_HOST}:${dbInfo.DB_PORT}/${dbInfo.DB_NAME}` : healthDiagnostics.dbInfoPath || '-'}</code>
+        </div>
+        <div>
+          <strong>요청</strong>
+          <code>{state.click.requestUrl || '/api/db-debug'}</code>
+        </div>
+        <div>
+          <strong>선택</strong>
+          <code>{state.click.lineName && state.click.selectStep ? `${state.click.lineName} / ${state.click.selectStep}` : '-'}</code>
+        </div>
+      </div>
+
+      <details className="dbDebugJson" open={hasError}>
+        <summary>진단 JSON</summary>
+        <pre>{JSON.stringify(debugPayload, null, 2)}</pre>
+      </details>
     </section>
   );
 }
@@ -1821,7 +1933,7 @@ function HomePage({ onSelect }) {
   );
 }
 
-function ConstructionView({ onBack }) {
+function ConstructionView({ onBack, dbDebugState, onRefreshDbDebug, onClickHistory }) {
   const [lineState, setLineState] = useState(EMPTY_CHAMBER_LINES_STATE);
   const [chamberLoadState, setChamberLoadState] = useState(EMPTY_CHAMBER_LOAD_STATE);
   const [selectedLineName, setSelectedLineName] = useState('');
@@ -1981,6 +2093,8 @@ function ConstructionView({ onBack }) {
         />
       )}
 
+      <DbDebugPanel state={dbDebugState} onRefresh={onRefreshDbDebug} />
+
       <section className="constructionPanel chamberLinePanel">
         <div className="chamberLineHeading">
           <div>
@@ -2063,7 +2177,7 @@ function ConstructionView({ onBack }) {
                 selectedMetStepKey={selectedChamberMetStep?.key}
                 onSelectMetStep={(row) => {
                   setSelectedChamberMetStep(row);
-                  uploadClickHistory(selectedLine?.lineName, row);
+                  onClickHistory(selectedLine?.lineName, row);
                 }}
                 loading={chamberLoadState.loading}
                 error={chamberLoadState.error}
@@ -2113,6 +2227,111 @@ function App() {
   const [activeChartSource, setActiveChartSource] = useState('main');
   const [currentView, setCurrentView] = useState('home');
   const [chartLatestDate, setChartLatestDate] = useState('');
+  const [dbDebugState, setDbDebugState] = useState(EMPTY_DB_DEBUG_STATE);
+
+  const refreshDbDebug = () => {
+    const checkedAt = nowText();
+    setDbDebugState((current) => ({
+      ...current,
+      health: {
+        ...current.health,
+        loading: true,
+        checkedAt,
+        error: '',
+      },
+    }));
+
+    fetchJson(`/api/db-debug?t=${Date.now()}`)
+      .then((payload) => {
+        setDbDebugState((current) => ({
+          ...current,
+          health: {
+            loading: false,
+            checkedAt: nowText(),
+            error: '',
+            payload,
+          },
+        }));
+      })
+      .catch((error) => {
+        setDbDebugState((current) => ({
+          ...current,
+          health: {
+            loading: false,
+            checkedAt: nowText(),
+            error: error.message,
+            payload: error.payload ?? null,
+          },
+        }));
+      });
+  };
+
+  const handleClickHistory = (lineName, row) => {
+    const request = getClickHistoryRequest(lineName, row);
+
+    if (!request) {
+      setDbDebugState((current) => ({
+        ...current,
+        click: {
+          status: 'skipped',
+          updatedAt: nowText(),
+          requestUrl: '',
+          lineName: String(lineName ?? '').trim(),
+          selectStep: getHistorySelectStep(row),
+          error: 'lineName 또는 selectStep이 없어 클릭 히스토리를 저장하지 않았습니다.',
+          payload: null,
+        },
+      }));
+      return;
+    }
+
+    setDbDebugState((current) => ({
+      ...current,
+      click: {
+        status: 'loading',
+        updatedAt: nowText(),
+        requestUrl: request.url,
+        lineName: request.lineName,
+        selectStep: request.selectStep,
+        error: '',
+        payload: null,
+      },
+    }));
+
+    uploadClickHistory(request)
+      .then((payload) => {
+        setDbDebugState((current) => ({
+          ...current,
+          click: {
+            status: 'success',
+            updatedAt: nowText(),
+            requestUrl: request.url,
+            lineName: request.lineName,
+            selectStep: request.selectStep,
+            error: '',
+            payload,
+          },
+        }));
+      })
+      .catch((error) => {
+        setDbDebugState((current) => ({
+          ...current,
+          click: {
+            status: 'error',
+            updatedAt: nowText(),
+            requestUrl: error.requestUrl ?? request.url,
+            lineName: request.lineName,
+            selectStep: request.selectStep,
+            error: error.message,
+            payload: error.payload ?? null,
+          },
+        }));
+      });
+  };
+
+  useEffect(() => {
+    refreshDbDebug();
+  }, []);
 
   useEffect(() => {
     fetchJson(`/api/summary?t=${Date.now()}`)
@@ -2230,7 +2449,7 @@ function App() {
   }
 
   if (currentView === 'chamber') {
-    return <ConstructionView onBack={handleBackHome} />;
+    return <ConstructionView onBack={handleBackHome} dbDebugState={dbDebugState} onRefreshDbDebug={refreshDbDebug} onClickHistory={handleClickHistory} />;
   }
 
   return (
@@ -2262,6 +2481,8 @@ function App() {
         latestDate={chartLatestDate}
       />
 
+      <DbDebugPanel state={dbDebugState} onRefresh={refreshDbDebug} />
+
       <div className={`topMetrics ${activeChartSource === 'fcc' ? 'threeColumns' : ''}`}>
         {metricCards.map((metric) => (
           <Metric key={metric.label} label={metric.label} value={metric.value} />
@@ -2279,7 +2500,7 @@ function App() {
                 setSelectedMetStep(row);
                 setActiveChartSource('main');
                 setCurrentView('main');
-                uploadClickHistory(CONFIG.lineName, row);
+                handleClickHistory(CONFIG.lineName, row);
               }}
               loading={loadState.loading}
               error={loadState.error}
@@ -2293,7 +2514,7 @@ function App() {
                 setSelectedAdditionalMetStep(row);
                 setActiveChartSource('fcc');
                 setCurrentView('fcc');
-                uploadClickHistory(CONFIG.lineName, row);
+                handleClickHistory(CONFIG.lineName, row);
               }}
               loading={fccLoadState.loading}
               error={fccLoadState.error}

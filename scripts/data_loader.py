@@ -17,6 +17,8 @@ CONFIG = {
     "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
 }
 
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
 LOADER_VERSION = "file-loader-v30"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
@@ -242,7 +244,7 @@ def normalize_history_select_step(value):
 
 
 def load_db_info():
-    with open("db_info.pkl", "rb") as file:
+    with open(DB_INFO_PATH, "rb") as file:
         db_info = pickle.load(file)
 
     return {
@@ -254,6 +256,17 @@ def load_db_info():
         "HDFS_HOST": db_info["HDFS_HOST"],
         "HDFS_NAME": db_info["HDFS_NAME"],
         "HDFS_PASSWORD": db_info["HDFS_PASSWORD"],
+    }
+
+
+def db_info_summary(db_info):
+    return {
+        "DB_HOST": db_info.get("DB_HOST", ""),
+        "DB_PORT": db_info.get("DB_PORT", ""),
+        "DB_NAME": db_info.get("DB_NAME", ""),
+        "DB_USER": db_info.get("DB_USER", ""),
+        "HDFS_HOST": db_info.get("HDFS_HOST", ""),
+        "HDFS_NAME": db_info.get("HDFS_NAME", ""),
     }
 
 
@@ -284,6 +297,94 @@ def load_ip_info(ip_addr, db_info):
         ip_info = pd.DataFrame(cursor.fetchall(), columns=["ip", "knox_id", "sdwt", "available"])
         cursor.close()
     return ip_info
+
+
+def command_db_debug(_args):
+    ip_addr = get_remote_ip()
+    diagnostics = {
+        "version": LOADER_VERSION,
+        "remoteIp": ip_addr,
+        "cwd": os.getcwd(),
+        "dbInfoPath": DB_INFO_PATH,
+        "dbInfoExists": os.path.exists(DB_INFO_PATH),
+        "dbInfoReadable": os.access(DB_INFO_PATH, os.R_OK),
+        "ipInfoRows": 0,
+        "knoxIdFound": False,
+        "warnings": [],
+    }
+
+    try:
+        db_info = load_db_info()
+    except Exception as exc:
+        write_json(
+            {
+                "ok": False,
+                "error": f"DB 설정 파일을 읽지 못했습니다: {exc}",
+                "diagnostics": diagnostics,
+            }
+        )
+        return
+
+    if not ip_addr:
+        diagnostics["warnings"].append("REMOTE_ADDR 값이 없어 접속자 조회는 건너뛰었습니다.")
+        write_json(
+            {
+                "ok": True,
+                "dbInfo": db_info_summary(db_info),
+                "diagnostics": diagnostics,
+            }
+        )
+        return
+
+    try:
+        ip_info = load_ip_info(ip_addr, db_info)
+        knox_id = first_ip_info_value(ip_info, "knox_id")
+    except Exception as exc:
+        write_json(
+            {
+                "ok": False,
+                "error": f"DB 접속 또는 접속자 조회에 실패했습니다: {exc}",
+                "dbInfo": db_info_summary(db_info),
+                "diagnostics": diagnostics,
+            }
+        )
+        return
+
+    diagnostics = {
+        **diagnostics,
+        "ipInfoRows": len(ip_info),
+        "knoxIdFound": bool(knox_id),
+    }
+
+    if ip_info.empty:
+        write_json(
+            {
+                "ok": False,
+                "error": f"승인된 접속자 정보를 찾지 못했습니다: {ip_addr}",
+                "dbInfo": db_info_summary(db_info),
+                "diagnostics": diagnostics,
+            }
+        )
+        return
+
+    if not knox_id:
+        write_json(
+            {
+                "ok": False,
+                "error": f"접속자 knox_id를 찾지 못했습니다: {ip_addr}",
+                "dbInfo": db_info_summary(db_info),
+                "diagnostics": diagnostics,
+            }
+        )
+        return
+
+    write_json(
+        {
+            "ok": True,
+            "dbInfo": db_info_summary(db_info),
+            "diagnostics": diagnostics,
+        }
+    )
 
 
 def first_ip_info_value(ip_info, column, default=""):
@@ -2185,6 +2286,7 @@ def main():
     subparsers.add_parser("summary")
     subparsers.add_parser("fcc-summary")
     subparsers.add_parser("chamber-lines")
+    subparsers.add_parser("db-debug")
     click_history_parser = subparsers.add_parser("click-history")
     click_history_parser.add_argument("--line-name", required=True)
     click_history_parser.add_argument("--select-step", required=True)
@@ -2215,6 +2317,8 @@ def main():
             command_fcc_summary(args)
         elif args.command == "chamber-lines":
             command_chamber_lines(args)
+        elif args.command == "db-debug":
+            command_db_debug(args)
         elif args.command == "click-history":
             command_click_history(args)
         elif args.command == "chamber-summary":
@@ -2228,7 +2332,7 @@ def main():
     except Exception as exc:
         if args.command.startswith("fcc"):
             sources = source_status(FCC_DATA_SOURCES)
-        elif args.command == "click-history":
+        elif args.command in ("click-history", "db-debug"):
             sources = []
         elif args.command in ("chamber-summary", "chamber-chart") and getattr(args, "line_code", None) and getattr(args, "device", None):
             sources = source_status(chamber_data_sources(args.line_code, args.device))
