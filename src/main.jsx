@@ -2108,6 +2108,9 @@ function ConstructionView({ onBack, onClickHistory }) {
           </section>
         </>
       )}
+      <button className="scrollTopButton" type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+        TOP
+      </button>
     </main>
   );
 }
