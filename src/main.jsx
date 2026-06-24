@@ -346,6 +346,10 @@ function groupRowsByMainStep(rows, { prioritizeCenter = false } = {}) {
   });
 }
 
+function getOpenMainSteps(groups) {
+  return new Set(groups.map((group) => group.mainStep).filter(Boolean));
+}
+
 function Metric({ label, value }) {
   return (
     <div className="metric">
@@ -389,8 +393,10 @@ function SourceStatusBanner({ loading, error, sources, diagnostics, latestDate }
 }
 
 function SdwtSelector({ options, selectedSdwt, onSelect, disabled }) {
+  const useGridLayout = options.length > 3;
+
   return (
-    <div className="sdwtButtons" aria-label="SDWT 선택">
+    <div className={`sdwtButtons ${useGridLayout ? 'gridLayout' : ''}`} aria-label="SDWT 선택">
       {options.map((option) => (
         <button
           key={option}
@@ -435,8 +441,7 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
   const [openSteps, setOpenSteps] = useState(() => new Set());
 
   useEffect(() => {
-    if (groups[0]?.mainStep) setOpenSteps(new Set([groups[0].mainStep]));
-    else setOpenSteps(new Set());
+    setOpenSteps(getOpenMainSteps(groups));
   }, [groups]);
 
   const toggleMainStep = (mainStep) => {
@@ -532,8 +537,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
   const [openSteps, setOpenSteps] = useState(() => new Set());
 
   useEffect(() => {
-    if (groups[0]?.mainStep) setOpenSteps(new Set([groups[0].mainStep]));
-    else setOpenSteps(new Set());
+    setOpenSteps(getOpenMainSteps(groups));
   }, [groups]);
 
   const toggleMainStep = (mainStep) => {

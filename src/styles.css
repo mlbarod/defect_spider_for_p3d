@@ -720,10 +720,16 @@ code {
   min-width: 0;
 }
 
+.sdwtButtons.gridLayout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .sdwtButtons button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
   min-height: 32px;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
@@ -733,6 +739,7 @@ code {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  overflow-wrap: anywhere;
   box-shadow: var(--shadow-sm);
   transition:
     border-color 160ms ease,
