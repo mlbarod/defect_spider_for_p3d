@@ -1511,6 +1511,13 @@ tr:last-child td {
   stroke-width: 1;
 }
 
+.yValueLine {
+  stroke: hsl(35 92% 56%);
+  stroke-width: 0.75px;
+  stroke-dasharray: 2 3;
+  opacity: 0.9;
+}
+
 .axisText {
   fill: var(--muted-foreground);
   font-size: 7.5px;

@@ -719,6 +719,7 @@ const STEP_LEGEND_COLORS = [
   { swatch: 'hsl(350 89% 60%)', point: 'hsla(350, 89%, 60%, 0.16)' },
   { swatch: 'hsl(240 55% 58%)', point: 'hsla(240, 55%, 58%, 0.16)' },
 ];
+const EMPTY_Y_VALUE_LINES = [];
 
 function getLegendKey(type, value) {
   return `${type}:${String(value)}`;
@@ -827,7 +828,7 @@ function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
   );
 }
 
-const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType, highlightRange = null }) {
+const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType, highlightRange = null, yValueLines = EMPTY_Y_VALUE_LINES }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -862,6 +863,22 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     [stdPoints],
   );
   const scatterPoints = useMemo(() => [...centerScatterPoints, ...stdScatterPoints], [centerScatterPoints, stdScatterPoints]);
+  const yValueReferenceLines = useMemo(
+    () =>
+      yValueLines
+        .map((line) => {
+          const y = toNumber(line.y_value ?? line.yValue);
+          if (y === null) return null;
+
+          return {
+            ...line,
+            y,
+            eqp: String(line.eqp_ch ?? line.eqp_id ?? line.eqpid ?? eqpId ?? '').trim() || '-',
+          };
+        })
+        .filter(Boolean),
+    [yValueLines, eqpId],
+  );
   const ngIdentitySet = useMemo(
     () => buildNgIdentitySet([...failPoints, ...stdPoints]),
     [failPoints, stdPoints],
@@ -936,7 +953,10 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     });
   };
   const fallbackXValues = (axisPoints.length > 0 ? axisPoints : scatterPoints).map((point) => point.x);
-  const fallbackYValues = (allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y);
+  const fallbackYValues = [
+    ...(allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y),
+    ...yValueReferenceLines.map((line) => line.y),
+  ];
   const resolveRange = (range, fallbackValues) => {
     const minValue = toNumber(range?.min);
     const maxValue = toNumber(range?.max);
@@ -945,23 +965,26 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     return { min: 0, max: 1 };
   };
   const getYDomain = (range, shouldPad = true) => {
-    if (range.max === range.min) {
+    const minY = 0;
+    const maxRangeValue = Math.max(minY + 1, range.max);
+
+    if (maxRangeValue === minY) {
       return {
-        minY: range.min - 1,
-        maxY: range.max + 1,
+        minY,
+        maxY: minY + 1,
       };
     }
     if (!shouldPad) {
       return {
-        minY: range.min,
-        maxY: range.max,
+        minY,
+        maxY: maxRangeValue,
       };
     }
-    const span = Math.max(0, range.max - range.min);
+    const span = Math.max(0, maxRangeValue - minY);
     const yPad = Math.max(1, span * 0.12);
     return {
-      minY: range.min - yPad,
-      maxY: range.max + yPad,
+      minY,
+      maxY: maxRangeValue + yPad,
     };
   };
   const xRange = resolveRange(domains?.x, fallbackXValues);
@@ -984,7 +1007,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     setDragRange(null);
     setTooltip(null);
     setHiddenLegendKeys(new Set());
-  }, [allPoints, anomalyType, failPoints, stdPoints, eqpId]);
+  }, [allPoints, anomalyType, failPoints, stdPoints, eqpId, yValueLines]);
 
   useEffect(() => {
     const element = plotRef.current;
@@ -1029,6 +1052,16 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
       width: widthValue,
     };
   }, [highlightRange, viewMinX, viewMaxX, plotWidth]);
+  const visibleYValueReferenceLines = useMemo(
+    () =>
+      yValueReferenceLines.filter(
+        (line) =>
+          line.y >= viewMinY &&
+          line.y <= viewMaxY &&
+          !hiddenLegendKeys.has(getLegendKey('eqp', line.eqp)),
+      ),
+    [yValueReferenceLines, viewMinY, viewMaxY, hiddenLegendKeys],
+  );
   const visibleAllScreenPoints = useMemo(
     () =>
       visibleAllScatterPoints.filter(isVisible).map((point) => {
@@ -1097,14 +1130,12 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     const fullX = Math.max(1, fullDomain.maxX - fullDomain.minX);
     const fullY = Math.max(1, fullDomain.maxY - fullDomain.minY);
     const spanX = Math.min(fullX, Math.max(1, next.maxX - next.minX));
-    const spanY = Math.min(fullY, Math.max(1, next.maxY - next.minY));
+    const spanY = Math.min(fullY, Math.max(1, next.maxY - fullDomain.minY));
     let minDomainX = next.minX;
-    let minDomainY = next.minY;
+    const minDomainY = fullDomain.minY;
 
     if (minDomainX < fullDomain.minX) minDomainX = fullDomain.minX;
     if (minDomainX + spanX > fullDomain.maxX) minDomainX = fullDomain.maxX - spanX;
-    if (minDomainY < fullDomain.minY) minDomainY = fullDomain.minY;
-    if (minDomainY + spanY > fullDomain.maxY) minDomainY = fullDomain.maxY - spanY;
 
     return {
       minX: minDomainX,
@@ -1273,9 +1304,9 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
           <clipPath id={clipId}>
             <rect x={padding.left - clipOverflow} y={padding.top - clipOverflow} width={plotWidth + clipOverflow * 2} height={plotHeight + clipOverflow * 2} />
           </clipPath>
-          {yTicks.map((tick) => (
+          {yTicks.map((tick, index) => (
             <g key={tick}>
-              <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />
+              {index !== 1 && <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />}
               <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
                 {Math.round(tick).toLocaleString()}
               </text>
@@ -1292,6 +1323,17 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
             {timeHighlight && (
               <rect className="timeHighlightBand" x={timeHighlight.x} y={padding.top} width={timeHighlight.width} height={plotHeight} pointerEvents="none" />
             )}
+            {visibleYValueReferenceLines.map((line, index) => (
+              <line
+                key={`${line.eqp}-${line.y}-${index}`}
+                className="yValueLine"
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={yScale(line.y)}
+                y2={yScale(line.y)}
+                pointerEvents="none"
+              />
+            ))}
             {pmEvents
               .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
               .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
@@ -1526,6 +1568,7 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points, highligh
         eqpId={eqpId}
         anomalyType={anomalyType}
         highlightRange={highlightRange}
+        yValueLines={chartData.yValueLines}
       />
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">

@@ -1828,6 +1828,7 @@ def select_columns(dataframe):
     wanted = [
         "tkout_time",
         "fab_value",
+        "y_value",
         "process_id",
         "wafer_id",
         "lot_id",
@@ -1849,6 +1850,35 @@ def chart_records(dataframe, limit=900, anomaly_type=None):
     if anomaly_type:
         for row in rows:
             row["anomaly_type"] = anomaly_type
+    return rows
+
+
+def chart_y_value_lines(dataframe, eqp_id):
+    if "y_value" not in frame_columns(dataframe):
+        return []
+
+    rows = []
+    seen = set()
+    for row in frame_records(select_columns(dataframe)):
+        try:
+            y_value = float(row.get("y_value"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(y_value):
+            continue
+
+        eqp_ch = str(get_first(row, ("eqp_ch", "eqp_id", "eqpid")) or eqp_id or "").strip()
+        key = (eqp_ch, round(y_value, 8))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(
+            {
+                "eqp_ch": eqp_ch,
+                "y_value": y_value,
+            }
+        )
+
     return rows
 
 
@@ -1932,9 +1962,10 @@ def command_chart(args):
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
     main_all_fab_values = numeric_column_values(all_df, "fab_value")
+    y_value_values = numeric_column_values(fail_for_eqp, "y_value")
     chart_fab_values_center = main_all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = main_all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
-    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
+    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value") + y_value_values
 
     pm_events = []
     if os.path.isfile(CONFIG["pmCodePath"]) and os.access(CONFIG["pmCodePath"], os.R_OK):
@@ -1976,19 +2007,20 @@ def command_chart(args):
             "domains": {
                 "x": time_domain(all_df, "tkout_time"),
                 "yFull": numeric_domain(chart_fab_values),
-                "yInitial": outlier_display_domain(main_all_fab_values),
+                "yInitial": outlier_display_domain(main_all_fab_values + y_value_values),
                 "center": {
-                    "yFull": numeric_domain(chart_fab_values_center),
-                    "yInitial": outlier_display_domain(main_all_fab_values),
+                    "yFull": numeric_domain(chart_fab_values_center + y_value_values),
+                    "yInitial": outlier_display_domain(main_all_fab_values + y_value_values),
                 },
                 "std": {
-                    "yFull": numeric_domain(chart_fab_values_std),
-                    "yInitial": outlier_display_domain(main_all_fab_values),
+                    "yFull": numeric_domain(chart_fab_values_std + y_value_values),
+                    "yInitial": outlier_display_domain(main_all_fab_values + y_value_values),
                 },
             },
             "allPoints": chart_records(all_background, None),
             "failPoints": chart_records(fail_for_eqp, None, "center"),
             "stdPoints": chart_records(std_for_eqp, None, "std"),
+            "yValueLines": chart_y_value_lines(fail_for_eqp, args.eqp_id),
             "pmEvents": pm_events,
         }
     )
@@ -2007,9 +2039,10 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
     all_fab_values = numeric_column_values(all_df, "fab_value")
+    y_value_values = numeric_column_values(fail_for_eqp, "y_value")
     chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
-    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
+    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value") + y_value_values
 
     return {
         "ok": True,
@@ -2036,19 +2069,20 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
         "domains": {
             "x": time_domain(all_df, "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
-            "yInitial": outlier_display_domain(all_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values + y_value_values),
             "center": {
-                "yFull": numeric_domain(chart_fab_values_center),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yFull": numeric_domain(chart_fab_values_center + y_value_values),
+                "yInitial": outlier_display_domain(all_fab_values + y_value_values),
             },
             "std": {
-                "yFull": numeric_domain(chart_fab_values_std),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yFull": numeric_domain(chart_fab_values_std + y_value_values),
+                "yInitial": outlier_display_domain(all_fab_values + y_value_values),
             },
         },
         "allPoints": chart_records(all_background, None),
         "failPoints": chart_records(fail_for_eqp, None, "center"),
         "stdPoints": chart_records(std_for_eqp, None, "std"),
+        "yValueLines": chart_y_value_lines(fail_for_eqp, eqp_id),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
     }
 
@@ -2104,9 +2138,10 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
     all_fab_values = numeric_column_values(all_df, "fab_value")
+    y_value_values = numeric_column_values(fail_for_eqp, "y_value")
     chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
-    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
+    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value") + y_value_values
 
     return {
         "ok": True,
@@ -2133,19 +2168,20 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
         "domains": {
             "x": time_domain(all_df, "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
-            "yInitial": outlier_display_domain(all_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values + y_value_values),
             "center": {
-                "yFull": numeric_domain(chart_fab_values_center),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yFull": numeric_domain(chart_fab_values_center + y_value_values),
+                "yInitial": outlier_display_domain(all_fab_values + y_value_values),
             },
             "std": {
-                "yFull": numeric_domain(chart_fab_values_std),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yFull": numeric_domain(chart_fab_values_std + y_value_values),
+                "yInitial": outlier_display_domain(all_fab_values + y_value_values),
             },
         },
         "allPoints": chart_records(all_background, None),
         "failPoints": chart_records(fail_for_eqp, None, "center"),
         "stdPoints": chart_records(std_for_eqp, None, "std"),
+        "yValueLines": chart_y_value_lines(fail_for_eqp, eqp_id),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
     }
 
