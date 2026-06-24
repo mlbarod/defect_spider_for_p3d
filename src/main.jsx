@@ -719,7 +719,6 @@ const STEP_LEGEND_COLORS = [
   { swatch: 'hsl(350 89% 60%)', point: 'hsla(350, 89%, 60%, 0.16)' },
   { swatch: 'hsl(240 55% 58%)', point: 'hsla(240, 55%, 58%, 0.16)' },
 ];
-const EMPTY_Y_VALUE_LINES = [];
 
 function getLegendKey(type, value) {
   return `${type}:${String(value)}`;
@@ -828,7 +827,7 @@ function ChartLegend({ stepItems, equipmentItems, hiddenKeys, onToggle }) {
   );
 }
 
-const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType, highlightRange = null, yValueLines = EMPTY_Y_VALUE_LINES }) {
+const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, stdPoints, pmEvents, eqpId, domains, anomalyType, highlightRange = null }) {
   const [viewDomain, setViewDomain] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -863,22 +862,6 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     [stdPoints],
   );
   const scatterPoints = useMemo(() => [...centerScatterPoints, ...stdScatterPoints], [centerScatterPoints, stdScatterPoints]);
-  const yValueReferenceLines = useMemo(
-    () =>
-      yValueLines
-        .map((line) => {
-          const y = toNumber(line.y_value ?? line.yValue);
-          if (y === null) return null;
-
-          return {
-            ...line,
-            y,
-            eqp: String(line.eqp_ch ?? line.eqp_id ?? line.eqpid ?? eqpId ?? '').trim() || '-',
-          };
-        })
-        .filter(Boolean),
-    [yValueLines, eqpId],
-  );
   const ngIdentitySet = useMemo(
     () => buildNgIdentitySet([...failPoints, ...stdPoints]),
     [failPoints, stdPoints],
@@ -953,10 +936,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     });
   };
   const fallbackXValues = (axisPoints.length > 0 ? axisPoints : scatterPoints).map((point) => point.x);
-  const fallbackYValues = [
-    ...(allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y),
-    ...yValueReferenceLines.map((line) => line.y),
-  ];
+  const fallbackYValues = (allScatterPoints.length > 0 ? allScatterPoints : scatterPoints).map((point) => point.y);
   const resolveRange = (range, fallbackValues) => {
     const minValue = toNumber(range?.min);
     const maxValue = toNumber(range?.max);
@@ -1007,7 +987,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     setDragRange(null);
     setTooltip(null);
     setHiddenLegendKeys(new Set());
-  }, [allPoints, anomalyType, failPoints, stdPoints, eqpId, yValueLines]);
+  }, [allPoints, anomalyType, failPoints, stdPoints, eqpId]);
 
   useEffect(() => {
     const element = plotRef.current;
@@ -1052,16 +1032,6 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
       width: widthValue,
     };
   }, [highlightRange, viewMinX, viewMaxX, plotWidth]);
-  const visibleYValueReferenceLines = useMemo(
-    () =>
-      yValueReferenceLines.filter(
-        (line) =>
-          line.y >= viewMinY &&
-          line.y <= viewMaxY &&
-          !hiddenLegendKeys.has(getLegendKey('eqp', line.eqp)),
-      ),
-    [yValueReferenceLines, viewMinY, viewMaxY, hiddenLegendKeys],
-  );
   const visibleAllScreenPoints = useMemo(
     () =>
       visibleAllScatterPoints.filter(isVisible).map((point) => {
@@ -1323,17 +1293,6 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
             {timeHighlight && (
               <rect className="timeHighlightBand" x={timeHighlight.x} y={padding.top} width={timeHighlight.width} height={plotHeight} pointerEvents="none" />
             )}
-            {visibleYValueReferenceLines.map((line, index) => (
-              <line
-                key={`${line.eqp}-${line.y}-${index}`}
-                className="yValueLine"
-                x1={padding.left}
-                x2={width - padding.right}
-                y1={yScale(line.y)}
-                y2={yScale(line.y)}
-                pointerEvents="none"
-              />
-            ))}
             {pmEvents
               .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
               .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
@@ -1568,7 +1527,6 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points, highligh
         eqpId={eqpId}
         anomalyType={anomalyType}
         highlightRange={highlightRange}
-        yValueLines={chartData.yValueLines}
       />
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
