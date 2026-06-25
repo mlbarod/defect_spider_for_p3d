@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v32"
+LOADER_VERSION = "file-loader-v33"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1207,7 +1207,6 @@ def add_fcc_summary_rows(
     met_mapping_by_key=None,
     met_mapping_by_main_step=None,
     use_mapping_met_step=False,
-    use_mapping_met_item=False,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
@@ -1222,22 +1221,20 @@ def add_fcc_summary_rows(
             continue
 
         mapped_entry = None
-        if use_mapping_met_step or use_mapping_met_item:
+        if use_mapping_met_step:
             mapped_entry = (met_mapping_by_key or {}).get((main_step, fail_met_step))
-            if use_mapping_met_step:
-                candidates = (met_mapping_by_main_step or {}).get(main_step, [])
-                if mapped_entry is None and len(candidates) == 1:
-                    mapped_entry = candidates[0]
-                if mapped_entry is None:
-                    continue
+            candidates = (met_mapping_by_main_step or {}).get(main_step, [])
+            if mapped_entry is None and len(candidates) == 1:
+                mapped_entry = candidates[0]
+            if mapped_entry is None:
+                continue
 
         met_step = mapped_entry["metStep"] if use_mapping_met_step and mapped_entry else fail_met_step
         mapping_key = f"{key_prefix}::{main_step}::{met_step}"
         if mapping_key not in mapped_keys:
             continue
 
-        item_id = mapped_entry.get("metItem") if use_mapping_met_item and mapped_entry else ""
-        item_id = item_id or fail_item_id
+        item_id = fail_item_id
         if not item_id:
             continue
 
@@ -1423,7 +1420,6 @@ def command_fcc_summary(_args):
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
-    fcc_step_met_by_key, _fcc_step_met_by_main_step = fcc_met_mapping_index(met_rows)
     fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid", "eqpch", "eqp_ch"))
     metrics = {
         **fcc_met_unique_counts(extra_met_rows),
@@ -1448,8 +1444,6 @@ def command_fcc_summary(_args):
         key_prefix="fcc_step",
         chart_root="step",
         source_priority=1,
-        met_mapping_by_key=fcc_step_met_by_key,
-        use_mapping_met_item=True,
     )
     diagnostics["usedRows"]["fcc_extra_met"] = len(extra_met_rows)
     diagnostics["usedRows"]["fcc_extra_fail"] = sum(
