@@ -1186,14 +1186,15 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   };
   const showTooltip = (event, point) => {
     const key = getTooltipPointKey(point);
+    const nextTooltip = {
+      key,
+      rows: getPointTooltipRows(point),
+      ...getTooltipPosition(event),
+    };
+
     setTooltip((current) => {
       if (current?.key === key) return current;
-
-      return {
-        key,
-        rows: getPointTooltipRows(point),
-        ...getTooltipPosition(event),
-      };
+      return nextTooltip;
     });
   };
   const findIndexedPoint = (index, position, threshold) => {
