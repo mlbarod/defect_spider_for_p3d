@@ -720,23 +720,50 @@ const STEP_LEGEND_COLORS = [
   { swatch: 'hsl(240 55% 58%)', point: 'hsla(240, 55%, 58%, 0.16)' },
 ];
 
-const Y_TICK_INTERVAL = 5;
+const TARGET_Y_TICK_COUNT = 7;
 
-function roundUpToTickInterval(value, interval = Y_TICK_INTERVAL) {
+function getNiceYAxisInterval(minY, maxY, targetTickCount = TARGET_Y_TICK_COUNT) {
+  const span = Math.max(1, maxY - minY);
+  const rawInterval = span / Math.max(1, targetTickCount - 1);
+  const magnitude = 10 ** Math.floor(Math.log10(rawInterval));
+  const normalized = rawInterval / magnitude;
+  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+
+  return niceNormalized * magnitude;
+}
+
+function roundUpToTickInterval(value, interval) {
   if (!Number.isFinite(value)) return interval;
   return Math.max(interval, Math.ceil(value / interval) * interval);
 }
 
-function buildYAxisTicks(minY, maxY, interval = Y_TICK_INTERVAL) {
+function getIntervalPrecision(interval) {
+  if (!Number.isFinite(interval) || Number.isInteger(interval)) return 0;
+  const [mantissa, exponentText] = interval.toExponential().split('e');
+  const mantissaDecimals = (mantissa.split('.')[1] ?? '').length;
+  const exponent = Number(exponentText);
+
+  return Math.min(8, Math.max(0, exponent < 0 ? -exponent + mantissaDecimals : mantissaDecimals - exponent));
+}
+
+function buildYAxisTicks(minY, maxY) {
+  const interval = getNiceYAxisInterval(minY, maxY);
+  const precision = getIntervalPrecision(interval);
   const start = Math.ceil(minY / interval) * interval;
   const end = Math.floor(maxY / interval) * interval;
   const ticks = [];
 
-  for (let tick = start; tick <= end; tick += interval) {
+  for (let index = 0; index < 100; index += 1) {
+    const tick = Number((start + interval * index).toFixed(precision));
+    if (tick > end + interval / 1000) break;
     ticks.push(Object.is(tick, -0) ? 0 : tick);
   }
 
   return ticks.length > 0 ? ticks : [0];
+}
+
+function formatAxisTick(value) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 8 });
 }
 
 function getLegendKey(type, value) {
@@ -966,19 +993,20 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   const getYDomain = (range, shouldPad = true) => {
     const minY = 0;
     const maxRangeValue = Math.max(minY + 1, range.max);
+    const roundMaxY = (value) => roundUpToTickInterval(value, getNiceYAxisInterval(minY, value));
 
-    if (maxRangeValue === minY) return { minY, maxY: Y_TICK_INTERVAL };
+    if (maxRangeValue === minY) return { minY, maxY: getNiceYAxisInterval(minY, minY + 1) };
     if (!shouldPad) {
       return {
         minY,
-        maxY: roundUpToTickInterval(maxRangeValue),
+        maxY: roundMaxY(maxRangeValue),
       };
     }
     const span = Math.max(0, maxRangeValue - minY);
     const yPad = Math.max(1, span * 0.12);
     return {
       minY,
-      maxY: roundUpToTickInterval(maxRangeValue + yPad),
+      maxY: roundMaxY(maxRangeValue + yPad),
     };
   };
   const xRange = resolveRange(domains?.x, fallbackXValues);
@@ -1125,7 +1153,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
       minX: minDomainX,
       maxX: minDomainX + spanX,
       minY: minDomainY,
-      maxY: Math.min(fullDomain.maxY, roundUpToTickInterval(minDomainY + spanY)),
+      maxY: Math.min(fullDomain.maxY, roundUpToTickInterval(minDomainY + spanY, getNiceYAxisInterval(minDomainY, minDomainY + spanY))),
     };
   };
   const getSvgPoint = (event) => {
@@ -1292,7 +1320,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
             <g key={tick}>
               <line className="axisTick" x1={padding.left - 4} x2={padding.left} y1={yScale(tick)} y2={yScale(tick)} />
               <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
-                {tick.toLocaleString()}
+                {formatAxisTick(tick)}
               </text>
             </g>
           ))}
