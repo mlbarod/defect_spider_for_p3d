@@ -720,6 +720,25 @@ const STEP_LEGEND_COLORS = [
   { swatch: 'hsl(240 55% 58%)', point: 'hsla(240, 55%, 58%, 0.16)' },
 ];
 
+const Y_TICK_INTERVAL = 5;
+
+function roundUpToTickInterval(value, interval = Y_TICK_INTERVAL) {
+  if (!Number.isFinite(value)) return interval;
+  return Math.max(interval, Math.ceil(value / interval) * interval);
+}
+
+function buildYAxisTicks(minY, maxY, interval = Y_TICK_INTERVAL) {
+  const start = Math.ceil(minY / interval) * interval;
+  const end = Math.floor(maxY / interval) * interval;
+  const ticks = [];
+
+  for (let tick = start; tick <= end; tick += interval) {
+    ticks.push(Object.is(tick, -0) ? 0 : tick);
+  }
+
+  return ticks.length > 0 ? ticks : [0];
+}
+
 function getLegendKey(type, value) {
   return `${type}:${String(value)}`;
 }
@@ -948,23 +967,18 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     const minY = 0;
     const maxRangeValue = Math.max(minY + 1, range.max);
 
-    if (maxRangeValue === minY) {
-      return {
-        minY,
-        maxY: minY + 1,
-      };
-    }
+    if (maxRangeValue === minY) return { minY, maxY: Y_TICK_INTERVAL };
     if (!shouldPad) {
       return {
         minY,
-        maxY: maxRangeValue,
+        maxY: roundUpToTickInterval(maxRangeValue),
       };
     }
     const span = Math.max(0, maxRangeValue - minY);
     const yPad = Math.max(1, span * 0.12);
     return {
       minY,
-      maxY: maxRangeValue + yPad,
+      maxY: roundUpToTickInterval(maxRangeValue + yPad),
     };
   };
   const xRange = resolveRange(domains?.x, fallbackXValues);
@@ -1017,7 +1031,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   const clampY = (value) => Math.min(height - padding.bottom, Math.max(padding.top, value));
   const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
   const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
-  const yTicks = [viewMinY, viewMinY + (viewMaxY - viewMinY) / 2, viewMaxY];
+  const yTicks = buildYAxisTicks(viewMinY, viewMaxY);
   const timeHighlight = useMemo(() => {
     const min = toNumber(highlightRange?.min);
     const max = toNumber(highlightRange?.max);
@@ -1111,7 +1125,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
       minX: minDomainX,
       maxX: minDomainX + spanX,
       minY: minDomainY,
-      maxY: minDomainY + spanY,
+      maxY: Math.min(fullDomain.maxY, roundUpToTickInterval(minDomainY + spanY)),
     };
   };
   const getSvgPoint = (event) => {
@@ -1274,11 +1288,11 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
           <clipPath id={clipId}>
             <rect x={padding.left - clipOverflow} y={padding.top - clipOverflow} width={plotWidth + clipOverflow * 2} height={plotHeight + clipOverflow * 2} />
           </clipPath>
-          {yTicks.map((tick, index) => (
+          {yTicks.map((tick) => (
             <g key={tick}>
-              {index !== 1 && <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />}
+              {tick !== 0 && <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />}
               <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
-                {Math.round(tick).toLocaleString()}
+                {tick.toLocaleString()}
               </text>
             </g>
           ))}
@@ -1433,6 +1447,42 @@ function NgPointTable({ points, row, eqpId }) {
   );
 }
 
+function getChangeHistoryText(row) {
+  const date = formatTableValue(row?.date);
+  const workType = formatTableValue(row?.work_type);
+  const desc = formatTableValue(row?.desc);
+
+  return `${date} [${workType}] : ${desc}`;
+}
+
+function ChangeHistoryList({ rows }) {
+  return (
+    <div className="changeHistoryShell">
+      {rows.length > 0 ? (
+        <div className="changeHistoryList">
+          {rows.map((row, index) => {
+            const url = String(row?.ctttm_url ?? '').trim();
+            const text = getChangeHistoryText(row);
+            const key = `${row?.date ?? ''}-${row?.work_type ?? ''}-${url}-${index}`;
+
+            return url ? (
+              <a key={key} className="changeHistoryLink" href={url} target="_blank" rel="noreferrer">
+                {text}
+              </a>
+            ) : (
+              <span key={key} className="changeHistoryLink missingUrl">
+                {text}
+              </span>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="changeHistoryEmpty">표시할 변경점 이력이 없습니다.</div>
+      )}
+    </div>
+  );
+}
+
 function getTypedDomains(domains, anomalyType) {
   const typedDomain = domains?.[anomalyType];
   if (!typedDomain) return domains;
@@ -1501,11 +1551,15 @@ function ChartFailureCard({ row, eqpId, error, data }) {
 
 function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points, highlightRange = null }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
   const isFccCenterSourceChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step' && anomalyType === 'center';
   const ngIdentitySet = useMemo(() => buildNgIdentitySet(points), [points]);
   const ngTablePoints = useMemo(() => getNgTablePoints(points, ngIdentitySet, eqpId), [points, ngIdentitySet, eqpId]);
-  const tableId = `ng-table-${String(`${eqpId}-${anomalyType}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const cardId = String(`${eqpId}-${anomalyType}-${row?.key ?? ''}`).replace(/[^a-zA-Z0-9_-]/g, '-');
+  const tableId = `ng-table-${cardId}`;
+  const historyId = `change-history-${cardId}`;
+  const changeHistoryRows = chartData.pmHistories ?? [];
 
   return (
     <div className={`chartShell ${isFccCenterSourceChart ? 'fccCenterSourceChart' : ''}`}>
@@ -1528,6 +1582,18 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points, highligh
         anomalyType={anomalyType}
         highlightRange={highlightRange}
       />
+      <button className="ngTableToggle changeHistoryToggle" type="button" onClick={() => setIsHistoryOpen((current) => !current)} aria-expanded={isHistoryOpen} aria-controls={historyId}>
+        <span className={`chevron ${isHistoryOpen ? 'open' : ''}`} aria-hidden="true">
+          ▸
+        </span>
+        <span>변경점 이력</span>
+        <strong>{changeHistoryRows.length.toLocaleString()} rows</strong>
+      </button>
+      {isHistoryOpen && (
+        <div id={historyId}>
+          <ChangeHistoryList rows={changeHistoryRows} />
+        </div>
+      )}
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
           ▸

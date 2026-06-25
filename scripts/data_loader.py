@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v30"
+LOADER_VERSION = "file-loader-v31"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -32,6 +32,8 @@ COMPACT_TIME_FORMATS = (
     "%y%m%d%H%M",
     "%Y%m%d",
 )
+PM_EQUIPMENT_COLUMNS = ("eqp_ch", "eqp_id", "eqpid")
+PM_HISTORY_COLUMNS = ("date", "work_type", "desc", "ctttm_url")
 DATA_SOURCES = [
     {
         "key": "spec",
@@ -892,6 +894,59 @@ def exclude_frame_eqp(dataframe, eqp_id):
         condition = dataframe[column].astype(str).str.strip() != target_eqp_id
         mask = condition if mask is None else mask & condition
     return dataframe[mask]
+
+
+def normalize_pm_equipment(value):
+    return str(value or "").strip().replace("-", "_")
+
+
+def filter_pm_frame_eqp(dataframe, eqp_id):
+    columns = frame_columns(dataframe)
+    target_eqp_id = normalize_pm_equipment(eqp_id)
+    if not target_eqp_id:
+        return dataframe.head(0)
+
+    if is_polars_frame(dataframe):
+        pl = load_polars()
+        expression = None
+        for column in PM_EQUIPMENT_COLUMNS:
+            if column not in columns:
+                continue
+            condition = (
+                pl.col(column)
+                .cast(pl.Utf8)
+                .fill_null("")
+                .str.strip_chars()
+                .str.replace_all("-", "_")
+                == target_eqp_id
+            )
+            expression = condition if expression is None else expression | condition
+        if "asset" in columns:
+            condition = (
+                pl.col("asset")
+                .cast(pl.Utf8)
+                .fill_null("")
+                .str.strip_chars()
+                .str.replace_all("-", "_")
+                .str.contains(target_eqp_id, literal=True)
+            )
+            expression = condition if expression is None else expression | condition
+        return dataframe.filter(expression) if expression is not None else dataframe.head(0)
+
+    mask = None
+    for column in PM_EQUIPMENT_COLUMNS:
+        if column not in columns:
+            continue
+        condition = dataframe[column].astype(str).str.strip().str.replace("-", "_", regex=False) == target_eqp_id
+        mask = condition if mask is None else mask | condition
+    if "asset" in columns:
+        condition = dataframe["asset"].astype(str).str.strip().str.replace("-", "_", regex=False).str.contains(target_eqp_id, regex=False, na=False)
+        mask = condition if mask is None else mask | condition
+    return dataframe[mask] if mask is not None else dataframe.head(0)
+
+
+def select_existing_frame_columns(dataframe, columns):
+    return select_frame_columns(dataframe, [column for column in columns if column in frame_columns(dataframe)])
 
 
 def select_frame_columns(dataframe, columns):
@@ -1936,20 +1991,8 @@ def command_chart(args):
     chart_fab_values_std = main_all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
 
-    pm_events = []
-    if os.path.isfile(CONFIG["pmCodePath"]) and os.access(CONFIG["pmCodePath"], os.R_OK):
-        pm_df = read_parquet(CONFIG["pmCodePath"])
-        if {"asset", "inprg_dt", "work_type"}.issubset(set(frame_columns(pm_df))):
-            if is_polars_frame(pm_df):
-                pl = load_polars()
-                pm_df = pm_df.with_columns(pl.col("asset").cast(pl.Utf8).str.replace_all("-", "_").alias("asset"))
-                pm_df = pm_df.filter(pl.col("asset").str.contains(str(args.eqp_id), literal=True))
-                pm_events = add_time_fields(records(pm_df.select(["asset", "inprg_dt", "work_type"]).head(80)), "inprg_dt")
-            else:
-                pm_df = pm_df.copy()
-                pm_df["asset"] = pm_df["asset"].astype(str).str.replace("-", "_", regex=False)
-                pm_df = pm_df[pm_df["asset"].str.contains(str(args.eqp_id), regex=False, na=False)]
-                pm_events = add_time_fields(records(pm_df[["asset", "inprg_dt", "work_type"]].head(80)), "inprg_dt")
+    pm_events = pm_events_for_eqp(args.eqp_id)
+    pm_histories = pm_history_rows_for_eqp(args.eqp_id)
 
     write_json(
         {
@@ -1990,6 +2033,7 @@ def command_chart(args):
             "failPoints": chart_records(fail_for_eqp, None, "center"),
             "stdPoints": chart_records(std_for_eqp, None, "std"),
             "pmEvents": pm_events,
+            "pmHistories": pm_histories,
         }
     )
 
@@ -2050,6 +2094,7 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
         "failPoints": chart_records(fail_for_eqp, None, "center"),
         "stdPoints": chart_records(std_for_eqp, None, "std"),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
+        "pmHistories": pm_history_rows_for_eqp(eqp_id) if include_pm else [],
     }
 
 
@@ -2058,24 +2103,73 @@ def command_chamber_chart(args):
     write_json(generic_chart_payload(resolved_paths, args.eqp_id, include_pm=True))
 
 
-def pm_events_for_eqp(eqp_id):
+def pm_frame_for_eqp(eqp_id):
     if not os.path.isfile(CONFIG["pmCodePath"]) or not os.access(CONFIG["pmCodePath"], os.R_OK):
-        return []
+        return None
 
     pm_df = read_parquet(CONFIG["pmCodePath"])
-    if not {"asset", "inprg_dt", "work_type"}.issubset(set(frame_columns(pm_df))):
+    return filter_pm_frame_eqp(pm_df, eqp_id)
+
+
+def pm_time_column(columns, prefer_date=False):
+    if prefer_date and "date" in columns:
+        return "date"
+    if "inprg_dt" in columns:
+        return "inprg_dt"
+    if "date" in columns:
+        return "date"
+    return ""
+
+
+def pm_events_for_eqp(eqp_id):
+    pm_df = pm_frame_for_eqp(eqp_id)
+    if pm_df is None:
         return []
 
-    if is_polars_frame(pm_df):
-        pl = load_polars()
-        pm_df = pm_df.with_columns(pl.col("asset").cast(pl.Utf8).str.replace_all("-", "_").alias("asset"))
-        pm_df = pm_df.filter(pl.col("asset").str.contains(str(eqp_id), literal=True))
-        return add_time_fields(records(pm_df.select(["asset", "inprg_dt", "work_type"]).head(80)), "inprg_dt")
+    columns = frame_columns(pm_df)
+    time_column = pm_time_column(columns)
+    if not time_column or "work_type" not in columns:
+        return []
 
-    pm_df = pm_df.copy()
-    pm_df["asset"] = pm_df["asset"].astype(str).str.replace("-", "_", regex=False)
-    pm_df = pm_df[pm_df["asset"].str.contains(str(eqp_id), regex=False, na=False)]
-    return add_time_fields(records(pm_df[["asset", "inprg_dt", "work_type"]].head(80)), "inprg_dt")
+    selected_columns = ["asset", time_column, "work_type"]
+    rows = records(select_existing_frame_columns(sort_frame(pm_df, time_column), selected_columns).head(80))
+    for row in rows:
+        if time_column != "inprg_dt":
+            row["inprg_dt"] = row.get(time_column)
+        if "asset" in row:
+            row["asset"] = normalize_pm_equipment(row.get("asset"))
+    return add_time_fields(rows, "inprg_dt")
+
+
+def pm_history_rows_for_eqp(eqp_id):
+    pm_df = pm_frame_for_eqp(eqp_id)
+    if pm_df is None:
+        return []
+
+    columns = frame_columns(pm_df)
+    time_column = pm_time_column(columns, prefer_date=True)
+    if not time_column:
+        return []
+
+    selected_columns = list(dict.fromkeys([time_column, *PM_HISTORY_COLUMNS]))
+    rows = records(select_existing_frame_columns(sort_frame(pm_df, time_column), selected_columns))
+    histories = []
+    for row in rows:
+        history_date = clean_text(row.get(time_column)) or time_text(row.get(time_column))
+        work_type = clean_text(row.get("work_type"))
+        desc = clean_text(row.get("desc"))
+        ctttm_url = clean_text(row.get("ctttm_url"))
+        if not any([history_date, work_type, desc, ctttm_url]):
+            continue
+        histories.append(
+            {
+                "date": history_date,
+                "work_type": work_type,
+                "desc": desc,
+                "ctttm_url": ctttm_url,
+            }
+        )
+    return histories
 
 
 def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=True, include_pm=True, require_std=False):
@@ -2147,6 +2241,7 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
         "failPoints": chart_records(fail_for_eqp, None, "center"),
         "stdPoints": chart_records(std_for_eqp, None, "std"),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
+        "pmHistories": pm_history_rows_for_eqp(eqp_id) if include_pm else [],
     }
 
 

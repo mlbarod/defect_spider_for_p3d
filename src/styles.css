@@ -1622,6 +1622,56 @@ tr:last-child td {
   color: var(--muted-foreground);
 }
 
+.changeHistoryToggle {
+  margin-bottom: 8px;
+}
+
+.changeHistoryShell {
+  width: 90%;
+  max-height: 220px;
+  margin: -2px auto 8px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.changeHistoryList {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.changeHistoryLink {
+  display: block;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 3px);
+  color: var(--foreground);
+  padding: 8px 9px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.changeHistoryLink:hover {
+  border-color: var(--border);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.changeHistoryLink.missingUrl {
+  color: var(--muted-foreground);
+}
+
+.changeHistoryEmpty {
+  padding: 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .pmLine {
   stroke: hsl(152 57% 40%);
   stroke-width: 0.7px;
