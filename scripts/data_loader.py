@@ -1731,10 +1731,7 @@ def fcc_item_id_from_met_seq(value):
     text = strip_fcc_prefix(strip_main_suffix(normalize_step(value))).strip()
     if "_" not in text:
         return ""
-    tail = text.split("_", 1)[1]
-    item_id = tail.split("_", 1)[0].strip()
-    digits = "".join(char for char in item_id if char.isdigit())
-    return digits or item_id
+    return text.split("_", 1)[1].strip()
 
 
 def normalize_item_id(value):
