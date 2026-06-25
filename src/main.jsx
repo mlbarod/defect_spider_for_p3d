@@ -670,6 +670,17 @@ function getPointTooltipRows(point) {
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
 
+function getTooltipPointKey(point) {
+  return [
+    point?.anomaly_type ?? '',
+    point?.tkout_time_ms ?? point?.tkout_time ?? '',
+    point?.fab_value ?? '',
+    point?.wafer_id ?? '',
+    point?.lot_id ?? point?.lot_wf ?? '',
+    point?.eqp_id ?? point?.eqpid ?? point?.eqp_ch ?? point?.eqpch ?? '',
+  ].join('|');
+}
+
 function normalizeTextValue(value) {
   return String(value ?? '')
     .normalize('NFKC')
@@ -1058,8 +1069,8 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   const clampX = (value) => Math.min(width - padding.right, Math.max(padding.left, value));
   const clampY = (value) => Math.min(height - padding.bottom, Math.max(padding.top, value));
   const isVisible = (point) => point.x >= viewMinX && point.x <= viewMaxX && point.y >= viewMinY && point.y <= viewMaxY;
-  const xTicks = [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX];
-  const yTicks = buildYAxisTicks(viewMinY, viewMaxY);
+  const xTicks = useMemo(() => [viewMinX, viewMinX + (viewMaxX - viewMinX) / 2, viewMaxX], [viewMinX, viewMaxX]);
+  const yTicks = useMemo(() => buildYAxisTicks(viewMinY, viewMaxY), [viewMinY, viewMaxY]);
   const timeHighlight = useMemo(() => {
     const min = toNumber(highlightRange?.min);
     const max = toNumber(highlightRange?.max);
@@ -1174,9 +1185,15 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     };
   };
   const showTooltip = (event, point) => {
-    setTooltip({
-      rows: getPointTooltipRows(point),
-      ...getTooltipPosition(event),
+    const key = getTooltipPointKey(point);
+    setTooltip((current) => {
+      if (current?.key === key) return current;
+
+      return {
+        key,
+        rows: getPointTooltipRows(point),
+        ...getTooltipPosition(event),
+      };
     });
   };
   const findIndexedPoint = (index, position, threshold) => {
@@ -1218,7 +1235,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     const scatterPoint = findIndexedPoint(scatterHoverIndex, point, anomalyPointRadius + 3);
     const canvasPoint = scatterPoint ?? findIndexedPoint(allHoverIndex, point, 6);
     if (canvasPoint) showTooltip(event, canvasPoint);
-    else setTooltip(null);
+    else setTooltip((current) => (current ? null : current));
   };
   const handleMouseUp = (event) => {
     if (!dragRange) return;
@@ -1288,6 +1305,64 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     context.restore();
   }, [visibleAllScreenPoints, plotWidth, plotHeight]);
 
+  const yAxisElements = useMemo(
+    () =>
+      yTicks.map((tick) => {
+        const y = yScale(tick);
+
+        return (
+          <g key={tick}>
+            <line className="axisTick" x1={padding.left - 4} x2={padding.left} y1={y} y2={y} />
+            <text className="axisText" x={padding.left - 8} y={y + 4} textAnchor="end">
+              {formatAxisTick(tick)}
+            </text>
+          </g>
+        );
+      }),
+    [yTicks, viewMinY, viewMaxY, plotHeight],
+  );
+  const xAxisElements = useMemo(
+    () =>
+      xTicks.map((tick, index) => (
+        <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor={index === 0 ? 'start' : index === xTicks.length - 1 ? 'end' : 'middle'}>
+          {formatShortDate(tick, axisPoints)}
+        </text>
+      )),
+    [xTicks, axisPoints, viewMinX, viewMaxX, plotWidth],
+  );
+  const pmEventElements = useMemo(
+    () =>
+      pmEvents
+        .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
+        .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
+        .map((event, index) => {
+          const isWarningAsset = !hasPmAssetSeparator(event.asset);
+
+          return (
+            <g key={`${event.inprg_dt}-${index}`}>
+              <line className={`pmLine ${isWarningAsset ? 'warning' : ''}`} x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
+              <text className={`pmText ${isWarningAsset ? 'warning' : ''}`} x={xScale(event.x) + 4} y={padding.top + 12}>
+                {event.work_type}
+              </text>
+            </g>
+          );
+        }),
+    [pmEvents, viewMinX, viewMaxX, plotWidth],
+  );
+  const scatterPathElements = useMemo(
+    () => (
+      <>
+        {scatterPathItems.map((item) => (
+          <path key={`${item.className}-border`} className="pointBorderLayer" d={item.borderD} pointerEvents="none" />
+        ))}
+        {scatterPathItems.map((item) => (
+          <path key={item.className} className={`${item.className} pointFillLayer`} d={item.d} pointerEvents="none" />
+        ))}
+      </>
+    ),
+    [scatterPathItems],
+  );
+
   if (!hasPoints) {
     return <div className="emptyMiniState">차트 parquet에서 tkout_time/fab_value 데이터를 찾지 못했습니다.</div>;
   }
@@ -1316,46 +1391,16 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
           <clipPath id={clipId}>
             <rect x={padding.left - clipOverflow} y={padding.top - clipOverflow} width={plotWidth + clipOverflow * 2} height={plotHeight + clipOverflow * 2} />
           </clipPath>
-          {yTicks.map((tick) => (
-            <g key={tick}>
-              <line className="axisTick" x1={padding.left - 4} x2={padding.left} y1={yScale(tick)} y2={yScale(tick)} />
-              <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
-                {formatAxisTick(tick)}
-              </text>
-            </g>
-          ))}
-          {xTicks.map((tick, index) => (
-            <text key={tick} className="axisText" x={xScale(tick)} y={height - 17} textAnchor={index === 0 ? 'start' : index === xTicks.length - 1 ? 'end' : 'middle'}>
-              {formatShortDate(tick, axisPoints)}
-            </text>
-          ))}
+          {yAxisElements}
+          {xAxisElements}
           <line className="axisLine" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
           <line className="axisLine" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
           <g clipPath={`url(#${clipId})`}>
             {timeHighlight && (
               <rect className="timeHighlightBand" x={timeHighlight.x} y={padding.top} width={timeHighlight.width} height={plotHeight} pointerEvents="none" />
             )}
-            {pmEvents
-              .map((event) => ({ ...event, x: toTime(event.inprg_dt, event) }))
-              .filter((event) => event.x !== null && event.x >= viewMinX && event.x <= viewMaxX)
-              .map((event, index) => {
-                const isWarningAsset = !hasPmAssetSeparator(event.asset);
-
-                return (
-                  <g key={`${event.inprg_dt}-${index}`}>
-                    <line className={`pmLine ${isWarningAsset ? 'warning' : ''}`} x1={xScale(event.x)} x2={xScale(event.x)} y1={padding.top} y2={height - padding.bottom} />
-                    <text className={`pmText ${isWarningAsset ? 'warning' : ''}`} x={xScale(event.x) + 4} y={padding.top + 12}>
-                      {event.work_type}
-                    </text>
-                  </g>
-                );
-              })}
-            {scatterPathItems.map((item) => (
-              <path key={`${item.className}-border`} className="pointBorderLayer" d={item.borderD} pointerEvents="none" />
-            ))}
-            {scatterPathItems.map((item) => (
-              <path key={item.className} className={`${item.className} pointFillLayer`} d={item.d} pointerEvents="none" />
-            ))}
+            {pmEventElements}
+            {scatterPathElements}
           </g>
         </svg>
         {selection && selection.width > 1 && selection.height > 1 && (
