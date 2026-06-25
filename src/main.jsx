@@ -30,13 +30,13 @@ const DATA_SOURCES = [
     key: 'fail',
     label: '중심치 이상 목록',
     path: `${folderPath}/${isMainLine ? 'main_fail_list.parquet' : 'fail_list.parquet'}`,
-    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid/eqpch'],
   },
   {
     key: 'std',
     label: '산포 이상 목록',
     path: `${folderPath}/${isMainLine ? 'main_fail_list_std.parquet' : 'fail_list_std.parquet'}`,
-    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid/eqpch'],
   },
   {
     key: 'met',
@@ -48,7 +48,7 @@ const DATA_SOURCES = [
     key: 'pm',
     label: 'PM 이력',
     path: CONFIG.pmCodePath,
-    requiredColumns: ['asset', 'inprg_dt', 'work_type'],
+    requiredColumns: ['asset 또는 eqp_ch/eqpch', 'inprg_dt', 'work_type'],
   },
 ];
 
@@ -63,7 +63,7 @@ const FCC_DATA_SOURCES = [
     key: 'fcc_fail',
     label: 'FCC 중심치 이상 목록',
     path: `${fccStepPath}/fail_list.parquet`,
-    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid/eqpch'],
   },
   {
     key: 'fcc_extra_met',
@@ -75,13 +75,13 @@ const FCC_DATA_SOURCES = [
     key: 'fcc_extra_fail',
     label: 'FCC 추가 중심치 이상 목록',
     path: `${fccFolderPath}/fail_list.parquet`,
-    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid/eqpch'],
   },
   {
     key: 'fcc_extra_std',
     label: 'FCC 추가 산포 이상 목록',
     path: `${fccFolderPath}/fail_list_std.parquet`,
-    requiredColumns: ['main_seq', 'met_seq', 'eqpid'],
+    requiredColumns: ['main_seq', 'met_seq', 'eqpid/eqpch'],
   },
 ];
 
@@ -664,7 +664,7 @@ function getPointTooltipRows(point) {
   return [
     ['lot_wf', point.lot_wf],
     ['tkout_time', point.tkout_time_text || point.tkout_time],
-    ['eqp_ch', point.eqp_ch],
+    ['eqp_ch', point.eqp_ch ?? point.eqpch],
     ['step_seq', point.step_seq],
     ['fab_value', point.fab_value],
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
@@ -749,7 +749,7 @@ function getStepPrefix(point) {
 }
 
 function getEquipmentId(point, fallback = '') {
-  const value = point?.eqp_id ?? point?.eqpid ?? point?.eqp_ch ?? fallback;
+  const value = point?.eqp_id ?? point?.eqpid ?? point?.eqp_ch ?? point?.eqpch ?? fallback;
   const text = String(value ?? '').trim();
   return text || '-';
 }
@@ -1290,7 +1290,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
           </clipPath>
           {yTicks.map((tick) => (
             <g key={tick}>
-              {tick !== 0 && <line className="gridLine" x1={padding.left} x2={width - padding.right} y1={yScale(tick)} y2={yScale(tick)} />}
+              <line className="axisTick" x1={padding.left - 4} x2={padding.left} y1={yScale(tick)} y2={yScale(tick)} />
               <text className="axisText" x={padding.left - 8} y={yScale(tick) + 4} textAnchor="end">
                 {tick.toLocaleString()}
               </text>
@@ -1410,7 +1410,7 @@ function formatTableValue(value) {
 
 function getNgTableValue(point, column, row, eqpId) {
   if (column === 'tkout_time') return point.tkout_time_text || point.tkout_time;
-  if (column === 'eqp_id') return point.eqp_id ?? point.eqpid ?? point.eqp_ch ?? eqpId;
+  if (column === 'eqp_id') return point.eqp_id ?? point.eqpid ?? point.eqp_ch ?? point.eqpch ?? eqpId;
   if (column === 'lot_id') return point.lot_id ?? point.lot_wf;
   if (column === 'item_id') return point.item_id ?? getMetStepDisplay(row.metStep).metItem;
   return point[column];
@@ -1447,42 +1447,6 @@ function NgPointTable({ points, row, eqpId }) {
   );
 }
 
-function getChangeHistoryText(row) {
-  const date = formatTableValue(row?.date);
-  const workType = formatTableValue(row?.work_type);
-  const desc = formatTableValue(row?.desc);
-
-  return `${date} [${workType}] : ${desc}`;
-}
-
-function ChangeHistoryList({ rows }) {
-  return (
-    <div className="changeHistoryShell">
-      {rows.length > 0 ? (
-        <div className="changeHistoryList">
-          {rows.map((row, index) => {
-            const url = String(row?.ctttm_url ?? '').trim();
-            const text = getChangeHistoryText(row);
-            const key = `${row?.date ?? ''}-${row?.work_type ?? ''}-${url}-${index}`;
-
-            return url ? (
-              <a key={key} className="changeHistoryLink" href={url} target="_blank" rel="noreferrer">
-                {text}
-              </a>
-            ) : (
-              <span key={key} className="changeHistoryLink missingUrl">
-                {text}
-              </span>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="changeHistoryEmpty">표시할 변경점 이력이 없습니다.</div>
-      )}
-    </div>
-  );
-}
-
 function getTypedDomains(domains, anomalyType) {
   const typedDomain = domains?.[anomalyType];
   if (!typedDomain) return domains;
@@ -1494,11 +1458,19 @@ function getTypedDomains(domains, anomalyType) {
   };
 }
 
-function ChartTag({ anomalyType }) {
-  const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
+function ChartTag({ anomalyType, anomalyTypes }) {
+  const types = anomalyTypes?.length ? anomalyTypes : [anomalyType ?? 'center'];
   return (
     <div className="chartTags" aria-label="이상 유형">
-      <span className={`anomalyTag ${meta.tagClass}`}>{meta.label}</span>
+      {types.map((type) => {
+        const meta = ANOMALY_META[type] ?? ANOMALY_META.center;
+
+        return (
+          <span key={type} className={`anomalyTag ${meta.tagClass}`}>
+            {meta.label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -1549,17 +1521,24 @@ function ChartFailureCard({ row, eqpId, error, data }) {
   );
 }
 
-function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points, highlightRange = null }) {
+function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const meta = ANOMALY_META[anomalyType] ?? ANOMALY_META.center;
-  const isFccCenterSourceChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step' && anomalyType === 'center';
-  const ngIdentitySet = useMemo(() => buildNgIdentitySet(points), [points]);
-  const ngTablePoints = useMemo(() => getNgTablePoints(points, ngIdentitySet, eqpId), [points, ngIdentitySet, eqpId]);
-  const cardId = String(`${eqpId}-${anomalyType}-${row?.key ?? ''}`).replace(/[^a-zA-Z0-9_-]/g, '-');
+  const resolvedCenterPoints = centerPoints ?? (anomalyType === 'center' ? points : []);
+  const resolvedStdPoints = stdPoints ?? (anomalyType === 'std' ? points : []);
+  const anomalyTypes = [
+    resolvedCenterPoints.length > 0 ? 'center' : '',
+    resolvedStdPoints.length > 0 ? 'std' : '',
+  ].filter(Boolean);
+  const visibleAnomalyTypes = anomalyTypes.length > 0 ? anomalyTypes : [anomalyType];
+  const titleLabel = visibleAnomalyTypes.map((type) => ANOMALY_META[type]?.label ?? ANOMALY_META.center.label).join(' / ');
+  const isFccCenterSourceChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step' && visibleAnomalyTypes.includes('center');
+  const combinedPoints = useMemo(() => [...resolvedCenterPoints, ...resolvedStdPoints], [resolvedCenterPoints, resolvedStdPoints]);
+  const ngIdentitySet = useMemo(() => buildNgIdentitySet(combinedPoints), [combinedPoints]);
+  const ngTablePoints = useMemo(() => getNgTablePoints(combinedPoints, ngIdentitySet, eqpId), [combinedPoints, ngIdentitySet, eqpId]);
+  const cardId = String(`${eqpId}-${visibleAnomalyTypes.join('-')}-${row?.key ?? ''}`).replace(/[^a-zA-Z0-9_-]/g, '-');
   const tableId = `ng-table-${cardId}`;
-  const historyId = `change-history-${cardId}`;
-  const changeHistoryRows = chartData.pmHistories ?? [];
+  const chartAnomalyType = visibleAnomalyTypes.join('-');
+  const chartDomains = visibleAnomalyTypes.length === 1 ? getTypedDomains(chartData.domains ?? null, visibleAnomalyTypes[0]) : chartData.domains;
 
   return (
     <div className={`chartShell ${isFccCenterSourceChart ? 'fccCenterSourceChart' : ''}`}>
@@ -1567,33 +1546,21 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType, points, highligh
         <div className="chartTitleText">
           <strong>{eqpId}</strong>
           <span>
-            {getChartHeading(row, chartData)} / {meta.label}
+            {getChartHeading(row, chartData)} / {titleLabel}
           </span>
         </div>
-        <ChartTag anomalyType={anomalyType} />
+        <ChartTag anomalyTypes={visibleAnomalyTypes} />
       </div>
       <ScatterChart
         allPoints={chartData.allPoints ?? []}
-        failPoints={anomalyType === 'center' ? points : []}
-        stdPoints={anomalyType === 'std' ? points : []}
+        failPoints={resolvedCenterPoints}
+        stdPoints={resolvedStdPoints}
         pmEvents={chartData.pmEvents ?? []}
-        domains={getTypedDomains(chartData.domains ?? null, anomalyType)}
+        domains={chartDomains}
         eqpId={eqpId}
-        anomalyType={anomalyType}
+        anomalyType={chartAnomalyType}
         highlightRange={highlightRange}
       />
-      <button className="ngTableToggle changeHistoryToggle" type="button" onClick={() => setIsHistoryOpen((current) => !current)} aria-expanded={isHistoryOpen} aria-controls={historyId}>
-        <span className={`chevron ${isHistoryOpen ? 'open' : ''}`} aria-hidden="true">
-          ▸
-        </span>
-        <span>변경점 이력</span>
-        <strong>{changeHistoryRows.length.toLocaleString()} rows</strong>
-      </button>
-      {isHistoryOpen && (
-        <div id={historyId}>
-          <ChangeHistoryList rows={changeHistoryRows} />
-        </div>
-      )}
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
           ▸
@@ -1653,8 +1620,9 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const centerNgTablePoints = useMemo(() => getNgTablePoints(centerPoints, centerNgIdentitySet, eqpId), [centerPoints, centerNgIdentitySet, eqpId]);
   const extraCenterHighlightRange = useMemo(() => getTkoutTimeRange(centerNgTablePoints), [centerNgTablePoints]);
   const hasExtraCharts = extraCenterCharts.length > 0 || extraStdCharts.length > 0;
+  const hasBaseChart = centerPoints.length > 0 || stdChartPoints.length > 0;
 
-  if (chartState.loading || chartState.error || (centerPoints.length === 0 && stdChartPoints.length === 0 && !hasExtraCharts)) {
+  if (chartState.loading || chartState.error || (!hasBaseChart && !hasExtraCharts)) {
     return (
       <div className="chartShell">
         <div className="chartTitle">
@@ -1682,8 +1650,16 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
 
   return (
     <>
-      {centerPoints.length > 0 && (
-        <AnomalyChartCard key={`${eqpId}-center`} row={row} eqpId={eqpId} chartData={chartState.data} anomalyType="center" points={centerPoints} />
+      {hasBaseChart && (
+        <AnomalyChartCard
+          key={`${eqpId}-base`}
+          row={row}
+          eqpId={eqpId}
+          chartData={chartState.data}
+          anomalyType={centerPoints.length > 0 ? 'center' : 'std'}
+          centerPoints={centerPoints}
+          stdPoints={stdChartPoints}
+        />
       )}
       {extraCenterCharts.map((chart, index) =>
         chart.ok !== false && (chart.failPoints?.length ?? 0) > 0 ? (
@@ -1725,9 +1701,6 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             data={chart}
           />
         ),
-      )}
-      {stdChartPoints.length > 0 && (
-        <AnomalyChartCard key={`${eqpId}-std`} row={row} eqpId={eqpId} chartData={chartState.data} anomalyType="std" points={stdChartPoints} />
       )}
     </>
   );

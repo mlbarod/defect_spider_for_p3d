@@ -32,8 +32,7 @@ COMPACT_TIME_FORMATS = (
     "%y%m%d%H%M",
     "%Y%m%d",
 )
-PM_EQUIPMENT_COLUMNS = ("eqp_ch", "eqp_id", "eqpid")
-PM_HISTORY_COLUMNS = ("date", "work_type", "desc", "ctttm_url")
+PM_EQUIPMENT_COLUMNS = ("eqp_ch", "eqpch", "eqp_id", "eqpid")
 DATA_SOURCES = [
     {
         "key": "spec",
@@ -832,7 +831,7 @@ def sort_frame(dataframe, column):
 
 
 def filter_frame_p3d_drawing(dataframe):
-    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch") if column in frame_columns(dataframe)]
+    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch", "eqpch") if column in frame_columns(dataframe)]
     if not eqp_columns:
         return dataframe
     if is_polars_frame(dataframe):
@@ -857,7 +856,7 @@ def filter_frame_p3d_drawing(dataframe):
 
 
 def filter_frame_eqp(dataframe, eqp_id):
-    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch") if column in frame_columns(dataframe)]
+    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch", "eqpch") if column in frame_columns(dataframe)]
     if not eqp_columns:
         return dataframe
     target_eqp_id = str(eqp_id).strip()
@@ -877,7 +876,7 @@ def filter_frame_eqp(dataframe, eqp_id):
 
 
 def exclude_frame_eqp(dataframe, eqp_id):
-    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch") if column in frame_columns(dataframe)]
+    eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch", "eqpch") if column in frame_columns(dataframe)]
     if not eqp_columns:
         return dataframe
     target_eqp_id = str(eqp_id).strip()
@@ -1068,7 +1067,7 @@ def add_summary_rows(
     by_main_step,
     main_columns=("main_seq", "대상스탭", "main_step", "mainStep"),
     met_columns=("met_seq", "계측스탭", "met_step", "metStep"),
-    eqp_columns=("eqpid", "eqp_id", "eqpIds", "eqp_ids"),
+    eqp_columns=("eqpid", "eqpch", "eqp_ch", "eqp_id", "eqpIds", "eqp_ids"),
     data_kind="",
     key_prefix="",
     filter_cross_line_eqp=True,
@@ -1287,7 +1286,7 @@ def add_fcc_summary_rows(
     return added
 
 
-def collect_eqp_ids(rows, eqp_columns=("eqpid",)):
+def collect_eqp_ids(rows, eqp_columns=("eqpid", "eqpch", "eqp_ch")):
     eqp_ids = set()
     for row in rows:
         eqp_ids.update(parse_eqp_ids(get_first(row, eqp_columns)))
@@ -1407,7 +1406,7 @@ def command_fcc_summary(_args):
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
-    fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid",))
+    fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid", "eqpch", "eqp_ch"))
     metrics = {
         **fcc_met_unique_counts(extra_met_rows),
         "centerEqpCount": len(fcc_center_eqp_ids),
@@ -1427,7 +1426,7 @@ def command_fcc_summary(_args):
         "centerCount",
         by_main_step,
         mapped_keys,
-        eqp_columns=("eqpid",),
+        eqp_columns=("eqpid", "eqpch", "eqp_ch"),
         key_prefix="fcc_step",
         chart_root="step",
         source_priority=1,
@@ -1436,12 +1435,12 @@ def command_fcc_summary(_args):
     diagnostics["usedRows"]["fcc_extra_fail"] = sum(
         1
         for row in extra_fail_rows
-        if set(parse_eqp_ids(get_first(row, ("eqpid",)))) & fcc_center_eqp_ids
+        if set(parse_eqp_ids(get_first(row, ("eqpid", "eqpch", "eqp_ch")))) & fcc_center_eqp_ids
     )
     diagnostics["usedRows"]["fcc_extra_std"] = sum(
         1
         for row in extra_std_rows
-        if set(parse_eqp_ids(get_first(row, ("eqpid",)))) & fcc_center_eqp_ids
+        if set(parse_eqp_ids(get_first(row, ("eqpid", "eqpch", "eqp_ch")))) & fcc_center_eqp_ids
     )
 
     rows = [
@@ -1889,6 +1888,7 @@ def select_columns(dataframe):
         "lot_wf",
         "step_seq",
         "eqp_ch",
+        "eqpch",
         "eqp_id",
         "eqpid",
         "item_id",
@@ -1992,7 +1992,6 @@ def command_chart(args):
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
 
     pm_events = pm_events_for_eqp(args.eqp_id)
-    pm_histories = pm_history_rows_for_eqp(args.eqp_id)
 
     write_json(
         {
@@ -2033,7 +2032,6 @@ def command_chart(args):
             "failPoints": chart_records(fail_for_eqp, None, "center"),
             "stdPoints": chart_records(std_for_eqp, None, "std"),
             "pmEvents": pm_events,
-            "pmHistories": pm_histories,
         }
     )
 
@@ -2094,7 +2092,6 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
         "failPoints": chart_records(fail_for_eqp, None, "center"),
         "stdPoints": chart_records(std_for_eqp, None, "std"),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
-        "pmHistories": pm_history_rows_for_eqp(eqp_id) if include_pm else [],
     }
 
 
@@ -2139,37 +2136,6 @@ def pm_events_for_eqp(eqp_id):
         if "asset" in row:
             row["asset"] = normalize_pm_equipment(row.get("asset"))
     return add_time_fields(rows, "inprg_dt")
-
-
-def pm_history_rows_for_eqp(eqp_id):
-    pm_df = pm_frame_for_eqp(eqp_id)
-    if pm_df is None:
-        return []
-
-    columns = frame_columns(pm_df)
-    time_column = pm_time_column(columns, prefer_date=True)
-    if not time_column:
-        return []
-
-    selected_columns = list(dict.fromkeys([time_column, *PM_HISTORY_COLUMNS]))
-    rows = records(select_existing_frame_columns(sort_frame(pm_df, time_column), selected_columns))
-    histories = []
-    for row in rows:
-        history_date = clean_text(row.get(time_column)) or time_text(row.get(time_column))
-        work_type = clean_text(row.get("work_type"))
-        desc = clean_text(row.get("desc"))
-        ctttm_url = clean_text(row.get("ctttm_url"))
-        if not any([history_date, work_type, desc, ctttm_url]):
-            continue
-        histories.append(
-            {
-                "date": history_date,
-                "work_type": work_type,
-                "desc": desc,
-                "ctttm_url": ctttm_url,
-            }
-        )
-    return histories
 
 
 def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=True, include_pm=True, require_std=False):
@@ -2241,7 +2207,6 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
         "failPoints": chart_records(fail_for_eqp, None, "center"),
         "stdPoints": chart_records(std_for_eqp, None, "std"),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
-        "pmHistories": pm_history_rows_for_eqp(eqp_id) if include_pm else [],
     }
 
 
@@ -2253,7 +2218,7 @@ def fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_t
 
     try:
         fcc_fail_rows = frame_records(read_parquet(fcc_fail_source["path"]))
-        if eqp_id not in collect_eqp_ids(fcc_fail_rows, ("eqpid",)):
+        if eqp_id not in collect_eqp_ids(fcc_fail_rows, ("eqpid", "eqpch", "eqp_ch")):
             return []
         extra_rows = frame_records(read_parquet(extra_source["path"]))
         extra_met_rows = read_met_rows(extra_met_source["path"], device=None)
@@ -2264,7 +2229,7 @@ def fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_t
     specs = []
     seen = set()
     for row in extra_rows:
-        if eqp_id not in parse_eqp_ids(get_first(row, ("eqpid",))):
+        if eqp_id not in parse_eqp_ids(get_first(row, ("eqpid", "eqpch", "eqp_ch"))):
             continue
 
         main_step_raw = str(get_first(row, ("main_seq",)) or "").strip()
