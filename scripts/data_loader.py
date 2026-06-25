@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v31"
+LOADER_VERSION = "file-loader-v32"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1152,6 +1152,7 @@ def add_fcc_met_rows(target, met_rows, key_prefix="fcc", chart_root="step", sour
             "stepSeq": main_step,
             "metStep": met_step,
             "metStepPath": met_step_raw or met_step,
+            "metItem": fcc_met_item(row),
             "stepDesc": row.get("step_desc") or "",
             "sdwt": row.get("sdwt") or "",
             "centerCount": 0,
@@ -1182,6 +1183,7 @@ def fcc_met_mapping_index(met_rows):
             "mainStepPath": main_step_raw or main_step,
             "metStep": met_step,
             "metStepPath": met_step_raw or met_step,
+            "metItem": fcc_met_item(row),
             "stepDesc": row.get("step_desc") or "",
             "sdwt": row.get("sdwt") or "",
         }
@@ -1205,41 +1207,49 @@ def add_fcc_summary_rows(
     met_mapping_by_key=None,
     met_mapping_by_main_step=None,
     use_mapping_met_step=False,
+    use_mapping_met_item=False,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
     added = 0
     for row in source_rows:
-        main_step_raw = str(get_first(row, ("main_seq",)) or "").strip()
-        met_seq_raw = str(get_first(row, ("met_seq",)) or "").strip()
+        main_step_raw = str(get_first(row, ("main_seq", "main_step", "mainStep")) or "").strip()
+        met_seq_raw = str(get_first(row, ("met_seq", "met_step", "metStep")) or "").strip()
         main_step = fcc_mapping_step_code(main_step_raw)
         fail_met_step = fcc_mapping_step_code(met_seq_raw)
-        item_id = fcc_item_id_from_met_seq(met_seq_raw)
-        if not main_step or not fail_met_step or not item_id:
+        fail_item_id = fcc_item_id_from_met_seq(met_seq_raw)
+        if not main_step or not fail_met_step:
             continue
 
         mapped_entry = None
-        if use_mapping_met_step:
+        if use_mapping_met_step or use_mapping_met_item:
             mapped_entry = (met_mapping_by_key or {}).get((main_step, fail_met_step))
-            candidates = (met_mapping_by_main_step or {}).get(main_step, [])
-            if mapped_entry is None and len(candidates) == 1:
-                mapped_entry = candidates[0]
-            if mapped_entry is None:
-                continue
+            if use_mapping_met_step:
+                candidates = (met_mapping_by_main_step or {}).get(main_step, [])
+                if mapped_entry is None and len(candidates) == 1:
+                    mapped_entry = candidates[0]
+                if mapped_entry is None:
+                    continue
 
-        met_step = mapped_entry["metStep"] if mapped_entry else fail_met_step
+        met_step = mapped_entry["metStep"] if use_mapping_met_step and mapped_entry else fail_met_step
         mapping_key = f"{key_prefix}::{main_step}::{met_step}"
         if mapping_key not in mapped_keys:
+            continue
+
+        item_id = mapped_entry.get("metItem") if use_mapping_met_item and mapped_entry else ""
+        item_id = item_id or fail_item_id
+        if not item_id:
             continue
 
         met_seq = f"{met_step}_{item_id}"
         key = f"{key_prefix}::{main_step}::{met_seq}"
         step_desc, sdwt = find_step_desc(main_step, by_main_step)
         if mapped_entry:
-            main_step_raw = mapped_entry["mainStepPath"]
-            met_seq_raw = met_seq
             step_desc = mapped_entry["stepDesc"] or step_desc
             sdwt = mapped_entry["sdwt"] or sdwt
+            if use_mapping_met_step:
+                main_step_raw = mapped_entry["mainStepPath"]
+        met_seq_raw = met_seq
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
         if required_eqp_ids is not None:
             eqp_ids = [eqp_id for eqp_id in eqp_ids if eqp_id in required_eqp_ids]
@@ -1258,6 +1268,7 @@ def add_fcc_summary_rows(
                 "stepSeq": main_step,
                 "metStep": met_seq,
                 "metStepPath": met_seq_raw or met_seq,
+                "metItem": item_id,
                 "stepDesc": step_desc,
                 "sdwt": sdwt,
                 "centerCount": 0,
@@ -1272,6 +1283,8 @@ def add_fcc_summary_rows(
             current["mainStepPath"] = main_step_raw
         if met_seq_raw:
             current["metStepPath"] = met_seq_raw
+        if item_id:
+            current["metItem"] = item_id
         if step_desc and not current["stepDesc"]:
             current["stepDesc"] = step_desc
         if sdwt and not current["sdwt"]:
@@ -1291,6 +1304,10 @@ def collect_eqp_ids(rows, eqp_columns=("eqpid", "eqpch", "eqp_ch")):
     for row in rows:
         eqp_ids.update(parse_eqp_ids(get_first(row, eqp_columns)))
     return eqp_ids
+
+
+def fcc_met_item(row):
+    return normalize_item_id(row.get("met_item") or "")
 
 
 def fcc_met_unique_counts(met_rows):
@@ -1406,6 +1423,7 @@ def command_fcc_summary(_args):
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
+    fcc_step_met_by_key, _fcc_step_met_by_main_step = fcc_met_mapping_index(met_rows)
     fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid", "eqpch", "eqp_ch"))
     metrics = {
         **fcc_met_unique_counts(extra_met_rows),
@@ -1430,6 +1448,8 @@ def command_fcc_summary(_args):
         key_prefix="fcc_step",
         chart_root="step",
         source_priority=1,
+        met_mapping_by_key=fcc_step_met_by_key,
+        use_mapping_met_item=True,
     )
     diagnostics["usedRows"]["fcc_extra_met"] = len(extra_met_rows)
     diagnostics["usedRows"]["fcc_extra_fail"] = sum(
@@ -2232,8 +2252,8 @@ def fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_t
         if eqp_id not in parse_eqp_ids(get_first(row, ("eqpid", "eqpch", "eqp_ch"))):
             continue
 
-        main_step_raw = str(get_first(row, ("main_seq",)) or "").strip()
-        met_seq_raw = str(get_first(row, ("met_seq",)) or "").strip()
+        main_step_raw = str(get_first(row, ("main_seq", "main_step", "mainStep")) or "").strip()
+        met_seq_raw = str(get_first(row, ("met_seq", "met_step", "metStep")) or "").strip()
         main_step = fcc_mapping_step_code(main_step_raw)
         fail_met_step = fcc_mapping_step_code(met_seq_raw)
         item_id = fcc_item_id_from_met_seq(met_seq_raw)
