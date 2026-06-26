@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v33"
+LOADER_VERSION = "file-loader-v34"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1237,6 +1237,7 @@ def add_fcc_summary_rows(
         item_id = fail_item_id
         if not item_id:
             continue
+        met_item2 = fcc_fail_met_item2(row)
 
         met_seq = f"{met_step}_{item_id}"
         key = f"{key_prefix}::{main_step}::{met_seq}"
@@ -1266,6 +1267,7 @@ def add_fcc_summary_rows(
                 "metStep": met_seq,
                 "metStepPath": met_seq_raw or met_seq,
                 "metItem": item_id,
+                "metItem2": met_item2,
                 "stepDesc": step_desc,
                 "sdwt": sdwt,
                 "centerCount": 0,
@@ -1282,6 +1284,8 @@ def add_fcc_summary_rows(
             current["metStepPath"] = met_seq_raw
         if item_id:
             current["metItem"] = item_id
+        if met_item2:
+            current["metItem2"] = met_item2
         if step_desc and not current["stepDesc"]:
             current["stepDesc"] = step_desc
         if sdwt and not current["sdwt"]:
@@ -1305,6 +1309,13 @@ def collect_eqp_ids(rows, eqp_columns=("eqpid", "eqpch", "eqp_ch")):
 
 def fcc_met_item(row):
     return normalize_item_id(row.get("met_item") or "")
+
+
+def fcc_fail_met_item2(row):
+    value = get_first(row, ("met_item2", "metItem2"))
+    if is_missing_value(value):
+        return ""
+    return str(value or "").strip()
 
 
 def fcc_met_unique_counts(met_rows):
@@ -1936,6 +1947,25 @@ def numeric_column_values(dataframe, column):
     return values
 
 
+def is_ng_decision(value):
+    normalized = "".join(char for char in str(value or "").strip().upper() if char.isalnum())
+    return normalized == "NG"
+
+
+def final_decision_ng_numeric_values(dataframe, value_column="fab_value"):
+    values = []
+    for decision, value in zip(column_values(dataframe, "final_decision"), column_values(dataframe, value_column)):
+        if not is_ng_decision(decision):
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            values.append(number)
+    return values
+
+
 def percentile(sorted_values, ratio):
     if not sorted_values:
         return None
@@ -1967,8 +1997,10 @@ def outlier_filtered_values(values):
     return filtered or values
 
 
-def outlier_display_domain(values):
+def outlier_display_domain(values, protected_values=None):
     filtered = outlier_filtered_values(values)
+    if protected_values:
+        filtered = filtered + protected_values
     if not filtered:
         return None
     return {"min": min(filtered) - 2, "max": max(filtered) * 1.2}
@@ -1998,6 +2030,9 @@ def command_chart(args):
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
     main_all_fab_values = numeric_column_values(all_df, "fab_value")
+    center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
+    std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
+    ng_fab_values = center_ng_fab_values + std_ng_fab_values
     chart_fab_values_center = main_all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = main_all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
@@ -2029,14 +2064,14 @@ def command_chart(args):
             "domains": {
                 "x": time_domain(all_df, "tkout_time"),
                 "yFull": numeric_domain(chart_fab_values),
-                "yInitial": outlier_display_domain(main_all_fab_values),
+                "yInitial": outlier_display_domain(main_all_fab_values, ng_fab_values),
                 "center": {
                     "yFull": numeric_domain(chart_fab_values_center),
-                    "yInitial": outlier_display_domain(main_all_fab_values),
+                    "yInitial": outlier_display_domain(main_all_fab_values, center_ng_fab_values),
                 },
                 "std": {
                     "yFull": numeric_domain(chart_fab_values_std),
-                    "yInitial": outlier_display_domain(main_all_fab_values),
+                    "yInitial": outlier_display_domain(main_all_fab_values, std_ng_fab_values),
                 },
             },
             "allPoints": chart_records(all_background, None),
@@ -2060,6 +2095,9 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
     all_fab_values = numeric_column_values(all_df, "fab_value")
+    center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
+    std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
+    ng_fab_values = center_ng_fab_values + std_ng_fab_values
     chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
@@ -2089,14 +2127,14 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
         "domains": {
             "x": time_domain(all_df, "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
-            "yInitial": outlier_display_domain(all_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values, ng_fab_values),
             "center": {
                 "yFull": numeric_domain(chart_fab_values_center),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
             },
             "std": {
                 "yFull": numeric_domain(chart_fab_values_std),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yInitial": outlier_display_domain(all_fab_values, std_ng_fab_values),
             },
         },
         "allPoints": chart_records(all_background, None),
@@ -2175,6 +2213,9 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
     all_fab_values = numeric_column_values(all_df, "fab_value")
+    center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
+    std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
+    ng_fab_values = center_ng_fab_values + std_ng_fab_values
     chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
@@ -2204,14 +2245,14 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
         "domains": {
             "x": time_domain(all_df, "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
-            "yInitial": outlier_display_domain(all_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values, ng_fab_values),
             "center": {
                 "yFull": numeric_domain(chart_fab_values_center),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
             },
             "std": {
                 "yFull": numeric_domain(chart_fab_values_std),
-                "yInitial": outlier_display_domain(all_fab_values),
+                "yInitial": outlier_display_domain(all_fab_values, std_ng_fab_values),
             },
         },
         "allPoints": chart_records(all_background, None),

@@ -600,6 +600,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
                   <div className="subStepButtons" id={`additional-metsteps-${group.mainStep}`}>
                     {group.metSteps.map((row) => {
                       const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+                      const displayMetItem = String(row.metItem2 ?? '').trim() || metItem;
 
                       return (
                         <button
@@ -609,7 +610,7 @@ function AdditionalAnomalyStepTree({ groups, selectedMetStepKey, onSelectMetStep
                         >
                           <span>
                             {metStepNo}
-                            {metItem ? ` / ${metItem}` : ''}
+                            {displayMetItem ? ` / ${displayMetItem}` : ''}
                           </span>
                           <strong>{row.eqpIds?.length ?? 0} eqp</strong>
                         </button>
@@ -692,9 +693,11 @@ function isNgDecision(value) {
   return normalizeTextValue(value).toUpperCase().replace(/[^A-Z0-9]/g, '') === 'NG';
 }
 
-function getNgDecisionValue(point) {
-  if (point?.anomaly_type === 'std') return point.std_result ?? point.final_decision;
-  return point?.final_decision;
+function hasNgDecision(point) {
+  if (point?.anomaly_type === 'std') {
+    return isNgDecision(point.std_result) || isNgDecision(point.final_decision);
+  }
+  return isNgDecision(point?.final_decision);
 }
 
 function getPointIdentity(point) {
@@ -708,7 +711,7 @@ function buildNgIdentitySet(points) {
   const identities = new Set();
 
   points.forEach((point) => {
-    if (!isNgDecision(getNgDecisionValue(point))) return;
+    if (!hasNgDecision(point)) return;
     const identity = getPointIdentity(point);
     if (identity) identities.add(identity);
   });
@@ -717,7 +720,7 @@ function buildNgIdentitySet(points) {
 }
 
 function pointMatchesNg(point, ngIdentitySet = null) {
-  if (isNgDecision(getNgDecisionValue(point))) return true;
+  if (hasNgDecision(point)) return true;
   const identity = getPointIdentity(point);
   return Boolean(identity && ngIdentitySet?.has(identity));
 }
