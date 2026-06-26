@@ -10,8 +10,8 @@
 | 중심치 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c/main_fail_list.parquet` | `main_seq`, `met_seq`, `eqpid` 또는 `eqpch` |
 | 산포 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c/main_fail_list_std.parquet` | `main_seq`, `met_seq`, `eqpid` 또는 `eqpch` |
 | MET 매핑 | `/appdata/hadoop/code/eads/PFB3/met.txt` | `device`, `main_step`, `met_step`, `step_desc`, `sdwt` |
-| FCC 스탭 MET 매핑 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fcc_step/met_fcc.txt` | `device`, `main_step`, `met_step`, `met_item`, `step_desc`, `sdwt` |
-| FCC 중심치 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fcc_step/fail_list.parquet` | `main_seq`/`main_step`, `met_seq`/`met_step`, `met_item2`, `eqpid` 또는 `eqpch` |
+| FCC 스탭 MET 매핑 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fcc_step/met_fcc.txt` | `device`, `main_step`, `met_step`, `met_item`, `met_item2`, `step_desc`, `sdwt` |
+| FCC 중심치 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fcc_step/fail_list.parquet` | `main_seq`/`main_step`, `met_seq`/`met_step`, `eqpid` 또는 `eqpch` |
 | FCC 추가 MET 매핑 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/met_fcc.txt` | `device`, `main_step`, `met_step`, `step_desc`, `sdwt` |
 | FCC 추가 중심치 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fail_list.parquet` | `main_seq`, `met_seq`, `eqpid` 또는 `eqpch` |
 | FCC 추가 산포 이상 목록 | `/appdata/hadoop/code/eads/PFB3/D1c_fcc/fail_list_std.parquet` | `main_seq`, `met_seq`, `eqpid` 또는 `eqpch` |

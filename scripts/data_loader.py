@@ -1153,6 +1153,7 @@ def add_fcc_met_rows(target, met_rows, key_prefix="fcc", chart_root="step", sour
             "metStep": met_step,
             "metStepPath": met_step_raw or met_step,
             "metItem": fcc_met_item(row),
+            "metItem2": fcc_met_item2(row),
             "stepDesc": row.get("step_desc") or "",
             "sdwt": row.get("sdwt") or "",
             "centerCount": 0,
@@ -1184,6 +1185,7 @@ def fcc_met_mapping_index(met_rows):
             "metStep": met_step,
             "metStepPath": met_step_raw or met_step,
             "metItem": fcc_met_item(row),
+            "metItem2": fcc_met_item2(row),
             "stepDesc": row.get("step_desc") or "",
             "sdwt": row.get("sdwt") or "",
         }
@@ -1220,9 +1222,8 @@ def add_fcc_summary_rows(
         if not main_step or not fail_met_step:
             continue
 
-        mapped_entry = None
+        mapped_entry = (met_mapping_by_key or {}).get((main_step, fail_met_step))
         if use_mapping_met_step:
-            mapped_entry = (met_mapping_by_key or {}).get((main_step, fail_met_step))
             candidates = (met_mapping_by_main_step or {}).get(main_step, [])
             if mapped_entry is None and len(candidates) == 1:
                 mapped_entry = candidates[0]
@@ -1237,7 +1238,7 @@ def add_fcc_summary_rows(
         item_id = fail_item_id
         if not item_id:
             continue
-        met_item2 = fcc_fail_met_item2(row)
+        met_item2 = mapped_entry.get("metItem2", "") if mapped_entry else ""
 
         met_seq = f"{met_step}_{item_id}"
         key = f"{key_prefix}::{main_step}::{met_seq}"
@@ -1311,7 +1312,7 @@ def fcc_met_item(row):
     return normalize_item_id(row.get("met_item") or "")
 
 
-def fcc_fail_met_item2(row):
+def fcc_met_item2(row):
     value = get_first(row, ("met_item2", "metItem2"))
     if is_missing_value(value):
         return ""
@@ -1431,6 +1432,7 @@ def command_fcc_summary(_args):
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
 
     by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
+    fcc_step_met_by_key, _fcc_step_met_by_main_step = fcc_met_mapping_index(met_rows)
     fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid", "eqpch", "eqp_ch"))
     metrics = {
         **fcc_met_unique_counts(extra_met_rows),
@@ -1455,6 +1457,7 @@ def command_fcc_summary(_args):
         key_prefix="fcc_step",
         chart_root="step",
         source_priority=1,
+        met_mapping_by_key=fcc_step_met_by_key,
     )
     diagnostics["usedRows"]["fcc_extra_met"] = len(extra_met_rows)
     diagnostics["usedRows"]["fcc_extra_fail"] = sum(
