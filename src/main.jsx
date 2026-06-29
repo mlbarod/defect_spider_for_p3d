@@ -1778,7 +1778,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
     const key = `${eqpId}-extra-center-${chart.row?.key ?? index}`;
     chartSections.push({
       key,
-      label: 'FCC 추가 중심치 이상',
+      label: '연관 step 중심치 이상',
       tone: 'extraCenter',
       element:
         chart.ok !== false && (chart.failPoints?.length ?? 0) > 0 ? (

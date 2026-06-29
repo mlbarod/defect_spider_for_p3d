@@ -1252,6 +1252,12 @@ tr:last-child td {
   padding-left: 14px;
 }
 
+.fccRelatedChartGroup + .fccRelatedChartGroup {
+  margin-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, var(--foreground));
+  padding-top: 18px;
+}
+
 .fccRelatedChartHeader {
   display: flex;
   align-items: start;
