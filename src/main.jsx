@@ -7,7 +7,7 @@ const CONFIG = {
   selectLine: 'PFB3',
   device: 'D1c',
   eadsRoot: '/appdata/hadoop/code/eads',
-  pmCodePath: '/appdata/abnormal_trend/pic/pm_code_info.parquet',
+  pmCodePath: '/appdata/abnormal_trend/pic/change_code_info.parquet',
 };
 
 const isMainLine = CONFIG.lineName === CONFIG.lineName;
@@ -48,7 +48,7 @@ const DATA_SOURCES = [
     key: 'pm',
     label: 'PM 이력',
     path: CONFIG.pmCodePath,
-    requiredColumns: ['asset 또는 eqp_ch/eqpch', 'inprg_dt', 'work_type'],
+    requiredColumns: ['asset 또는 eqp_ch/eqpch', 'inprg_dt', 'work_type', 'description', 'url'],
   },
 ];
 
@@ -1434,6 +1434,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
 });
 
 const NG_TABLE_COLUMNS = ['wafer_id', 'tkout_time', 'step_seq', 'eqp_id', 'lot_id', 'process_id', 'item_id', 'fab_value'];
+const PM_TABLE_COLUMNS = ['asset', 'work_type', 'inprg_dt', 'description', 'Link'];
 const ANOMALY_META = {
   center: { label: '중심치 이상', tagClass: 'center' },
   std: { label: '산포이상', tagClass: 'std' },
@@ -1516,6 +1517,68 @@ function NgPointTable({ points, row, eqpId }) {
           ) : (
             <tr>
               <td colSpan={NG_TABLE_COLUMNS.length}>NG 데이터가 없습니다.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function getPmTableValue(event, column) {
+  if (column === 'inprg_dt') return event.inprg_dt_text || event.inprg_dt;
+  return event[column];
+}
+
+function getPmLinkUrl(event) {
+  const value = event?.url;
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'number' && Number.isNaN(value)) return '';
+  const text = String(value).trim();
+  return text.toLowerCase() === 'nan' ? '' : text;
+}
+
+function PmEventTable({ events }) {
+  return (
+    <div className="ngTableShell pmTableShell">
+      <table className="ngPointTable pmEventTable">
+        <thead>
+          <tr>
+            {PM_TABLE_COLUMNS.map((column) => (
+              <th key={column}>{column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {events.length > 0 ? (
+            events.map((event, index) => {
+              const linkUrl = getPmLinkUrl(event);
+
+              return (
+                <tr key={`${event.inprg_dt_ms ?? event.inprg_dt}-${event.asset ?? ''}-${index}`}>
+                  {PM_TABLE_COLUMNS.map((column) => {
+                    if (column === 'Link') {
+                      return (
+                        <td key={column} className="pmLinkCell">
+                          {linkUrl ? (
+                            <a className="pmLinkButton" href={linkUrl} target="_blank" rel="noreferrer">
+                              Link
+                            </a>
+                          ) : (
+                            <span className="pmLinkButton disabled">Link</span>
+                          )}
+                        </td>
+                      );
+                    }
+
+                    return <td key={column}>{formatTableValue(getPmTableValue(event, column))}</td>;
+                  })}
+                </tr>
+              );
+            })
+          ) : (
+            <tr>
+              <td colSpan={PM_TABLE_COLUMNS.length}>PM 이력 데이터가 없습니다.</td>
             </tr>
           )}
         </tbody>
@@ -1628,8 +1691,10 @@ function FccRelatedChartGroup({ row, eqpId, sections }) {
 
 function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
+  const [isPmTableOpen, setIsPmTableOpen] = useState(false);
   const resolvedCenterPoints = centerPoints ?? (anomalyType === 'center' ? points : []);
   const resolvedStdPoints = stdPoints ?? (anomalyType === 'std' ? points : []);
+  const pmEvents = chartData.pmEvents ?? [];
   const anomalyTypes = [
     resolvedCenterPoints.length > 0 ? 'center' : '',
     resolvedStdPoints.length > 0 ? 'std' : '',
@@ -1642,6 +1707,7 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
   const ngTablePoints = useMemo(() => getNgTablePoints(combinedPoints, ngIdentitySet, eqpId), [combinedPoints, ngIdentitySet, eqpId]);
   const cardId = String(`${eqpId}-${visibleAnomalyTypes.join('-')}-${row?.key ?? ''}`).replace(/[^a-zA-Z0-9_-]/g, '-');
   const tableId = `ng-table-${cardId}`;
+  const pmTableId = `pm-table-${cardId}`;
   const chartAnomalyType = visibleAnomalyTypes.join('-');
   const chartDomains = visibleAnomalyTypes.length === 1 ? getTypedDomains(chartData.domains ?? null, visibleAnomalyTypes[0]) : chartData.domains;
 
@@ -1660,7 +1726,7 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
         allPoints={chartData.allPoints ?? []}
         failPoints={resolvedCenterPoints}
         stdPoints={resolvedStdPoints}
-        pmEvents={chartData.pmEvents ?? []}
+        pmEvents={pmEvents}
         domains={chartDomains}
         eqpId={eqpId}
         anomalyType={chartAnomalyType}
@@ -1676,6 +1742,18 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
       {isTableOpen && (
         <div id={tableId}>
           <NgPointTable points={ngTablePoints} row={row} eqpId={eqpId} />
+        </div>
+      )}
+      <button className="ngTableToggle pmTableToggle" type="button" onClick={() => setIsPmTableOpen((current) => !current)} aria-expanded={isPmTableOpen} aria-controls={pmTableId}>
+        <span className={`chevron ${isPmTableOpen ? 'open' : ''}`} aria-hidden="true">
+          ▸
+        </span>
+        <span>PM 이력 보기</span>
+        <strong>{pmEvents.length.toLocaleString()} rows</strong>
+      </button>
+      {isPmTableOpen && (
+        <div id={pmTableId}>
+          <PmEventTable events={pmEvents} />
         </div>
       )}
     </div>

@@ -955,6 +955,7 @@ code {
 .sdwtButtons button:focus-visible,
 .subStepButton:focus-visible,
 .ngTableToggle:focus-visible,
+.pmLinkButton:focus-visible,
 .chamberLineButton:focus-visible,
 .spiderAppCard:focus-visible,
 .homeBackButton:focus-visible,
@@ -1722,6 +1723,52 @@ tr:last-child td {
 
 .ngPointTable th {
   color: var(--muted-foreground);
+}
+
+.pmTableShell {
+  margin-bottom: 18px;
+}
+
+.pmEventTable {
+  min-width: 900px;
+}
+
+.pmEventTable td:nth-child(4) {
+  min-width: 260px;
+  max-width: 460px;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.pmLinkCell {
+  text-align: right;
+}
+
+.pmLinkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 26px;
+  border: 1px solid color-mix(in srgb, var(--chart-2) 42%, var(--border));
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--chart-2-soft);
+  color: color-mix(in srgb, var(--chart-2) 72%, var(--foreground));
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.pmLinkButton:hover {
+  border-color: color-mix(in srgb, var(--chart-2) 70%, var(--border));
+  background: color-mix(in srgb, var(--chart-2) 16%, var(--background));
+}
+
+.pmLinkButton.disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .pmLine {

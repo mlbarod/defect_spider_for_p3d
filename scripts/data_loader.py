@@ -14,7 +14,7 @@ CONFIG = {
     "selectLine": "PFB3",
     "device": "D1c",
     "eadsRoot": "/appdata/hadoop/code/eads",
-    "pmCodePath": "/appdata/abnormal_trend/pic/pm_code_info.parquet",
+    "pmCodePath": "/appdata/abnormal_trend/pic/change_code_info.parquet",
 }
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -2180,13 +2180,16 @@ def pm_events_for_eqp(eqp_id):
     if not time_column or "work_type" not in columns:
         return []
 
-    selected_columns = ["asset", time_column, "work_type"]
+    selected_columns = ["asset", time_column, "work_type", "description", "url"]
     rows = records(select_existing_frame_columns(sort_frame(pm_df, time_column), selected_columns).head(80))
     for row in rows:
         if time_column != "inprg_dt":
             row["inprg_dt"] = row.get(time_column)
         if "asset" in row:
             row["asset"] = normalize_pm_equipment(row.get("asset"))
+        for field in ("description", "url"):
+            if field not in row or is_missing_value(row[field]):
+                row[field] = ""
     return add_time_fields(rows, "inprg_dt")
 
 
@@ -2336,7 +2339,7 @@ def fcc_extra_center_charts(eqp_id):
     for spec in fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_type="center"):
         try:
             resolved_paths = resolve_fcc_chart_paths(spec["mainStepPath"], spec["metStepPath"], "root", resolve_std=False)
-            payload = fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=False, include_pm=False)
+            payload = fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=False, include_pm=True)
             payload["row"] = spec
             charts.append(payload)
         except Exception as exc:
@@ -2369,7 +2372,7 @@ def fcc_extra_std_charts(eqp_id):
                 eqp_id,
                 include_center=False,
                 include_std=True,
-                include_pm=False,
+                include_pm=True,
                 require_std=True,
             )
             payload["row"] = spec
