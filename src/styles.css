@@ -820,11 +820,11 @@ code {
 }
 
 .secondaryStepPanel {
-  min-height: 320px;
+  min-height: 480px;
 }
 
 .secondaryStepList {
-  max-height: min(360px, calc(100vh - 320px));
+  max-height: min(540px, calc(100vh - 260px));
 }
 
 .emptyPanel {
@@ -1243,6 +1243,102 @@ tr:last-child td {
   content: '';
   background: var(--destructive);
   pointer-events: none;
+}
+
+.fccRelatedChartGroup {
+  display: grid;
+  gap: 12px;
+  border-left: 4px solid color-mix(in srgb, var(--chart-2) 76%, var(--border));
+  padding-left: 14px;
+}
+
+.fccRelatedChartHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 2px 0 0;
+}
+
+.fccRelatedChartTitle {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fccRelatedChartTitle strong {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.fccRelatedChartTitle span {
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.fccRelatedChartTags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fccRelatedChartTags span,
+.fccRelatedChartItemLabel {
+  border: 1px solid color-mix(in srgb, var(--chart-2) 42%, var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--chart-2-soft);
+  color: color-mix(in srgb, var(--chart-2) 68%, var(--foreground));
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.fccRelatedChartTags span {
+  padding: 5px 8px;
+}
+
+.fccRelatedChartStack {
+  display: grid;
+  gap: 12px;
+}
+
+.fccRelatedChartItem {
+  position: relative;
+  display: grid;
+  gap: 7px;
+}
+
+.fccRelatedChartItem::before {
+  position: absolute;
+  top: 17px;
+  left: -14px;
+  width: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--chart-2) 62%, var(--border));
+  content: '';
+}
+
+.fccRelatedChartItemLabel {
+  z-index: 1;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fccRelatedChartItem.base .fccRelatedChartItemLabel {
+  border-color: color-mix(in srgb, var(--destructive) 32%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 8%, var(--card));
+  color: color-mix(in srgb, var(--destructive) 78%, var(--foreground));
 }
 
 .emptyChart {
@@ -1831,6 +1927,14 @@ tr:last-child td {
 
   .detailHeader {
     flex-direction: column;
+  }
+
+  .fccRelatedChartHeader {
+    flex-direction: column;
+  }
+
+  .fccRelatedChartTags {
+    justify-content: flex-start;
   }
 
   .statusChip {

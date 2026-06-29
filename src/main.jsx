@@ -1598,6 +1598,34 @@ function ChartFailureCard({ row, eqpId, error, data }) {
   );
 }
 
+function FccRelatedChartGroup({ row, eqpId, sections }) {
+  const visibleLabels = [...new Set(sections.map((section) => section.label))];
+
+  return (
+    <section className="fccRelatedChartGroup" aria-label={`${eqpId} FCC 연관 chart`}>
+      <div className="fccRelatedChartHeader">
+        <div className="fccRelatedChartTitle">
+          <strong>{eqpId}</strong>
+          <span>{getChartHeading(row)} / FCC 중심치 연관</span>
+        </div>
+        <div className="fccRelatedChartTags" aria-label="FCC chart category">
+          {visibleLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+      </div>
+      <div className="fccRelatedChartStack">
+        {sections.map((section) => (
+          <div key={section.key} className={`fccRelatedChartItem ${section.tone}`}>
+            <span className="fccRelatedChartItemLabel">{section.label}</span>
+            {section.element}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const resolvedCenterPoints = centerPoints ?? (anomalyType === 'center' ? points : []);
@@ -1698,6 +1726,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const extraCenterHighlightRange = useMemo(() => getTkoutTimeRange(centerNgTablePoints), [centerNgTablePoints]);
   const hasExtraCharts = extraCenterCharts.length > 0 || extraStdCharts.length > 0;
   const hasBaseChart = centerPoints.length > 0 || stdChartPoints.length > 0;
+  const isFccRelatedChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step';
 
   if (chartState.loading || chartState.error || (!hasBaseChart && !hasExtraCharts)) {
     return (
@@ -1725,11 +1754,15 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
     );
   }
 
-  return (
-    <>
-      {hasBaseChart && (
+  const chartSections = [];
+
+  if (hasBaseChart) {
+    chartSections.push({
+      key: `${eqpId}-base`,
+      label: 'FCC 중심치 이상',
+      tone: 'base',
+      element: (
         <AnomalyChartCard
-          key={`${eqpId}-base`}
           row={row}
           eqpId={eqpId}
           chartData={chartState.data}
@@ -1737,11 +1770,19 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
           centerPoints={centerPoints}
           stdPoints={stdChartPoints}
         />
-      )}
-      {extraCenterCharts.map((chart, index) =>
+      ),
+    });
+  }
+
+  extraCenterCharts.forEach((chart, index) => {
+    const key = `${eqpId}-extra-center-${chart.row?.key ?? index}`;
+    chartSections.push({
+      key,
+      label: 'FCC 추가 중심치 이상',
+      tone: 'extraCenter',
+      element:
         chart.ok !== false && (chart.failPoints?.length ?? 0) > 0 ? (
           <AnomalyChartCard
-            key={`${eqpId}-extra-center-${chart.row?.key ?? index}`}
             row={chart.row ?? row}
             eqpId={eqpId}
             chartData={chart}
@@ -1751,18 +1792,24 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
           />
         ) : (
           <ChartFailureCard
-            key={`${eqpId}-extra-center-failed-${chart.row?.key ?? index}`}
             row={chart.row ?? row}
             eqpId={eqpId}
             error={chart.error || 'FCC 추가 중심치 chart 데이터를 찾지 못했습니다.'}
             data={chart}
           />
         ),
-      )}
-      {extraStdCharts.map((chart, index) =>
+    });
+  });
+
+  extraStdCharts.forEach((chart, index) => {
+    const key = `${eqpId}-extra-std-${chart.row?.key ?? index}`;
+    chartSections.push({
+      key,
+      label: 'FCC 추가 산포 이상',
+      tone: 'extraStd',
+      element:
         chart.ok !== false && (chart.stdPoints?.length ?? 0) > 0 ? (
           <AnomalyChartCard
-            key={`${eqpId}-extra-std-${chart.row?.key ?? index}`}
             row={chart.row ?? row}
             eqpId={eqpId}
             chartData={chart}
@@ -1771,16 +1818,20 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
           />
         ) : (
           <ChartFailureCard
-            key={`${eqpId}-extra-std-failed-${chart.row?.key ?? index}`}
             row={chart.row ?? row}
             eqpId={eqpId}
             error={chart.error || 'FCC 추가 산포 chart 데이터를 찾지 못했습니다.'}
             data={chart}
           />
         ),
-      )}
-    </>
-  );
+    });
+  });
+
+  if (isFccRelatedChart) {
+    return <FccRelatedChartGroup row={row} eqpId={eqpId} sections={chartSections} />;
+  }
+
+  return <>{chartSections.map((section) => <React.Fragment key={section.key}>{section.element}</React.Fragment>)}</>;
 }
 
 function EmptyChartState({ selectedRow }) {
