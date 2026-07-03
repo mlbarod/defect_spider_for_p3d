@@ -1367,49 +1367,6 @@ def fcc_met_unique_counts(met_rows):
     }
 
 
-def chamber_line_mapping_entries(diagnostics=None):
-    entries = []
-    try:
-        content = read_text_file(LINE_MAPPING_PATH)
-        header, raw_rows = read_tab_rows_from_text(content)
-        line_column = get_column_name(header, "line")
-        line_code_column = get_column_name(header, "line_code")
-        device_column = get_column_name(header, "device")
-        if diagnostics is not None:
-            diagnostics.setdefault("inputRows", {})["line_mapping"] = len(raw_rows)
-
-        if not line_code_column or not device_column:
-            raise ValueError("line_mapping.txt에서 line_code/device 컬럼을 찾지 못했습니다.")
-
-        for row in raw_rows:
-            line_code = str(row.get(line_code_column, "") or "").strip()
-            device = str(row.get(device_column, "") or "").strip()
-            if not line_code or not device:
-                continue
-            entries.append(
-                {
-                    "lineName": str(row.get(line_column, "") or "").strip() if line_column else "",
-                    "lineCode": line_code,
-                    "device": device,
-                }
-            )
-    except Exception as exc:
-        if diagnostics is not None:
-            diagnostics.setdefault("warnings", []).append(f"관리 STEP line_mapping 읽기 실패: {exc}")
-            diagnostics.setdefault("inputRows", {})["line_mapping"] = 0
-
-    if entries:
-        return entries
-
-    return [
-        {
-            "lineName": CONFIG["lineName"],
-            "lineCode": CONFIG["selectLine"],
-            "device": CONFIG["device"],
-        }
-    ]
-
-
 def load_optional_parquet(source, diagnostics):
     try:
         dataframe = read_parquet(source["path"])
@@ -2386,70 +2343,61 @@ def management_met_specs_for_main_step(main_step, diagnostics):
     if not target_main_step:
         return []
 
-    line_entries = chamber_line_mapping_entries(diagnostics)
-    line_devices = {}
-    for entry in line_entries:
-        line_devices.setdefault(entry["lineCode"], set()).add(entry["device"])
+    met_source = next(source for source in DATA_SOURCES if source["key"] == "met")
+    line_code = CONFIG["selectLine"]
+    source_key = "management_met"
+    try:
+        met_rows = read_met_rows(met_source["path"], device=None)
+        diagnostics.setdefault("inputRows", {})[source_key] = len(met_rows)
+        diagnostics.setdefault("columns", {})[source_key] = list(met_rows[0].keys()) if met_rows else []
+        diagnostics.setdefault("resolvedPaths", {})["managementMetPath"] = met_source["path"]
+    except Exception as exc:
+        diagnostics.setdefault("warnings", []).append(f"관리 STEP MET 매핑 읽기 실패({met_source['path']}): {exc}")
+        diagnostics.setdefault("inputRows", {})[source_key] = 0
+        diagnostics.setdefault("columns", {})[source_key] = []
+        return []
 
     specs = []
     seen = set()
-    for line_code, mapped_devices in sorted(line_devices.items()):
-        met_path = f"{CONFIG['eadsRoot']}/{line_code}/met.txt"
-        source_key = f"management_met_{line_code}"
-        try:
-            met_rows = read_met_rows(met_path, device=None)
-            diagnostics.setdefault("inputRows", {})[source_key] = len(met_rows)
-            diagnostics.setdefault("columns", {})[source_key] = list(met_rows[0].keys()) if met_rows else []
-        except Exception as exc:
-            diagnostics.setdefault("warnings", []).append(f"관리 STEP MET 매핑 읽기 실패({line_code}): {exc}")
-            diagnostics.setdefault("inputRows", {})[source_key] = 0
-            diagnostics.setdefault("columns", {})[source_key] = []
+    for row in met_rows:
+        row_main_step_raw = str(row.get("main_step") or "").strip()
+        if fcc_mapping_step_code(row_main_step_raw) != target_main_step:
             continue
 
-        for row in met_rows:
-            row_main_step_raw = str(row.get("main_step") or "").strip()
-            if fcc_mapping_step_code(row_main_step_raw) != target_main_step:
-                continue
+        device = str(row.get("device") or CONFIG["device"]).strip()
+        if not device:
+            continue
 
-            row_line_code = str(get_first(row, ("line_code", "lineCode")) or line_code).strip() or line_code
-            row_device = str(row.get("device") or "").strip()
-            devices = [row_device] if row_device else sorted(mapped_devices)
-            for device in devices:
-                if not device:
-                    continue
-                if mapped_devices and row_device and device not in mapped_devices:
-                    continue
-
-                row_met_step_raw = str(row.get("met_step") or "").strip()
-                row_met_item_raw = str(get_first(row, ("met_item", "metItem")) or "").strip()
-                chart_met_step = management_chart_met_step(row_met_step_raw, row_met_item_raw)
-                if not chart_met_step:
-                    continue
-                key = (row_line_code, device, row_main_step_raw, chart_met_step)
-                if key in seen:
-                    continue
-                seen.add(key)
-                specs.append(
-                    {
-                        "key": f"management::{row_line_code}::{device}::{row_main_step_raw}::{chart_met_step}",
-                        "dataKind": "chamber",
-                        "chartRoot": "management",
-                        "lineCode": row_line_code,
-                        "device": device,
-                        "mainStep": normalize_step(row_main_step_raw),
-                        "mainStepPath": row_main_step_raw,
-                        "stepSeq": normalize_step(row_main_step_raw),
-                        "metStep": chart_met_step,
-                        "metStepPath": chart_met_step,
-                        "stepDesc": row.get("step_desc") or "",
-                        "sdwt": row.get("sdwt") or "",
-                        "centerCount": 1,
-                        "stdCount": 0,
-                        "centerEqpIds": [],
-                        "stdEqpIds": [],
-                        "eqpIds": [],
-                    }
-                )
+        row_met_step_raw = str(row.get("met_step") or "").strip()
+        row_met_item_raw = str(get_first(row, ("met_item", "metItem")) or "").strip()
+        chart_met_step = management_chart_met_step(row_met_step_raw, row_met_item_raw)
+        if not chart_met_step:
+            continue
+        key = (line_code, device, row_main_step_raw, chart_met_step)
+        if key in seen:
+            continue
+        seen.add(key)
+        specs.append(
+            {
+                "key": f"management::{line_code}::{device}::{row_main_step_raw}::{chart_met_step}",
+                "dataKind": "chamber",
+                "chartRoot": "management",
+                "lineCode": line_code,
+                "device": device,
+                "mainStep": normalize_step(row_main_step_raw),
+                "mainStepPath": row_main_step_raw,
+                "stepSeq": normalize_step(row_main_step_raw),
+                "metStep": chart_met_step,
+                "metStepPath": chart_met_step,
+                "stepDesc": row.get("step_desc") or "",
+                "sdwt": row.get("sdwt") or "",
+                "centerCount": 1,
+                "stdCount": 0,
+                "centerEqpIds": [],
+                "stdEqpIds": [],
+                "eqpIds": [],
+            }
+        )
 
     diagnostics.setdefault("usedRows", {})["management_met"] = len(specs)
     return specs
