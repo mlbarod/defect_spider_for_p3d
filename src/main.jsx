@@ -694,6 +694,7 @@ function isNgDecision(value) {
 }
 
 function hasNgDecision(point) {
+  if (point?.management_highlight) return true;
   if (point?.anomaly_type === 'std') {
     return isNgDecision(point.std_result) || isNgDecision(point.final_decision);
   }
@@ -1703,7 +1704,7 @@ function FccRelatedChartGroup({ row, eqpId, sections }) {
   );
 }
 
-function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null }) {
+function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null, titleAction = null }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const [isPmTableOpen, setIsPmTableOpen] = useState(false);
   const resolvedCenterPoints = centerPoints ?? (anomalyType === 'center' ? points : []);
@@ -1734,7 +1735,10 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
             {getChartHeading(row, chartData)} / {titleLabel}
           </span>
         </div>
-        <ChartTag anomalyTypes={visibleAnomalyTypes} />
+        <div className="chartTitleActions">
+          {titleAction}
+          <ChartTag anomalyTypes={visibleAnomalyTypes} />
+        </div>
       </div>
       <ScatterChart
         allPoints={chartData.allPoints ?? []}
@@ -1774,8 +1778,103 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
   );
 }
 
+function ManagementStepChartCard({ chart, eqpId }) {
+  const row = chart.row ?? {};
+  const title = [row.lineCode, row.device, getChartHeading(row, chart)].filter(Boolean).join(' / ');
+
+  if (chart.ok === false) {
+    return <ChartFailureCard row={row} eqpId={eqpId} error={chart.error || '관리 STEP all scatter 데이터를 찾지 못했습니다.'} data={chart} />;
+  }
+
+  return (
+    <section className="managementChartPanel">
+      <div className="managementChartTitle">
+        <strong>{title || '관리 STEP CHART'}</strong>
+        <span>{(chart.highlightPoints?.length ?? 0).toLocaleString()} highlighted</span>
+      </div>
+      <ScatterChart
+        allPoints={chart.allPoints ?? []}
+        failPoints={chart.highlightPoints ?? []}
+        stdPoints={[]}
+        pmEvents={[]}
+        domains={chart.domains}
+        eqpId={eqpId}
+        anomalyType="management"
+      />
+    </section>
+  );
+}
+
+function ManagementStepChartModal({ row, eqpId, onClose }) {
+  const [state, setState] = useState({ loading: true, error: '', data: null });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      mainStep: row.mainStepPath ?? row.mainStep,
+      chartMetStep: getChartMetStep(row),
+      eqpId,
+      t: String(Date.now()),
+    });
+
+    setState({ loading: true, error: '', data: null });
+    fetchJson(`/api/fcc-management-chart?${params.toString()}`, { signal: controller.signal })
+      .then((payload) => setState({ loading: false, error: '', data: payload }))
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setState({ loading: false, error: error.message, data: error.payload ?? null });
+      });
+
+    return () => controller.abort();
+  }, [row, eqpId]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const charts = state.data?.charts ?? [];
+
+  return (
+    <div className="modalBackdrop" role="presentation" onMouseDown={onClose}>
+      <section className="managementModal" role="dialog" aria-modal="true" aria-label={`${eqpId} 관리 STEP CHART`} onMouseDown={(event) => event.stopPropagation()}>
+        <header className="managementModalHeader">
+          <div>
+            <strong>{eqpId}</strong>
+            <span>{getChartHeading(row)} / 관리 STEP CHART</span>
+          </div>
+          <button className="modalCloseButton" type="button" onClick={onClose} aria-label="닫기">
+            ×
+          </button>
+        </header>
+
+        <div className="managementModalBody">
+          {state.loading && <div className="emptyMiniState">관리 STEP all scatter 파일을 읽고 있습니다.</div>}
+          {!state.loading && state.error && (
+            <div className="emptyChartBody">
+              <p>{state.error}</p>
+              <ChartFailurePaths data={state.data} />
+            </div>
+          )}
+          {!state.loading && !state.error && charts.length === 0 && (
+            <div className="emptyChartBody">
+              <p>FCC 중심치 이상목록의 main_step과 매칭되는 관리 STEP MET 매핑을 찾지 못했습니다.</p>
+            </div>
+          )}
+          {!state.loading && !state.error && charts.length > 0 && charts.map((chart, index) => <ManagementStepChartCard key={chart.row?.key ?? index} chart={chart} eqpId={eqpId} />)}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart' }) {
   const [chartState, setChartState] = useState({ loading: true, error: '', data: null });
+  const [isManagementModalOpen, setIsManagementModalOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1806,6 +1905,10 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
     return () => controller.abort();
   }, [chartEndpoint, eqpId, onLatestDate, row]);
 
+  useEffect(() => {
+    setIsManagementModalOpen(false);
+  }, [row?.key, eqpId]);
+
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
   const extraCenterCharts = chartState.data?.extraCenterCharts ?? [];
@@ -1820,6 +1923,11 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const hasExtraCharts = extraCenterCharts.length > 0 || extraStdCharts.length > 0;
   const hasBaseChart = centerPoints.length > 0 || stdChartPoints.length > 0;
   const isFccRelatedChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step';
+  const managementTitleAction = isFccRelatedChart ? (
+    <button className="managementChartButton" type="button" onClick={() => setIsManagementModalOpen(true)}>
+      관리STEP CHART 보기
+    </button>
+  ) : null;
 
   if (chartState.loading || chartState.error || (!hasBaseChart && !hasExtraCharts)) {
     return (
@@ -1862,6 +1970,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
           anomalyType={centerPoints.length > 0 ? 'center' : 'std'}
           centerPoints={centerPoints}
           stdPoints={stdChartPoints}
+          titleAction={managementTitleAction}
         />
       ),
     });
@@ -1920,11 +2029,18 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
     });
   });
 
-  if (isFccRelatedChart) {
-    return <FccRelatedChartGroup row={row} eqpId={eqpId} sections={chartSections} />;
-  }
+  const renderedCharts = isFccRelatedChart ? (
+    <FccRelatedChartGroup row={row} eqpId={eqpId} sections={chartSections} />
+  ) : (
+    <>{chartSections.map((section) => <React.Fragment key={section.key}>{section.element}</React.Fragment>)}</>
+  );
 
-  return <>{chartSections.map((section) => <React.Fragment key={section.key}>{section.element}</React.Fragment>)}</>;
+  return (
+    <>
+      {renderedCharts}
+      {isManagementModalOpen && <ManagementStepChartModal row={row} eqpId={eqpId} onClose={() => setIsManagementModalOpen(false)} />}
+    </>
+  );
 }
 
 function EmptyChartState({ selectedRow }) {

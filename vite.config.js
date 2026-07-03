@@ -177,6 +177,20 @@ function installApiHandlers(middlewares) {
       return;
     }
 
+    if (apiPath === '/fcc-management-chart') {
+      const mainStep = url.searchParams.get('mainStep');
+      const chartMetStep = url.searchParams.get('chartMetStep');
+      const eqpId = url.searchParams.get('eqpId');
+
+      if (!mainStep || !chartMetStep || !eqpId) {
+        sendJson(res, 400, { ok: false, error: 'mainStep, chartMetStep, eqpId가 필요합니다.' });
+        return;
+      }
+
+      runLoader(['fcc-management-chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
+      return;
+    }
+
     sendJson(res, 404, { ok: false, error: `알 수 없는 API 경로입니다: ${url.pathname}`, apiPath });
   });
 }

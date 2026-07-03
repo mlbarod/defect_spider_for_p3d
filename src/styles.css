@@ -1432,6 +1432,47 @@ tr:last-child td {
   max-width: 42%;
 }
 
+.chartTitleActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  max-width: 52%;
+}
+
+.chartTitleActions .chartTags {
+  max-width: none;
+}
+
+.managementChartButton,
+.modalCloseButton {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+  font-weight: 750;
+  line-height: 1;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.managementChartButton {
+  min-height: 28px;
+  padding: 7px 9px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.managementChartButton:hover,
+.modalCloseButton:hover {
+  border-color: color-mix(in srgb, var(--chart-2) 42%, var(--border));
+  background: var(--accent);
+}
+
 .anomalyTag,
 .chartStatusText {
   border: 1px solid var(--border);
@@ -1455,6 +1496,103 @@ tr:last-child td {
   border-color: color-mix(in srgb, var(--chart-2) 28%, var(--border));
   background: var(--chart-2-soft);
   color: color-mix(in srgb, var(--chart-2) 72%, var(--foreground));
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--foreground) 34%, transparent);
+  padding: 22px;
+}
+
+.managementModal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1180px, 96vw);
+  max-height: min(86vh, 920px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 20px 38px color-mix(in srgb, var(--foreground) 22%, transparent);
+}
+
+.managementModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+  padding: 12px 14px;
+}
+
+.managementModalHeader div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.managementModalHeader strong {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.managementModalHeader span {
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.modalCloseButton {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+}
+
+.managementModalBody {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.managementChartPanel {
+  display: grid;
+  gap: 9px;
+}
+
+.managementChartPanel + .managementChartPanel {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.managementChartTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.managementChartTitle strong {
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.managementChartTitle span {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .scatterChart {

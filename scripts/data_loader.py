@@ -887,6 +887,26 @@ def filter_frame_eqp(dataframe, eqp_id):
     return dataframe[mask]
 
 
+def filter_frame_eqp_ch(dataframe, eqp_id):
+    eqp_columns = [column for column in ("eqp_ch", "eqpch") if column in frame_columns(dataframe)]
+    if not eqp_columns:
+        return dataframe.head(0)
+    target_eqp_id = str(eqp_id).strip()
+    if is_polars_frame(dataframe):
+        pl = load_polars()
+        expression = None
+        for column in eqp_columns:
+            condition = pl.col(column).cast(pl.Utf8).fill_null("").str.strip_chars() == target_eqp_id
+            expression = condition if expression is None else expression | condition
+        return dataframe.filter(expression)
+
+    mask = None
+    for column in eqp_columns:
+        condition = dataframe[column].astype(str).str.strip() == target_eqp_id
+        mask = condition if mask is None else mask | condition
+    return dataframe[mask] if mask is not None else dataframe.head(0)
+
+
 def exclude_frame_eqp(dataframe, eqp_id):
     eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch", "eqpch") if column in frame_columns(dataframe)]
     if not eqp_columns:
@@ -1347,6 +1367,49 @@ def fcc_met_unique_counts(met_rows):
     }
 
 
+def chamber_line_mapping_entries(diagnostics=None):
+    entries = []
+    try:
+        content = read_text_file(LINE_MAPPING_PATH)
+        header, raw_rows = read_tab_rows_from_text(content)
+        line_column = get_column_name(header, "line")
+        line_code_column = get_column_name(header, "line_code")
+        device_column = get_column_name(header, "device")
+        if diagnostics is not None:
+            diagnostics.setdefault("inputRows", {})["line_mapping"] = len(raw_rows)
+
+        if not line_code_column or not device_column:
+            raise ValueError("line_mapping.txt에서 line_code/device 컬럼을 찾지 못했습니다.")
+
+        for row in raw_rows:
+            line_code = str(row.get(line_code_column, "") or "").strip()
+            device = str(row.get(device_column, "") or "").strip()
+            if not line_code or not device:
+                continue
+            entries.append(
+                {
+                    "lineName": str(row.get(line_column, "") or "").strip() if line_column else "",
+                    "lineCode": line_code,
+                    "device": device,
+                }
+            )
+    except Exception as exc:
+        if diagnostics is not None:
+            diagnostics.setdefault("warnings", []).append(f"관리 STEP line_mapping 읽기 실패: {exc}")
+            diagnostics.setdefault("inputRows", {})["line_mapping"] = 0
+
+    if entries:
+        return entries
+
+    return [
+        {
+            "lineName": CONFIG["lineName"],
+            "lineCode": CONFIG["selectLine"],
+            "device": CONFIG["device"],
+        }
+    ]
+
+
 def load_optional_parquet(source, diagnostics):
     try:
         dataframe = read_parquet(source["path"])
@@ -1735,6 +1798,61 @@ def resolve_chamber_chart_paths(line_code, device, main_step, chart_met_step):
             "allFiles": all_attempts,
             "failFiles": fail_attempts,
             "stdFiles": std_attempts,
+        },
+    }
+
+
+def resolve_chamber_all_chart_paths(line_code, device, main_step, chart_met_step, item_id=""):
+    line_code = str(line_code or "").strip()
+    device = str(device or "").strip()
+    if not line_code or not device:
+        raise ValueError("관리 STEP chart 경로에 필요한 lineCode/device가 없습니다.")
+
+    root_path = f"{CONFIG['eadsRoot']}/{line_code}/{device}"
+    main_candidates = unique_nonempty([main_step, normalize_step(main_step)])
+    main_dir, main_dir_name, main_attempts = resolve_child_dir(root_path, main_candidates, "management main_step")
+
+    met_base = normalize_step(chart_met_step)
+    met_candidates = []
+    if item_id and met_base and "_" not in strip_main_suffix(met_base):
+        met_candidates.append(f"{met_base}_{item_id}")
+    met_candidates.extend([met_base, chart_met_step])
+    met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, unique_nonempty(met_candidates), "management met_step", is_met=True)
+
+    latest_date = latest_child_dir(met_dir)
+    data_dir = os.path.join(met_dir, latest_date)
+    main_file_candidates = unique_nonempty([main_dir_name, main_step, normalize_step(main_step)])
+    all_path, all_attempts = resolve_parquet_file(data_dir, "all", main_file_candidates)
+
+    return {
+        "rootPath": root_path,
+        "mainDir": main_dir,
+        "metDir": met_dir,
+        "dataDir": data_dir,
+        "latestDate": latest_date,
+        "allPath": all_path,
+        "failPath": None,
+        "stdPath": None,
+        "requested": {
+            "lineCode": line_code,
+            "device": device,
+            "mainStep": main_step,
+            "chartMetStep": chart_met_step,
+            "itemId": item_id,
+        },
+        "resolved": {
+            "lineCode": line_code,
+            "device": device,
+            "mainStep": main_dir_name,
+            "chartMetStep": met_dir_name,
+            "itemId": item_id or generic_item_id_from_met_step(met_dir_name),
+        },
+        "attempts": {
+            "mainDirs": main_attempts,
+            "metDirs": met_attempts,
+            "allFiles": all_attempts,
+            "failFiles": [],
+            "stdFiles": [],
         },
     }
 
@@ -2220,6 +2338,180 @@ def pm_events_for_eqp(eqp_id):
     return add_time_fields(rows, "inprg_dt")
 
 
+def fcc_fail_rows_for_management(main_step, chart_met_step, eqp_id, diagnostics):
+    fcc_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_fail")
+    dataframe = read_parquet(fcc_fail_source["path"])
+    rows = frame_records(dataframe)
+    diagnostics.setdefault("inputRows", {})["fcc_fail"] = len(rows)
+    diagnostics.setdefault("columns", {})["fcc_fail"] = frame_columns(dataframe)
+
+    target_main_step = fcc_mapping_step_code(main_step)
+    target_met_step = fcc_mapping_step_code(chart_met_step)
+    target_item_id = fcc_item_id_from_met_seq(chart_met_step) if chart_met_step else ""
+    matches = []
+
+    for row in rows:
+        eqp_ids = parse_eqp_ids(get_first(row, ("eqpid", "eqpch", "eqp_ch")))
+        if str(eqp_id).strip() not in eqp_ids:
+            continue
+
+        row_main_step = str(get_first(row, ("main_seq", "main_step", "mainStep")) or "").strip()
+        if target_main_step and fcc_mapping_step_code(row_main_step) != target_main_step:
+            continue
+
+        row_met_step = str(get_first(row, ("met_seq", "met_step", "metStep")) or "").strip()
+        if target_met_step and fcc_mapping_step_code(row_met_step) != target_met_step:
+            continue
+        if target_item_id and fcc_item_id_from_met_seq(row_met_step) != target_item_id:
+            continue
+
+        matches.append(row)
+
+    diagnostics.setdefault("usedRows", {})["fcc_fail"] = len(matches)
+    return matches
+
+
+def management_chart_met_step(value, item_id=""):
+    met_step = normalize_step(value)
+    if item_id and met_step and "_" not in strip_main_suffix(met_step):
+        return f"{met_step}_{item_id}"
+    return met_step
+
+
+def management_met_specs_for_main_step(main_step, item_id, diagnostics):
+    target_main_step = fcc_mapping_step_code(main_step)
+    if not target_main_step:
+        return []
+
+    line_entries = chamber_line_mapping_entries(diagnostics)
+    line_devices = {}
+    for entry in line_entries:
+        line_devices.setdefault(entry["lineCode"], set()).add(entry["device"])
+
+    specs = []
+    seen = set()
+    for line_code, mapped_devices in sorted(line_devices.items()):
+        met_path = f"{CONFIG['eadsRoot']}/{line_code}/met.txt"
+        source_key = f"management_met_{line_code}"
+        try:
+            met_rows = read_met_rows(met_path, device=None)
+            diagnostics.setdefault("inputRows", {})[source_key] = len(met_rows)
+            diagnostics.setdefault("columns", {})[source_key] = list(met_rows[0].keys()) if met_rows else []
+        except Exception as exc:
+            diagnostics.setdefault("warnings", []).append(f"관리 STEP MET 매핑 읽기 실패({line_code}): {exc}")
+            diagnostics.setdefault("inputRows", {})[source_key] = 0
+            diagnostics.setdefault("columns", {})[source_key] = []
+            continue
+
+        for row in met_rows:
+            row_main_step_raw = str(row.get("main_step") or "").strip()
+            if fcc_mapping_step_code(row_main_step_raw) != target_main_step:
+                continue
+
+            row_line_code = str(get_first(row, ("line_code", "lineCode")) or line_code).strip() or line_code
+            row_device = str(row.get("device") or "").strip()
+            devices = [row_device] if row_device else sorted(mapped_devices)
+            for device in devices:
+                if not device:
+                    continue
+                if mapped_devices and row_device and device not in mapped_devices:
+                    continue
+
+                row_met_step_raw = str(row.get("met_step") or "").strip()
+                chart_met_step = management_chart_met_step(row_met_step_raw, item_id)
+                key = (row_line_code, device, row_main_step_raw, chart_met_step)
+                if key in seen:
+                    continue
+                seen.add(key)
+                specs.append(
+                    {
+                        "key": f"management::{row_line_code}::{device}::{row_main_step_raw}::{chart_met_step}",
+                        "dataKind": "chamber",
+                        "chartRoot": "management",
+                        "lineCode": row_line_code,
+                        "device": device,
+                        "mainStep": normalize_step(row_main_step_raw),
+                        "mainStepPath": row_main_step_raw,
+                        "stepSeq": normalize_step(row_main_step_raw),
+                        "metStep": chart_met_step,
+                        "metStepPath": chart_met_step,
+                        "stepDesc": row.get("step_desc") or "",
+                        "sdwt": row.get("sdwt") or "",
+                        "centerCount": 1,
+                        "stdCount": 0,
+                        "centerEqpIds": [],
+                        "stdEqpIds": [],
+                        "eqpIds": [],
+                    }
+                )
+
+    diagnostics.setdefault("usedRows", {})["management_met"] = len(specs)
+    return specs
+
+
+def management_specs_for_fcc_eqp(main_step, chart_met_step, eqp_id, diagnostics):
+    fail_rows = fcc_fail_rows_for_management(main_step, chart_met_step, eqp_id, diagnostics)
+    specs = []
+    seen = set()
+    for fail_row in fail_rows:
+        fcc_main_step = str(get_first(fail_row, ("main_seq", "main_step", "mainStep")) or "").strip()
+        fcc_met_step = str(get_first(fail_row, ("met_seq", "met_step", "metStep")) or chart_met_step or "").strip()
+        item_id = fcc_item_id_from_met_seq(fcc_met_step) or fcc_item_id_from_met_seq(chart_met_step)
+        for spec in management_met_specs_for_main_step(fcc_main_step, item_id, diagnostics):
+            key = (spec["lineCode"], spec["device"], spec["mainStepPath"], spec["metStepPath"])
+            if key in seen:
+                continue
+            seen.add(key)
+            specs.append(
+                {
+                    **spec,
+                    "fccMainStep": fcc_main_step,
+                    "fccMetStep": fcc_met_step,
+                    "fccEqpId": str(eqp_id).strip(),
+                }
+            )
+    return specs
+
+
+def management_all_chart_payload(resolved_paths, eqp_id):
+    all_path = resolved_paths["allPath"]
+    all_df = sort_frame(read_parquet(all_path), "tkout_time")
+    highlight_df = filter_frame_eqp_ch(all_df, eqp_id)
+    all_fab_values = numeric_column_values(all_df, "fab_value")
+    highlight_fab_values = numeric_column_values(highlight_df, "fab_value")
+    highlight_points = chart_records(highlight_df, None, "center")
+    for point in highlight_points:
+        point["management_highlight"] = True
+
+    return {
+        "ok": True,
+        "diagnostics": {
+            "version": LOADER_VERSION,
+            "resolvedPaths": resolved_paths,
+            "inputRows": {
+                "all": frame_height(all_df),
+                "highlight": frame_height(highlight_df),
+            },
+        },
+        "paths": {
+            "all": all_path,
+            "fail": None,
+            "std": None,
+            "pm": None,
+        },
+        "latestDate": resolved_paths["latestDate"],
+        "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),
+        "domains": {
+            "x": time_domain(all_df, "tkout_time"),
+            "yFull": numeric_domain(all_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values, highlight_fab_values),
+        },
+        "allPoints": chart_records(all_df, None),
+        "highlightPoints": highlight_points,
+        "pmEvents": [],
+    }
+
+
 def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=True, include_pm=True, require_std=False):
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
@@ -2425,6 +2717,57 @@ def command_fcc_chart(args):
     write_json(payload)
 
 
+def command_fcc_management_chart(args):
+    diagnostics = {
+        "version": LOADER_VERSION,
+        "requested": {
+            "mainStep": args.main_step,
+            "chartMetStep": args.chart_met_step,
+            "eqpId": args.eqp_id,
+        },
+        "inputRows": {},
+        "columns": {},
+        "usedRows": {},
+        "warnings": [],
+    }
+    specs = management_specs_for_fcc_eqp(args.main_step, args.chart_met_step, args.eqp_id, diagnostics)
+    charts = []
+
+    for spec in specs:
+        try:
+            resolved_paths = resolve_chamber_all_chart_paths(
+                spec["lineCode"],
+                spec["device"],
+                spec["mainStepPath"],
+                spec["metStepPath"],
+                item_id=fcc_item_id_from_met_seq(spec.get("fccMetStep", "")),
+            )
+            payload = management_all_chart_payload(resolved_paths, args.eqp_id)
+            payload["row"] = spec
+            charts.append(payload)
+        except Exception as exc:
+            charts.append(
+                {
+                    "ok": False,
+                    "row": spec,
+                    "error": str(exc),
+                    "paths": {},
+                    "diagnostics": {"version": LOADER_VERSION},
+                }
+            )
+
+    write_json(
+        {
+            "ok": True,
+            "charts": charts,
+            "diagnostics": {
+                **diagnostics,
+                "outputRows": len(charts),
+            },
+        }
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2454,6 +2797,10 @@ def main():
     fcc_chart_parser.add_argument("--chart-met-step", required=True)
     fcc_chart_parser.add_argument("--eqp-id", required=True)
     fcc_chart_parser.add_argument("--chart-root", choices=("step", "root"), default="step")
+    fcc_management_chart_parser = subparsers.add_parser("fcc-management-chart")
+    fcc_management_chart_parser.add_argument("--main-step", required=True)
+    fcc_management_chart_parser.add_argument("--chart-met-step", required=True)
+    fcc_management_chart_parser.add_argument("--eqp-id", required=True)
     args = parser.parse_args()
 
     try:
@@ -2473,6 +2820,8 @@ def main():
             command_chamber_chart(args)
         elif args.command == "fcc-chart":
             command_fcc_chart(args)
+        elif args.command == "fcc-management-chart":
+            command_fcc_management_chart(args)
     except Exception as exc:
         if args.command.startswith("fcc"):
             sources = source_status(FCC_DATA_SOURCES)
