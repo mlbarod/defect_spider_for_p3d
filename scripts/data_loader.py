@@ -1802,7 +1802,10 @@ def resolve_chamber_chart_paths(line_code, device, main_step, chart_met_step):
     }
 
 
-def resolve_chamber_all_chart_paths(line_code, device, main_step, chart_met_step, item_id=""):
+MANAGEMENT_RANDOM_PC_ITEM_ID = "RANDOM_PC"
+
+
+def resolve_chamber_all_chart_paths(line_code, device, main_step, chart_met_step):
     line_code = str(line_code or "").strip()
     device = str(device or "").strip()
     if not line_code or not device:
@@ -1812,12 +1815,8 @@ def resolve_chamber_all_chart_paths(line_code, device, main_step, chart_met_step
     main_candidates = unique_nonempty([main_step, normalize_step(main_step)])
     main_dir, main_dir_name, main_attempts = resolve_child_dir(root_path, main_candidates, "management main_step")
 
-    met_base = normalize_step(chart_met_step)
-    met_candidates = []
-    if item_id and met_base and "_" not in strip_main_suffix(met_base):
-        met_candidates.append(f"{met_base}_{item_id}")
-    met_candidates.extend([met_base, chart_met_step])
-    met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, unique_nonempty(met_candidates), "management met_step", is_met=True)
+    met_candidates = unique_nonempty([normalize_step(chart_met_step)])
+    met_dir, met_dir_name, met_attempts = resolve_child_dir(main_dir, met_candidates, "management met_step", is_met=True)
 
     latest_date = latest_child_dir(met_dir)
     data_dir = os.path.join(met_dir, latest_date)
@@ -1838,14 +1837,14 @@ def resolve_chamber_all_chart_paths(line_code, device, main_step, chart_met_step
             "device": device,
             "mainStep": main_step,
             "chartMetStep": chart_met_step,
-            "itemId": item_id,
+            "itemId": MANAGEMENT_RANDOM_PC_ITEM_ID,
         },
         "resolved": {
             "lineCode": line_code,
             "device": device,
             "mainStep": main_dir_name,
             "chartMetStep": met_dir_name,
-            "itemId": item_id or generic_item_id_from_met_step(met_dir_name),
+            "itemId": MANAGEMENT_RANDOM_PC_ITEM_ID,
         },
         "attempts": {
             "mainDirs": main_attempts,
@@ -2371,14 +2370,18 @@ def fcc_fail_rows_for_management(main_step, chart_met_step, eqp_id, diagnostics)
     return matches
 
 
-def management_chart_met_step(value, item_id=""):
-    met_step = normalize_step(value)
-    if item_id and met_step and "_" not in strip_main_suffix(met_step):
-        return f"{met_step}_{item_id}"
-    return met_step
+def management_chart_met_step(met_step, met_item=""):
+    met_item_text = normalize_step(met_item)
+    if not met_item_text:
+        met_item_text = strip_main_suffix(normalize_step(met_step)).split("_", 1)[0].strip()
+    if not met_item_text:
+        return ""
+    if met_item_text.endswith(f"_{MANAGEMENT_RANDOM_PC_ITEM_ID}"):
+        return met_item_text
+    return f"{met_item_text}_{MANAGEMENT_RANDOM_PC_ITEM_ID}"
 
 
-def management_met_specs_for_main_step(main_step, item_id, diagnostics):
+def management_met_specs_for_main_step(main_step, diagnostics):
     target_main_step = fcc_mapping_step_code(main_step)
     if not target_main_step:
         return []
@@ -2418,7 +2421,10 @@ def management_met_specs_for_main_step(main_step, item_id, diagnostics):
                     continue
 
                 row_met_step_raw = str(row.get("met_step") or "").strip()
-                chart_met_step = management_chart_met_step(row_met_step_raw, item_id)
+                row_met_item_raw = str(get_first(row, ("met_item", "metItem")) or "").strip()
+                chart_met_step = management_chart_met_step(row_met_step_raw, row_met_item_raw)
+                if not chart_met_step:
+                    continue
                 key = (row_line_code, device, row_main_step_raw, chart_met_step)
                 if key in seen:
                     continue
@@ -2456,8 +2462,7 @@ def management_specs_for_fcc_eqp(main_step, chart_met_step, eqp_id, diagnostics)
     for fail_row in fail_rows:
         fcc_main_step = str(get_first(fail_row, ("main_seq", "main_step", "mainStep")) or "").strip()
         fcc_met_step = str(get_first(fail_row, ("met_seq", "met_step", "metStep")) or chart_met_step or "").strip()
-        item_id = fcc_item_id_from_met_seq(fcc_met_step) or fcc_item_id_from_met_seq(chart_met_step)
-        for spec in management_met_specs_for_main_step(fcc_main_step, item_id, diagnostics):
+        for spec in management_met_specs_for_main_step(fcc_main_step, diagnostics):
             key = (spec["lineCode"], spec["device"], spec["mainStepPath"], spec["metStepPath"])
             if key in seen:
                 continue
@@ -2740,7 +2745,6 @@ def command_fcc_management_chart(args):
                 spec["device"],
                 spec["mainStepPath"],
                 spec["metStepPath"],
-                item_id=fcc_item_id_from_met_seq(spec.get("fccMetStep", "")),
             )
             payload = management_all_chart_payload(resolved_paths, args.eqp_id)
             payload["row"] = spec
