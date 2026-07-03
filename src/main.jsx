@@ -795,6 +795,19 @@ function getEquipmentId(point, fallback = '') {
   return text || '-';
 }
 
+function getEquipmentLegendLabel(point, fallback = '') {
+  const value = point?.eqp_ch ?? point?.eqpch ?? fallback;
+  const text = String(value ?? '').trim();
+  return text || '-';
+}
+
+function pointMatchesEquipment(point, eqpId) {
+  const target = String(eqpId ?? '').trim();
+  if (!target) return false;
+
+  return [point?.eqp_id, point?.eqpid, point?.eqp_ch, point?.eqpch].some((value) => String(value ?? '').trim() === target);
+}
+
 function eqpListIncludes(eqpIds, eqpId) {
   const target = String(eqpId ?? '').trim();
   return Array.isArray(eqpIds) && eqpIds.some((value) => String(value ?? '').trim() === target);
@@ -953,16 +966,17 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   const equipmentLegendItems = useMemo(() => {
     const counts = new Map();
     const groupedEqpId = String(eqpId ?? '').trim();
-    const addPoint = (point, fallback = '') => {
-      const label = getEquipmentId(point, fallback);
-      const current = counts.get(label) ?? { label, count: 0, grouped: label === groupedEqpId };
+    const addPoint = (point) => {
+      const label = getEquipmentLegendLabel(point);
+      const isGrouped = pointMatchesEquipment(point, groupedEqpId);
+      const current = counts.get(label) ?? { label, count: 0, grouped: isGrouped };
       current.count += 1;
-      current.grouped = current.grouped || label === groupedEqpId;
+      current.grouped = current.grouped || isGrouped;
       counts.set(label, current);
     };
 
     allScatterPoints.forEach((point) => addPoint(point));
-    scatterPoints.forEach((point) => addPoint(point, groupedEqpId));
+    scatterPoints.forEach((point) => addPoint(point));
 
     return Array.from(counts.values())
       .sort((left, right) => Number(right.grouped) - Number(left.grouped) || left.label.localeCompare(right.label))
@@ -976,16 +990,16 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
   const visibleAllScatterPoints = useMemo(
     () =>
       allScatterPoints.filter(
-        (point) => !hiddenLegendKeys.has(getLegendKey('step', getStepPrefix(point))) && !hiddenLegendKeys.has(getLegendKey('eqp', getEquipmentId(point))),
+        (point) => !hiddenLegendKeys.has(getLegendKey('step', getStepPrefix(point))) && !hiddenLegendKeys.has(getLegendKey('eqp', getEquipmentLegendLabel(point))),
       ),
     [allScatterPoints, hiddenLegendKeys],
   );
   const visibleScatterPoints = useMemo(
     () =>
       scatterPoints.filter(
-        (point) => !hiddenLegendKeys.has(getLegendKey('step', getStepPrefix(point))) && !hiddenLegendKeys.has(getLegendKey('eqp', getEquipmentId(point, eqpId))),
+        (point) => !hiddenLegendKeys.has(getLegendKey('step', getStepPrefix(point))) && !hiddenLegendKeys.has(getLegendKey('eqp', getEquipmentLegendLabel(point))),
       ),
-    [scatterPoints, hiddenLegendKeys, eqpId],
+    [scatterPoints, hiddenLegendKeys],
   );
   const toggleLegendKey = (key) => {
     setHiddenLegendKeys((current) => {
@@ -1775,6 +1789,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
     if (row.dataKind === 'chamber') {
       params.set('lineCode', row.lineCode ?? '');
       params.set('device', row.device ?? '');
+      params.set('lineName', row.lineName ?? '');
     }
 
     setChartState({ loading: true, error: '', data: null });
@@ -2169,13 +2184,15 @@ function ConstructionView({ onBack, onClickHistory }) {
     const params = new URLSearchParams({
       lineCode: selectedDevice.lineCode,
       device: selectedDevice.device,
+      lineName: selectedLine?.lineName ?? '',
       t: String(Date.now()),
     });
+    const chamberSummaryPath = `/api/chamber-summary?lineCode=${encodeURIComponent(selectedDevice.lineCode)}&device=${encodeURIComponent(selectedDevice.device)}&lineName=${encodeURIComponent(selectedLine?.lineName ?? '')}`;
 
     setChamberLoadState({
       ...EMPTY_CHAMBER_LOAD_STATE,
       loading: true,
-      apiPath: `/api/chamber-summary?lineCode=${encodeURIComponent(selectedDevice.lineCode)}&device=${encodeURIComponent(selectedDevice.device)}`,
+      apiPath: chamberSummaryPath,
     });
 
     fetchJson(`/api/chamber-summary?${params.toString()}`)
@@ -2185,7 +2202,7 @@ function ConstructionView({ onBack, onClickHistory }) {
         setChamberLoadState({
           loading: false,
           error: '',
-          apiPath: `/api/chamber-summary?lineCode=${encodeURIComponent(selectedDevice.lineCode)}&device=${encodeURIComponent(selectedDevice.device)}`,
+          apiPath: chamberSummaryPath,
           rows: payload.rows ?? [],
           sources: payload.sources ?? [],
           diagnostics: payload.diagnostics ?? EMPTY_CHAMBER_LOAD_STATE.diagnostics,
@@ -2197,7 +2214,7 @@ function ConstructionView({ onBack, onClickHistory }) {
         setChamberLoadState({
           loading: false,
           error: error.message,
-          apiPath: error.requestUrl ?? `/api/chamber-summary?lineCode=${encodeURIComponent(selectedDevice.lineCode)}&device=${encodeURIComponent(selectedDevice.device)}`,
+          apiPath: error.requestUrl ?? chamberSummaryPath,
           rows: error.payload?.rows ?? [],
           sources: error.payload?.sources ?? [],
           diagnostics: error.payload?.diagnostics ?? EMPTY_CHAMBER_LOAD_STATE.diagnostics,
@@ -2207,7 +2224,7 @@ function ConstructionView({ onBack, onClickHistory }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedDevice]);
+  }, [selectedDevice, selectedLine?.lineName]);
 
   useEffect(() => {
     const firstMetStep = chamberStepGroups[0]?.metSteps[0] ?? null;

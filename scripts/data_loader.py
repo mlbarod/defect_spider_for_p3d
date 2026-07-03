@@ -713,6 +713,7 @@ def command_chamber_lines(_args):
 def command_chamber_summary(args):
     line_code = str(args.line_code or "").strip()
     device = str(args.device or "").strip()
+    line_name = str(getattr(args, "line_name", "") or "").strip()
     if not line_code or not device:
         raise ValueError("lineCode와 device가 필요합니다.")
 
@@ -720,6 +721,7 @@ def command_chamber_summary(args):
     diagnostics = {
         "version": LOADER_VERSION,
         "lineCode": line_code,
+        "lineName": line_name,
         "device": device,
         "inputRows": {},
         "columns": {},
@@ -735,6 +737,7 @@ def command_chamber_summary(args):
     by_main_step, _by_step_desc = met_lookup(met_rows)
     merged = {}
     key_prefix = f"chamber::{line_code}::{device}::"
+    filter_p3d_chamber_eqp = is_p3d_chamber_selection(line_name, line_code, device)
     diagnostics["usedRows"]["fail"] = add_summary_rows(
         merged,
         fail_rows,
@@ -742,7 +745,7 @@ def command_chamber_summary(args):
         by_main_step,
         data_kind="chamber",
         key_prefix=key_prefix,
-        filter_cross_line_eqp=False,
+        filter_cross_line_eqp=filter_p3d_chamber_eqp,
     )
     diagnostics["usedRows"]["std"] = add_summary_rows(
         merged,
@@ -751,12 +754,13 @@ def command_chamber_summary(args):
         by_main_step,
         data_kind="chamber",
         key_prefix=key_prefix,
-        filter_cross_line_eqp=False,
+        filter_cross_line_eqp=filter_p3d_chamber_eqp,
     )
 
     rows = [
         {
             **row,
+            "lineName": line_name,
             "lineCode": line_code,
             "device": device,
             "chartRoot": "chamber",
@@ -800,6 +804,14 @@ def strip_percent_prefix(value):
 def is_p4d_eqp(value):
     digits = "".join(ch if ch.isdigit() else " " for ch in str(value)).split()
     return any(token.startswith("35") for token in digits)
+
+
+def is_p3d_chamber_selection(line_name="", line_code="", device=""):
+    normalized_line_name = str(line_name or "").strip().upper()
+    normalized_line_code = str(line_code or "").strip().upper()
+    if normalized_line_name.startswith("P3D"):
+        return True
+    return normalized_line_code in {"P3D", "PFB3"}
 
 
 def frame_records(dataframe):
@@ -2085,14 +2097,22 @@ def command_chart(args):
     )
 
 
-def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
+def generic_chart_payload(resolved_paths, eqp_id, include_pm=True, filter_p3d_drawing=False):
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
 
-    all_df = sort_frame(read_parquet(all_path), "tkout_time")
-    fail_df = sort_frame(read_parquet(fail_path), "tkout_time")
-    std_df = sort_frame(read_parquet(std_path), "tkout_time") if std_path else fail_df.head(0)
+    all_df = read_parquet(all_path)
+    fail_df = read_parquet(fail_path)
+    std_df = read_parquet(std_path) if std_path else fail_df.head(0)
+    if filter_p3d_drawing:
+        all_df = filter_frame_p3d_drawing(all_df)
+        fail_df = filter_frame_p3d_drawing(fail_df)
+        std_df = filter_frame_p3d_drawing(std_df)
+
+    all_df = sort_frame(all_df, "tkout_time")
+    fail_df = sort_frame(fail_df, "tkout_time")
+    std_df = sort_frame(std_df, "tkout_time")
 
     all_background = exclude_frame_eqp(all_df, eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
@@ -2149,7 +2169,14 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True):
 
 def command_chamber_chart(args):
     resolved_paths = resolve_chamber_chart_paths(args.line_code, args.device, args.main_step, args.chart_met_step)
-    write_json(generic_chart_payload(resolved_paths, args.eqp_id, include_pm=True))
+    write_json(
+        generic_chart_payload(
+            resolved_paths,
+            args.eqp_id,
+            include_pm=True,
+            filter_p3d_drawing=is_p3d_chamber_selection(getattr(args, "line_name", ""), args.line_code, args.device),
+        )
+    )
 
 
 def pm_frame_for_eqp(eqp_id):
@@ -2410,6 +2437,7 @@ def main():
     chamber_summary_parser = subparsers.add_parser("chamber-summary")
     chamber_summary_parser.add_argument("--line-code", required=True)
     chamber_summary_parser.add_argument("--device", required=True)
+    chamber_summary_parser.add_argument("--line-name", default="")
     chart_parser = subparsers.add_parser("chart")
     chart_parser.add_argument("--main-step", required=True)
     chart_parser.add_argument("--chart-met-step", required=True)
@@ -2420,6 +2448,7 @@ def main():
     chamber_chart_parser.add_argument("--main-step", required=True)
     chamber_chart_parser.add_argument("--chart-met-step", required=True)
     chamber_chart_parser.add_argument("--eqp-id", required=True)
+    chamber_chart_parser.add_argument("--line-name", default="")
     fcc_chart_parser = subparsers.add_parser("fcc-chart")
     fcc_chart_parser.add_argument("--main-step", required=True)
     fcc_chart_parser.add_argument("--chart-met-step", required=True)

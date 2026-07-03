@@ -116,13 +116,16 @@ function installApiHandlers(middlewares) {
     if (apiPath === '/chamber-summary') {
       const lineCode = url.searchParams.get('lineCode');
       const device = url.searchParams.get('device');
+      const lineName = url.searchParams.get('lineName') || '';
 
       if (!lineCode || !device) {
         sendJson(res, 400, { ok: false, error: 'lineCode, device가 필요합니다.' });
         return;
       }
 
-      runLoader(['chamber-summary', '--line-code', lineCode, '--device', device], res);
+      const loaderArgs = ['chamber-summary', '--line-code', lineCode, '--device', device];
+      if (lineName) loaderArgs.push('--line-name', lineName);
+      runLoader(loaderArgs, res);
       return;
     }
 
@@ -143,6 +146,7 @@ function installApiHandlers(middlewares) {
     if (apiPath === '/chamber-chart') {
       const lineCode = url.searchParams.get('lineCode');
       const device = url.searchParams.get('device');
+      const lineName = url.searchParams.get('lineName') || '';
       const mainStep = url.searchParams.get('mainStep');
       const chartMetStep = url.searchParams.get('chartMetStep');
       const eqpId = url.searchParams.get('eqpId');
@@ -152,7 +156,9 @@ function installApiHandlers(middlewares) {
         return;
       }
 
-      runLoader(['chamber-chart', '--line-code', lineCode, '--device', device, '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId], res);
+      const loaderArgs = ['chamber-chart', '--line-code', lineCode, '--device', device, '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId];
+      if (lineName) loaderArgs.push('--line-name', lineName);
+      runLoader(loaderArgs, res);
       return;
     }
 
