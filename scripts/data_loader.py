@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v34"
+LOADER_VERSION = "file-loader-v35"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -2004,14 +2004,75 @@ def select_columns(dataframe):
         "eqpid",
         "item_id",
         "item_desc",
+        "ppid",
+        "ppid_right",
         "final_decision",
         "std_result",
     ]
     return select_frame_columns(dataframe, wanted)
 
 
-def chart_records(dataframe, limit=900, anomaly_type=None):
+PPID_COLUMNS = ("ppid", "ppid_right")
+PPID_LOOKUP_COLUMN_GROUPS = (
+    ("tkout_time_ms", "tkout_time_text", "tkout_time"),
+    ("fab_value",),
+    ("wafer_id",),
+    ("lot_id", "lot_wf"),
+    ("step_seq",),
+    ("eqp_ch", "eqpch", "eqp_id", "eqpid"),
+)
+
+
+def normalize_lookup_value(value):
+    if is_missing_value(value):
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return f"{float(value):.12g}"
+        except Exception:
+            pass
+    return str(value).strip()
+
+
+def ppid_lookup_key(row):
+    return tuple(normalize_lookup_value(get_first(row, group)) for group in PPID_LOOKUP_COLUMN_GROUPS)
+
+
+def ppid_lookup_from_all(dataframe):
+    lookup = {}
+    rows = add_time_fields(records(select_columns(dataframe)), "tkout_time")
+
+    for row in rows:
+        values = {column: row.get(column) for column in PPID_COLUMNS if not is_missing_value(row.get(column))}
+        if not values:
+            continue
+
+        key = ppid_lookup_key(row)
+        if key not in lookup:
+            lookup[key] = values
+
+    return lookup
+
+
+def fill_ppid_fields(rows, ppid_lookup=None):
+    if not ppid_lookup:
+        return rows
+
+    for row in rows:
+        source = ppid_lookup.get(ppid_lookup_key(row))
+        if not source:
+            continue
+
+        for column in PPID_COLUMNS:
+            if is_missing_value(row.get(column)) and column in source:
+                row[column] = source[column]
+
+    return rows
+
+
+def chart_records(dataframe, limit=900, anomaly_type=None, ppid_lookup=None):
     rows = add_time_fields(sample_records(select_columns(dataframe), limit), "tkout_time")
+    fill_ppid_fields(rows, ppid_lookup)
     if anomaly_type:
         for row in rows:
             row["anomaly_type"] = anomaly_type
@@ -2118,6 +2179,7 @@ def command_chart(args):
     all_background = exclude_frame_eqp(all_df, args.eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
+    all_ppid_lookup = ppid_lookup_from_all(all_df)
     main_all_fab_values = numeric_column_values(all_df, "fab_value")
     center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
     std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
@@ -2164,8 +2226,8 @@ def command_chart(args):
                 },
             },
             "allPoints": chart_records(all_background, None),
-            "failPoints": chart_records(fail_for_eqp, None, "center"),
-            "stdPoints": chart_records(std_for_eqp, None, "std"),
+            "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup),
+            "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup),
             "pmEvents": pm_events,
         }
     )
@@ -2191,6 +2253,7 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True, filter_p3d_dr
     all_background = exclude_frame_eqp(all_df, eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
+    all_ppid_lookup = ppid_lookup_from_all(all_df)
     all_fab_values = numeric_column_values(all_df, "fab_value")
     center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
     std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
@@ -2235,8 +2298,8 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True, filter_p3d_dr
             },
         },
         "allPoints": chart_records(all_background, None),
-        "failPoints": chart_records(fail_for_eqp, None, "center"),
-        "stdPoints": chart_records(std_for_eqp, None, "std"),
+        "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup),
+        "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
     }
 
@@ -2490,6 +2553,7 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
     all_background = exclude_frame_eqp(all_df, eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
+    all_ppid_lookup = ppid_lookup_from_all(all_df)
     all_fab_values = numeric_column_values(all_df, "fab_value")
     center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
     std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
@@ -2534,8 +2598,8 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
             },
         },
         "allPoints": chart_records(all_background, None),
-        "failPoints": chart_records(fail_for_eqp, None, "center"),
-        "stdPoints": chart_records(std_for_eqp, None, "std"),
+        "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup),
+        "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
     }
 

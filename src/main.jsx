@@ -710,6 +710,8 @@ function getPointTooltipRows(point) {
     ['tkout_time', point.tkout_time_text || point.tkout_time],
     ['eqp_ch', point.eqp_ch ?? point.eqpch],
     ['step_seq', point.step_seq],
+    ['met_ppid', point.ppid],
+    ['ppid', point.ppid_right],
     ['fab_value', point.fab_value],
   ].map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : String(value)]);
 }
@@ -1239,7 +1241,7 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     const container = event.currentTarget.ownerSVGElement?.closest?.('.chartCanvas') ?? event.currentTarget.closest?.('.chartCanvas');
     const rect = container?.getBoundingClientRect();
     if (!rect) return { x: 12, y: 12 };
-    const maxLeft = Math.max(8, rect.width - 196);
+    const maxLeft = Math.max(8, rect.width - 372);
     return {
       x: Math.min(maxLeft, Math.max(8, event.clientX - rect.left + 12)),
       y: Math.max(8, event.clientY - rect.top + 12),
