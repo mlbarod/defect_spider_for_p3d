@@ -956,6 +956,7 @@ code {
 .subStepButton:focus-visible,
 .ngTableToggle:focus-visible,
 .pmLinkButton:focus-visible,
+.defectMapButton:focus-visible,
 .chamberLineButton:focus-visible,
 .spiderAppCard:focus-visible,
 .homeBackButton:focus-visible,
@@ -1849,7 +1850,7 @@ tr:last-child td {
 }
 
 .ngPointTable {
-  min-width: 820px;
+  min-width: 940px;
 }
 
 .ngPointTable th,
@@ -1882,6 +1883,11 @@ tr:last-child td {
   text-align: right;
 }
 
+.defectMapCell {
+  min-width: 118px;
+  text-align: right;
+}
+
 .pmLinkButton {
   display: inline-flex;
   align-items: center;
@@ -1905,6 +1911,33 @@ tr:last-child td {
 }
 
 .pmLinkButton.disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.defectMapButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 104px;
+  min-height: 26px;
+  border: 1px solid color-mix(in srgb, var(--primary) 36%, var(--border));
+  border-radius: calc(var(--radius) - 3px);
+  background: color-mix(in srgb, var(--primary) 9%, var(--background));
+  color: color-mix(in srgb, var(--primary) 78%, var(--foreground));
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.defectMapButton:hover {
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
+  background: color-mix(in srgb, var(--primary) 14%, var(--background));
+}
+
+.defectMapButton.disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }

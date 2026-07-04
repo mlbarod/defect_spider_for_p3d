@@ -10,6 +10,9 @@ const CONFIG = {
   pmCodePath: '/appdata/abnormal_trend/pic/change_code_info.parquet',
 };
 
+const DEFECT_MAP_CONFIG_ENDPOINT = '/api/defect-map-config';
+let defectMapConfigRequest = null;
+
 const isMainLine = CONFIG.lineName === CONFIG.lineName;
 const folderPath = `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}`;
 const fccFolderPath = `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}_fcc`;
@@ -184,6 +187,46 @@ async function fetchJson(url, options) {
   }
 
   return payload;
+}
+
+function normalizeDefectMapTemplate(payload) {
+  const template = payload?.urlTemplate ?? payload?.template ?? payload?.url ?? '';
+  return String(template ?? '').trim();
+}
+
+function loadDefectMapConfig() {
+  if (!defectMapConfigRequest) {
+    defectMapConfigRequest = fetchJson(`${DEFECT_MAP_CONFIG_ENDPOINT}?t=${Date.now()}`)
+      .then((payload) => normalizeDefectMapTemplate(payload))
+      .catch((error) => {
+        defectMapConfigRequest = null;
+        throw error;
+      });
+  }
+
+  return defectMapConfigRequest;
+}
+
+function useDefectMapUrlTemplate() {
+  const [state, setState] = useState({ loading: true, error: '', template: '' });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    loadDefectMapConfig()
+      .then((template) => {
+        if (isMounted) setState({ loading: false, error: '', template });
+      })
+      .catch((error) => {
+        if (isMounted) setState({ loading: false, error: error.message, template: '' });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return state;
 }
 
 function getHistorySelectStep(row) {
@@ -1501,15 +1544,59 @@ function formatTableValue(value) {
   return String(value);
 }
 
+function normalizeDefectMapField(value) {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'number' && Number.isNaN(value)) return '';
+
+  const text = String(value).trim();
+  return text.toLowerCase() === 'nan' ? '' : text;
+}
+
+function getFirstDefectMapField(point, keys) {
+  for (const key of keys) {
+    const value = normalizeDefectMapField(point?.[key]);
+    if (value) return value;
+  }
+
+  return '';
+}
+
+function getDefectMapFieldValue(point, field) {
+  if (field === 'lotId') return getFirstDefectMapField(point, ['LOT_ID', 'lot_id', 'lot_wf', 'LOT_WF']);
+  if (field === 'waferId') return getFirstDefectMapField(point, ['WAFER_ID', 'wafer_id']);
+  if (field === 'stepSeq') return getFirstDefectMapField(point, ['STEP_SEQ', 'step_seq']);
+  return '';
+}
+
+function getDefectMapUrl(urlTemplate, point) {
+  if (!urlTemplate) return '';
+
+  const placeholders = urlTemplate.match(/\{\}/g) ?? [];
+  if (placeholders.length !== 3) return '';
+
+  const values = [
+    getDefectMapFieldValue(point, 'lotId'),
+    getDefectMapFieldValue(point, 'waferId'),
+    getDefectMapFieldValue(point, 'stepSeq'),
+  ];
+
+  if (values.some((value) => !value)) return '';
+
+  let index = 0;
+  return urlTemplate.replace(/\{\}/g, () => encodeURIComponent(values[index++]));
+}
+
 function getNgTableValue(point, column, row, eqpId) {
   if (column === 'tkout_time') return point.tkout_time_text || point.tkout_time;
   if (column === 'eqp_id') return point.eqp_id ?? point.eqpid ?? point.eqp_ch ?? point.eqpch ?? eqpId;
-  if (column === 'lot_id') return point.lot_id ?? point.lot_wf;
+  if (column === 'lot_id') return point.lot_id ?? point.LOT_ID ?? point.lot_wf ?? point.LOT_WF;
   if (column === 'item_id') return point.item_id ?? getMetStepDisplay(row.metStep).metItem;
-  return point[column];
+  return point[column] ?? point[column.toUpperCase()];
 }
 
 function NgPointTable({ points, row, eqpId }) {
+  const defectMapConfig = useDefectMapUrlTemplate();
+
   return (
     <div className="ngTableShell">
       <table className="ngPointTable">
@@ -1518,20 +1605,39 @@ function NgPointTable({ points, row, eqpId }) {
             {NG_TABLE_COLUMNS.map((column) => (
               <th key={column}>{column}</th>
             ))}
+            <th>Defect MAP</th>
           </tr>
         </thead>
         <tbody>
           {points.length > 0 ? (
-            points.map((point, index) => (
-              <tr key={`${point.anomaly_type ?? 'ng'}-${point.tkout_time_ms ?? point.tkout_time}-${index}`}>
-                {NG_TABLE_COLUMNS.map((column) => (
-                  <td key={column}>{formatTableValue(getNgTableValue(point, column, row, eqpId))}</td>
-                ))}
-              </tr>
-            ))
+            points.map((point, index) => {
+              const defectMapUrl = getDefectMapUrl(defectMapConfig.template, point);
+              const disabledTitle = defectMapConfig.loading
+                ? 'Defect MAP URL을 읽는 중입니다.'
+                : defectMapConfig.error || 'LOT_ID, WAFER_ID, STEP_SEQ를 확인할 수 없습니다.';
+
+              return (
+                <tr key={`${point.anomaly_type ?? 'ng'}-${point.tkout_time_ms ?? point.tkout_time}-${index}`}>
+                  {NG_TABLE_COLUMNS.map((column) => (
+                    <td key={column}>{formatTableValue(getNgTableValue(point, column, row, eqpId))}</td>
+                  ))}
+                  <td className="defectMapCell">
+                    {defectMapUrl ? (
+                      <a className="defectMapButton" href={defectMapUrl} target="_blank" rel="noreferrer">
+                        Defect MAP보기
+                      </a>
+                    ) : (
+                      <span className="defectMapButton disabled" title={disabledTitle}>
+                        Defect MAP보기
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })
           ) : (
             <tr>
-              <td colSpan={NG_TABLE_COLUMNS.length}>NG 데이터가 없습니다.</td>
+              <td colSpan={NG_TABLE_COLUMNS.length + 1}>NG 데이터가 없습니다.</td>
             </tr>
           )}
         </tbody>

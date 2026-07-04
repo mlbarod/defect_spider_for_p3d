@@ -11,6 +11,17 @@ const loaderPath = join(rootDir, 'scripts', 'data_loader.py');
 const port = Number(process.env.PORT ?? 5173);
 const host = process.env.HOST ?? '0.0.0.0';
 const buildOnStart = process.env.BUILD_ON_START !== '0';
+const defectMapConfigPath = process.env.DEFECT_MAP_CONFIG_PATH ?? '/appdata/hadoop/code/eads/config.json';
+const defectMapUrlKeys = [
+  'url',
+  'URL',
+  'defectMapUrl',
+  'defectMapURL',
+  'defect_map_url',
+  'DEFECT_MAP_URL',
+  'mapUrl',
+  'map_url',
+];
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -50,6 +61,83 @@ function normalizeRemoteIp(value) {
 
 function getRemoteIp(req) {
   return normalizeRemoteIp(req.headers['x-forwarded-for'] ?? req.headers['x-real-ip'] ?? req.socket?.remoteAddress ?? '');
+}
+
+function countUrlTemplatePlaceholders(value) {
+  return (String(value ?? '').match(/\{\}/g) ?? []).length;
+}
+
+function preferUrlTemplate(candidate, fallback) {
+  if (!candidate) return fallback;
+  if (!fallback) return candidate;
+  return countUrlTemplatePlaceholders(candidate) > countUrlTemplatePlaceholders(fallback) ? candidate : fallback;
+}
+
+function findUrlTemplate(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || '';
+  }
+
+  if (Array.isArray(value)) {
+    return value.reduce((selected, item) => preferUrlTemplate(findUrlTemplate(item), selected), '');
+  }
+
+  if (!value || typeof value !== 'object') return '';
+
+  let selected = '';
+  for (const key of defectMapUrlKeys) {
+    selected = preferUrlTemplate(findUrlTemplate(value[key]), selected);
+  }
+
+  return Object.values(value).reduce((current, item) => preferUrlTemplate(findUrlTemplate(item), current), selected);
+}
+
+function parseDefectMapConfig(text) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) return '';
+
+  try {
+    return findUrlTemplate(JSON.parse(trimmed));
+  } catch (error) {
+    return trimmed;
+  }
+}
+
+async function handleDefectMapConfig(res) {
+  try {
+    const text = await readFile(defectMapConfigPath, 'utf8');
+    const urlTemplate = parseDefectMapConfig(text);
+    const placeholderCount = countUrlTemplatePlaceholders(urlTemplate);
+
+    if (!urlTemplate) {
+      sendJson(res, 500, {
+        ok: false,
+        error: `${defectMapConfigPath}에서 URL을 찾지 못했습니다.`,
+      });
+      return;
+    }
+
+    if (placeholderCount !== 3) {
+      sendJson(res, 500, {
+        ok: false,
+        error: `${defectMapConfigPath}의 URL에는 {} placeholder가 3개 필요합니다.`,
+        placeholderCount,
+      });
+      return;
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      urlTemplate,
+      placeholderCount,
+    });
+  } catch (error) {
+    sendJson(res, 500, {
+      ok: false,
+      error: `${defectMapConfigPath} 읽기 실패: ${error.message}`,
+    });
+  }
 }
 
 function runLoader(args, res, options = {}) {
@@ -114,6 +202,11 @@ function handleApi(req, res, url) {
 
   if (apiPath === '/client-ip') {
     sendJson(res, 200, { ok: true, ip: getRemoteIp(req) });
+    return true;
+  }
+
+  if (apiPath === '/defect-map-config') {
+    handleDefectMapConfig(res);
     return true;
   }
 
