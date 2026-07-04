@@ -2038,9 +2038,27 @@ def ppid_lookup_key(row):
     return tuple(normalize_lookup_value(get_first(row, group)) for group in PPID_LOOKUP_COLUMN_GROUPS)
 
 
-def ppid_lookup_from_all(dataframe):
+def use_ppid_as_ppid_right(dataframe):
+    columns = frame_columns(dataframe)
+    return "ppid" in columns and "ppid_right" not in columns
+
+
+def normalize_ppid_fields(rows, ppid_right_from_ppid=False, fallback_from_row_ppid=True):
+    if not ppid_right_from_ppid:
+        return rows
+
+    for row in rows:
+        if fallback_from_row_ppid and is_missing_value(row.get("ppid_right")) and not is_missing_value(row.get("ppid")):
+            row["ppid_right"] = row.get("ppid")
+        row["ppid"] = ""
+
+    return rows
+
+
+def ppid_lookup_from_all(dataframe, ppid_right_from_ppid=False):
     lookup = {}
     rows = add_time_fields(records(select_columns(dataframe)), "tkout_time")
+    normalize_ppid_fields(rows, ppid_right_from_ppid)
 
     for row in rows:
         values = {column: row.get(column) for column in PPID_COLUMNS if not is_missing_value(row.get(column))}
@@ -2070,9 +2088,10 @@ def fill_ppid_fields(rows, ppid_lookup=None):
     return rows
 
 
-def chart_records(dataframe, limit=900, anomaly_type=None, ppid_lookup=None):
+def chart_records(dataframe, limit=900, anomaly_type=None, ppid_lookup=None, ppid_right_from_ppid=False, fallback_from_row_ppid=True):
     rows = add_time_fields(sample_records(select_columns(dataframe), limit), "tkout_time")
     fill_ppid_fields(rows, ppid_lookup)
+    normalize_ppid_fields(rows, ppid_right_from_ppid, fallback_from_row_ppid)
     if anomaly_type:
         for row in rows:
             row["anomaly_type"] = anomaly_type
@@ -2179,7 +2198,8 @@ def command_chart(args):
     all_background = exclude_frame_eqp(all_df, args.eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, args.eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, args.eqp_id)
-    all_ppid_lookup = ppid_lookup_from_all(all_df)
+    ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
+    all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
     main_all_fab_values = numeric_column_values(all_df, "fab_value")
     center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
     std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
@@ -2225,9 +2245,9 @@ def command_chart(args):
                     "yInitial": outlier_display_domain(main_all_fab_values, std_ng_fab_values),
                 },
             },
-            "allPoints": chart_records(all_background, None),
-            "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup),
-            "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup),
+            "allPoints": chart_records(all_background, None, ppid_right_from_ppid=ppid_right_from_ppid),
+            "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup, ppid_right_from_ppid, False),
+            "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup, ppid_right_from_ppid, False),
             "pmEvents": pm_events,
         }
     )
@@ -2253,7 +2273,8 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True, filter_p3d_dr
     all_background = exclude_frame_eqp(all_df, eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
-    all_ppid_lookup = ppid_lookup_from_all(all_df)
+    ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
+    all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
     all_fab_values = numeric_column_values(all_df, "fab_value")
     center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
     std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
@@ -2297,9 +2318,9 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True, filter_p3d_dr
                 "yInitial": outlier_display_domain(all_fab_values, std_ng_fab_values),
             },
         },
-        "allPoints": chart_records(all_background, None),
-        "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup),
-        "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup),
+        "allPoints": chart_records(all_background, None, ppid_right_from_ppid=ppid_right_from_ppid),
+        "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup, ppid_right_from_ppid, False),
+        "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup, ppid_right_from_ppid, False),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
     }
 
@@ -2492,10 +2513,11 @@ def management_specs_for_fcc_eqp(main_step, chart_met_step, eqp_id, diagnostics)
 def management_all_chart_payload(resolved_paths, eqp_id):
     all_path = resolved_paths["allPath"]
     all_df = sort_frame(read_parquet(all_path), "tkout_time")
+    ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
     highlight_df = filter_frame_eqp_ch(all_df, eqp_id)
     all_fab_values = numeric_column_values(all_df, "fab_value")
     highlight_fab_values = numeric_column_values(highlight_df, "fab_value")
-    highlight_points = chart_records(highlight_df, None, "center")
+    highlight_points = chart_records(highlight_df, None, "center", ppid_right_from_ppid=ppid_right_from_ppid)
     for point in highlight_points:
         point["management_highlight"] = True
 
@@ -2522,7 +2544,7 @@ def management_all_chart_payload(resolved_paths, eqp_id):
             "yFull": numeric_domain(all_fab_values),
             "yInitial": outlier_display_domain(all_fab_values, highlight_fab_values),
         },
-        "allPoints": chart_records(all_df, None),
+        "allPoints": chart_records(all_df, None, ppid_right_from_ppid=ppid_right_from_ppid),
         "highlightPoints": highlight_points,
         "pmEvents": [],
     }
@@ -2553,7 +2575,8 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
     all_background = exclude_frame_eqp(all_df, eqp_id)
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
-    all_ppid_lookup = ppid_lookup_from_all(all_df)
+    ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
+    all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
     all_fab_values = numeric_column_values(all_df, "fab_value")
     center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
     std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
@@ -2597,9 +2620,9 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
                 "yInitial": outlier_display_domain(all_fab_values, std_ng_fab_values),
             },
         },
-        "allPoints": chart_records(all_background, None),
-        "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup),
-        "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup),
+        "allPoints": chart_records(all_background, None, ppid_right_from_ppid=ppid_right_from_ppid),
+        "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup, ppid_right_from_ppid, False),
+        "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup, ppid_right_from_ppid, False),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
     }
 
