@@ -772,12 +772,12 @@ function pointMatchesNg(point, ngIdentitySet = null) {
 }
 
 const STEP_LEGEND_COLORS = [
-  { swatch: 'hsl(268 75% 58%)', point: 'hsla(268, 75%, 58%, 0.16)' },
-  { swatch: 'hsl(204 94% 45%)', point: 'hsla(204, 94%, 45%, 0.16)' },
-  { swatch: 'hsl(152 57% 40%)', point: 'hsla(152, 57%, 40%, 0.16)' },
-  { swatch: 'hsl(35 92% 56%)', point: 'hsla(35, 92%, 56%, 0.16)' },
-  { swatch: 'hsl(350 89% 60%)', point: 'hsla(350, 89%, 60%, 0.16)' },
-  { swatch: 'hsl(240 55% 58%)', point: 'hsla(240, 55%, 58%, 0.16)' },
+  { swatch: 'hsl(268 75% 52%)', point: 'hsla(268, 75%, 52%, 0.24)' },
+  { swatch: 'hsl(204 94% 40%)', point: 'hsla(204, 94%, 40%, 0.24)' },
+  { swatch: 'hsl(152 57% 34%)', point: 'hsla(152, 57%, 34%, 0.24)' },
+  { swatch: 'hsl(35 92% 48%)', point: 'hsla(35, 92%, 48%, 0.24)' },
+  { swatch: 'hsl(316 69% 44%)', point: 'hsla(316, 69%, 44%, 0.24)' },
+  { swatch: 'hsl(240 55% 50%)', point: 'hsla(240, 55%, 50%, 0.24)' },
 ];
 
 const TARGET_Y_TICK_COUNT = 7;
