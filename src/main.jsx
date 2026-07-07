@@ -877,6 +877,15 @@ function getPrioritizedEqpIds(row) {
   return result;
 }
 
+function isFccSingleRow(row) {
+  return row?.anomalySource === 'fcc_single' || String(row?.drawCategory ?? '').trim().toLowerCase() === 'single' || row?.suppressExtraCharts === true;
+}
+
+function getEquipmentChartEndpoint(row, chartEndpoint) {
+  if (row?.dataKind === 'fcc') return '/api/fcc-chart';
+  return chartEndpoint;
+}
+
 function prepareCanvas(canvas, width, height) {
   if (!canvas) return null;
 
@@ -1983,6 +1992,8 @@ function ManagementStepChartModal({ row, eqpId, onClose }) {
 function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart' }) {
   const [chartState, setChartState] = useState({ loading: true, error: '', data: null });
   const [isManagementModalOpen, setIsManagementModalOpen] = useState(false);
+  const resolvedChartEndpoint = getEquipmentChartEndpoint(row, chartEndpoint);
+  const suppressExtraCharts = isFccSingleRow(row);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1998,9 +2009,10 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
       params.set('device', row.device ?? '');
       params.set('lineName', row.lineName ?? '');
     }
+    if (suppressExtraCharts) params.set('suppressExtraCharts', '1');
 
     setChartState({ loading: true, error: '', data: null });
-    fetchJson(`${chartEndpoint}?${params.toString()}`, { signal: controller.signal })
+    fetchJson(`${resolvedChartEndpoint}?${params.toString()}`, { signal: controller.signal })
       .then((payload) => {
         setChartState({ loading: false, error: '', data: payload });
         if (payload.latestDate) onLatestDate?.(payload.latestDate);
@@ -2011,7 +2023,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
       });
 
     return () => controller.abort();
-  }, [chartEndpoint, eqpId, onLatestDate, row]);
+  }, [eqpId, onLatestDate, resolvedChartEndpoint, row, suppressExtraCharts]);
 
   useEffect(() => {
     setIsManagementModalOpen(false);
@@ -2019,8 +2031,8 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
 
   const failPoints = chartState.data?.failPoints ?? [];
   const stdPoints = chartState.data?.stdPoints ?? [];
-  const extraCenterCharts = chartState.data?.extraCenterCharts ?? [];
-  const extraStdCharts = chartState.data?.extraStdCharts ?? [];
+  const extraCenterCharts = suppressExtraCharts ? [] : (chartState.data?.extraCenterCharts ?? []);
+  const extraStdCharts = suppressExtraCharts ? [] : (chartState.data?.extraStdCharts ?? []);
   const shouldDrawCenter = eqpListIncludes(row.centerEqpIds, eqpId);
   const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
   const centerPoints = shouldDrawCenter ? failPoints : [];

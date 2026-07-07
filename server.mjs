@@ -279,13 +279,16 @@ function handleApi(req, res, url) {
     const chartMetStep = url.searchParams.get('chartMetStep');
     const eqpId = url.searchParams.get('eqpId');
     const chartRoot = url.searchParams.get('chartRoot') || 'step';
+    const suppressExtraCharts = url.searchParams.get('suppressExtraCharts') === '1';
 
     if (!mainStep || !chartMetStep || !eqpId) {
       sendJson(res, 400, { ok: false, error: 'mainStep, chartMetStep, eqpId가 필요합니다.' });
       return true;
     }
 
-    runLoader(['fcc-chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId, '--chart-root', chartRoot], res);
+    const loaderArgs = ['fcc-chart', '--main-step', mainStep, '--chart-met-step', chartMetStep, '--eqp-id', eqpId, '--chart-root', chartRoot];
+    if (suppressExtraCharts) loaderArgs.push('--suppress-extra-charts');
+    runLoader(loaderArgs, res);
     return true;
   }
 
