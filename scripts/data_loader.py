@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v37"
+LOADER_VERSION = "file-loader-v38"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -877,6 +877,14 @@ def sort_frame(dataframe, column):
     return dataframe.sort_values(column)
 
 
+def sort_frame_desc(dataframe, column):
+    if column not in frame_columns(dataframe):
+        return dataframe
+    if is_polars_frame(dataframe):
+        return dataframe.sort(column, descending=True)
+    return dataframe.sort_values(column, ascending=False)
+
+
 def filter_frame_p3d_drawing(dataframe):
     eqp_columns = [column for column in ("eqp_id", "eqpid", "eqp_ch", "eqpch") if column in frame_columns(dataframe)]
     if not eqp_columns:
@@ -1040,7 +1048,7 @@ def split_p3d_drawing_df(dataframe):
 
 
 def split_fcc_drawing_df(dataframe):
-    return normalize_fcc_chart_frame(dataframe)
+    return filter_frame_p3d_drawing(normalize_fcc_chart_frame(dataframe))
 
 
 def records(dataframe):
@@ -1289,6 +1297,7 @@ def add_fcc_summary_rows(
     met_mapping_by_key=None,
     met_mapping_by_main_step=None,
     use_mapping_met_step=False,
+    filter_cross_line_eqp=False,
 ):
     eqp_ids_key = "centerEqpIds" if count_key == "centerCount" else "stdEqpIds"
 
@@ -1332,6 +1341,8 @@ def add_fcc_summary_rows(
         eqp_ids = parse_eqp_ids(get_first(row, eqp_columns))
         if required_eqp_ids is not None:
             eqp_ids = [eqp_id for eqp_id in eqp_ids if eqp_id in required_eqp_ids]
+        if filter_cross_line_eqp:
+            eqp_ids = [eqp_id for eqp_id in eqp_ids if not is_p4d_eqp(eqp_id)]
         if not eqp_ids:
             continue
 
@@ -1575,7 +1586,11 @@ def command_fcc_summary(_args):
 
     by_main_step, _by_step_desc = met_lookup(display_met_rows, step_normalizer=fcc_mapping_step_code)
     fcc_step_met_by_key, _fcc_step_met_by_main_step = fcc_met_mapping_index(display_met_rows)
-    fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid", "eqpch", "eqp_ch"))
+    fcc_center_eqp_ids = {
+        eqp_id
+        for eqp_id in collect_eqp_ids(fail_rows, ("eqpid", "eqpch", "eqp_ch"))
+        if not is_p4d_eqp(eqp_id)
+    }
     metrics = {
         **fcc_met_unique_counts(extra_met_rows),
         "centerEqpCount": len(fcc_center_eqp_ids),
@@ -1601,6 +1616,7 @@ def command_fcc_summary(_args):
         chart_root="step",
         source_priority=1,
         met_mapping_by_key=fcc_step_met_by_key,
+        filter_cross_line_eqp=True,
     )
     diagnostics["usedRows"]["fcc_extra_met"] = len(extra_met_rows)
     diagnostics["usedRows"]["fcc_extra_fail"] = sum(
@@ -2478,7 +2494,7 @@ def pm_events_for_eqp(eqp_id):
         return []
 
     selected_columns = ["asset", time_column, "work_type", "description", "url"]
-    rows = records(select_existing_frame_columns(sort_frame(pm_df, time_column), selected_columns).head(80))
+    rows = records(select_existing_frame_columns(sort_frame_desc(pm_df, time_column), selected_columns).head(80))
     for row in rows:
         if time_column != "inprg_dt":
             row["inprg_dt"] = row.get(time_column)

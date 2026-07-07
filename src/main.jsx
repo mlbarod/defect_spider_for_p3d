@@ -550,6 +550,7 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
                   <div className="subStepButtons" id={`metsteps-${group.mainStep}`}>
                     {group.metSteps.map((row) => {
                       const { metStepNo, metItem } = getMetStepDisplay(row.metStep);
+                      const displayMetItem = getMetStepButtonItem(row, metItem);
 
                       return (
                         <button
@@ -559,7 +560,7 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
                         >
                           <span>
                             {metStepNo}
-                            {metItem ? ` / ${metItem}` : ''}
+                            {displayMetItem ? ` / ${displayMetItem}` : ''}
                           </span>
                           <strong>{row.eqpIds?.length ?? 0} eqp</strong>
                         </button>
@@ -879,6 +880,11 @@ function getPrioritizedEqpIds(row) {
 
 function isFccSingleRow(row) {
   return row?.anomalySource === 'fcc_single' || String(row?.drawCategory ?? '').trim().toLowerCase() === 'single' || row?.suppressExtraCharts === true;
+}
+
+function getMetStepButtonItem(row, fallback = '') {
+  if (isFccSingleRow(row)) return String(row?.metItem2 ?? '').trim() || fallback;
+  return fallback;
 }
 
 function getEquipmentChartEndpoint(row, chartEndpoint) {
