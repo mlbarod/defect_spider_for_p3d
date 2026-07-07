@@ -19,12 +19,14 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v35"
+LOADER_VERSION = "file-loader-v36"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
 FCC_STEP_PATH = f"{FCC_FOLDER_PATH}/fcc_step"
 LINE_MAPPING_PATH = os.environ.get("LINE_MAPPING_PATH") or f"{CONFIG['eadsRoot']}/line_mapping.txt"
+FCC_DRAW_CATEGORY_SINGLE = "single"
+FCC_SINGLE_CHAMBER_LINE_CODE = "PFB3"
 COMPACT_TIME_FORMATS = (
     "%Y%m%d%H%M%S",
     "%Y%m%d%H%M",
@@ -690,6 +692,27 @@ def chamber_data_sources(line_code, device):
     ]
 
 
+def fcc_single_chamber_data_sources(device):
+    line_root = f"{CONFIG['eadsRoot']}/{FCC_SINGLE_CHAMBER_LINE_CODE}"
+    return [
+        {
+            "key": "fcc_step_met",
+            "label": "FCC 스탭 MET 매핑",
+            "path": f"{FCC_STEP_PATH}/met_fcc.txt",
+        },
+        {
+            "key": "fcc_fail",
+            "label": "FCC 중심치 이상 목록",
+            "path": f"{FCC_STEP_PATH}/fail_list.parquet",
+        },
+        {
+            "key": "fcc_single_chamber_met",
+            "label": "PFB3 개별챔버 MET 매핑",
+            "path": f"{line_root}/met.txt",
+        },
+    ]
+
+
 def command_chamber_lines(_args):
     line_mapping_path = LINE_MAPPING_PATH
     line_mapping_content = read_text_file(line_mapping_path)
@@ -717,7 +740,11 @@ def command_chamber_summary(args):
     if not line_code or not device:
         raise ValueError("lineCode와 device가 필요합니다.")
 
-    sources = chamber_data_sources(line_code, device)
+    chamber_sources = chamber_data_sources(line_code, device)
+    sources = chamber_sources
+    include_fcc_single = should_add_fcc_single_to_chamber(line_name, line_code, device)
+    if include_fcc_single:
+        sources = sources + fcc_single_chamber_data_sources(device)
     diagnostics = {
         "version": LOADER_VERSION,
         "lineCode": line_code,
@@ -729,7 +756,7 @@ def command_chamber_summary(args):
         "outputRows": 0,
         "warnings": [],
     }
-    met_source, fail_source, std_source = sources
+    met_source, fail_source, std_source = chamber_sources
     fail_rows = load_optional_parquet(fail_source, diagnostics)
     std_rows = load_optional_parquet(std_source, diagnostics)
     met_rows = load_optional_met_rows(met_source, diagnostics, device=device)
@@ -757,12 +784,23 @@ def command_chamber_summary(args):
         filter_cross_line_eqp=filter_p3d_chamber_eqp,
     )
 
+    if include_fcc_single:
+        diagnostics["usedRows"]["fcc_single_fail"] = add_fcc_single_chamber_rows(
+            merged,
+            device,
+            filter_cross_line_eqp=filter_p3d_chamber_eqp,
+            diagnostics=diagnostics,
+            selected_chamber_met_rows=met_rows if line_code.upper() == FCC_SINGLE_CHAMBER_LINE_CODE else None,
+        )
+    else:
+        diagnostics["usedRows"]["fcc_single_fail"] = 0
+
     rows = [
         {
             **row,
-            "lineName": line_name,
-            "lineCode": line_code,
-            "device": device,
+            "lineName": row.get("lineName") or line_name,
+            "lineCode": row.get("lineCode") or line_code,
+            "device": row.get("device") or device,
             "chartRoot": "chamber",
         }
         for row in merged.values()
@@ -771,7 +809,7 @@ def command_chamber_summary(args):
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
 
-    if not fail_rows and not std_rows:
+    if not fail_rows and not std_rows and diagnostics["usedRows"].get("fcc_single_fail", 0) == 0:
         write_json(
             {
                 "ok": False,
@@ -812,6 +850,10 @@ def is_p3d_chamber_selection(line_name="", line_code="", device=""):
     if normalized_line_name.startswith("P3D"):
         return True
     return normalized_line_code in {"P3D", "PFB3"}
+
+
+def should_add_fcc_single_to_chamber(line_name="", line_code="", device=""):
+    return is_p3d_chamber_selection(line_name, line_code, device)
 
 
 def frame_records(dataframe):
@@ -1160,6 +1202,17 @@ def add_summary_rows(
     return added
 
 
+def normalize_draw_category(row):
+    value = get_first(row, ("draw_category", "drawCategory", "draw category"))
+    if is_missing_value(value):
+        return ""
+    return str(value or "").strip().lower()
+
+
+def is_fcc_single_draw_row(row):
+    return normalize_draw_category(row) == FCC_DRAW_CATEGORY_SINGLE
+
+
 def add_fcc_met_rows(target, met_rows, key_prefix="fcc", chart_root="step", source_priority=1):
     added = 0
     for row in met_rows:
@@ -1184,6 +1237,7 @@ def add_fcc_met_rows(target, met_rows, key_prefix="fcc", chart_root="step", sour
             "stepSeq": main_step,
             "metStep": met_step,
             "metStepPath": met_step_raw or met_step,
+            "drawCategory": normalize_draw_category(row),
             "metItem": fcc_met_item(row),
             "metItem2": fcc_met_item2(row),
             "stepDesc": row.get("step_desc") or "",
@@ -1216,6 +1270,7 @@ def fcc_met_mapping_index(met_rows):
             "mainStepPath": main_step_raw or main_step,
             "metStep": met_step,
             "metStepPath": met_step_raw or met_step,
+            "drawCategory": normalize_draw_category(row),
             "metItem": fcc_met_item(row),
             "metItem2": fcc_met_item2(row),
             "stepDesc": row.get("step_desc") or "",
@@ -1299,6 +1354,7 @@ def add_fcc_summary_rows(
                 "stepSeq": main_step,
                 "metStep": met_seq,
                 "metStepPath": met_seq_raw or met_seq,
+                "drawCategory": mapped_entry.get("drawCategory", "") if mapped_entry else "",
                 "metItem": item_id,
                 "metItem2": met_item2,
                 "stepDesc": step_desc,
@@ -1338,6 +1394,139 @@ def collect_eqp_ids(rows, eqp_columns=("eqpid", "eqpch", "eqp_ch")):
     for row in rows:
         eqp_ids.update(parse_eqp_ids(get_first(row, eqp_columns)))
     return eqp_ids
+
+
+def chamber_met_mapping_index(met_rows):
+    by_key = {}
+    by_main_step = {}
+
+    for row in met_rows:
+        main_step_raw = str(row.get("main_step") or "").strip()
+        met_step_raw = str(row.get("met_step") or "").strip()
+        main_step = fcc_mapping_step_code(main_step_raw)
+        met_step = fcc_mapping_step_code(met_step_raw)
+        if not main_step:
+            continue
+
+        entry = {
+            "mainStep": normalize_step(main_step_raw),
+            "mainStepPath": main_step_raw or main_step,
+            "stepSeq": normalize_step(main_step_raw) or main_step,
+            "metStep": normalize_step(met_step_raw),
+            "metStepPath": met_step_raw or met_step,
+            "stepDesc": row.get("step_desc") or "",
+            "sdwt": row.get("sdwt") or "",
+            "device": str(row.get("device") or "").strip(),
+        }
+        by_main_step.setdefault(main_step, []).append(entry)
+        if met_step:
+            by_key.setdefault((main_step, met_step), []).append(entry)
+
+    return by_key, by_main_step
+
+
+def first_chamber_met_entry(single_entry, chamber_met_by_key, chamber_met_by_main_step):
+    main_step = single_entry.get("mainStep") or ""
+    met_step = single_entry.get("metStep") or ""
+    exact_candidates = chamber_met_by_key.get((main_step, met_step), [])
+    if exact_candidates:
+        return exact_candidates[0]
+
+    main_candidates = chamber_met_by_main_step.get(main_step, [])
+    if main_candidates:
+        return {
+            **main_candidates[0],
+            "metStep": single_entry.get("metStep") or main_candidates[0].get("metStep", ""),
+            "metStepPath": single_entry.get("metStepPath") or main_candidates[0].get("metStepPath", ""),
+        }
+
+    return None
+
+
+def add_fcc_single_chamber_rows(target, device, filter_cross_line_eqp=True, diagnostics=None, selected_chamber_met_rows=None):
+    diagnostics = diagnostics if diagnostics is not None else {}
+    fcc_step_met_source, fcc_fail_source, pfb3_met_source = fcc_single_chamber_data_sources(device)
+    fcc_met_rows = load_optional_met_rows(fcc_step_met_source, diagnostics, device=None)
+    fcc_fail_rows = load_optional_parquet(fcc_fail_source, diagnostics)
+    if selected_chamber_met_rows is not None:
+        chamber_met_rows = selected_chamber_met_rows
+        diagnostics.setdefault("inputRows", {})[pfb3_met_source["key"]] = len(chamber_met_rows)
+        diagnostics.setdefault("columns", {})[pfb3_met_source["key"]] = list(chamber_met_rows[0].keys()) if chamber_met_rows else []
+    else:
+        chamber_met_rows = load_optional_met_rows(pfb3_met_source, diagnostics, device=device)
+
+    single_met_rows = [row for row in fcc_met_rows if is_fcc_single_draw_row(row)]
+    diagnostics.setdefault("usedRows", {})["fcc_single_met"] = len(single_met_rows)
+    diagnostics.setdefault("usedRows", {})["fcc_single_chamber_met"] = len(chamber_met_rows)
+    if not single_met_rows or not fcc_fail_rows or not chamber_met_rows:
+        return 0
+
+    fcc_single_by_key, _fcc_single_by_main_step = fcc_met_mapping_index(single_met_rows)
+    chamber_met_by_key, chamber_met_by_main_step = chamber_met_mapping_index(chamber_met_rows)
+    added = 0
+
+    for row in fcc_fail_rows:
+        main_step_raw = str(get_first(row, ("main_seq", "main_step", "mainStep")) or "").strip()
+        met_seq_raw = str(get_first(row, ("met_seq", "met_step", "metStep")) or "").strip()
+        main_step = fcc_mapping_step_code(main_step_raw)
+        fail_met_step = fcc_mapping_step_code(met_seq_raw)
+        if not main_step or not fail_met_step:
+            continue
+
+        single_entry = fcc_single_by_key.get((main_step, fail_met_step))
+        if not single_entry:
+            continue
+
+        chamber_entry = first_chamber_met_entry(single_entry, chamber_met_by_key, chamber_met_by_main_step)
+        if not chamber_entry:
+            continue
+
+        eqp_ids = parse_eqp_ids(get_first(row, ("eqpid", "eqpch", "eqp_ch")))
+        if filter_cross_line_eqp:
+            eqp_ids = [eqp_id for eqp_id in eqp_ids if not is_p4d_eqp(eqp_id)]
+        if not eqp_ids:
+            continue
+
+        row_line_code = FCC_SINGLE_CHAMBER_LINE_CODE
+        row_device = chamber_entry.get("device") or device
+        main_step_value = chamber_entry.get("mainStep") or main_step
+        met_step_value = chamber_entry.get("metStep") or single_entry.get("metStep") or fail_met_step
+        if not main_step_value or not met_step_value:
+            continue
+
+        key = f"chamber::{row_line_code}::{row_device}::{main_step_value}::{met_step_value}"
+        current = target.setdefault(
+            key,
+            {
+                "key": key,
+                "dataKind": "chamber",
+                "anomalySource": "fcc_single",
+                "drawCategory": FCC_DRAW_CATEGORY_SINGLE,
+                "lineCode": row_line_code,
+                "device": row_device,
+                "mainStep": main_step_value,
+                "mainStepPath": chamber_entry.get("mainStepPath") or main_step_value,
+                "stepSeq": chamber_entry.get("stepSeq") or main_step_value,
+                "metStep": met_step_value,
+                "metStepPath": chamber_entry.get("metStepPath") or single_entry.get("metStepPath") or met_step_value,
+                "metItem": single_entry.get("metItem", ""),
+                "metItem2": single_entry.get("metItem2", ""),
+                "stepDesc": chamber_entry.get("stepDesc") or single_entry.get("stepDesc", ""),
+                "sdwt": chamber_entry.get("sdwt") or single_entry.get("sdwt", ""),
+                "centerCount": 0,
+                "stdCount": 0,
+                "centerEqpIds": [],
+                "stdEqpIds": [],
+                "eqpIds": [],
+            },
+        )
+
+        current["centerEqpIds"] = sorted(set(current["centerEqpIds"]) | set(eqp_ids))
+        current["centerCount"] = len(current["centerEqpIds"])
+        current["eqpIds"] = sorted(set(current["eqpIds"]) | set(eqp_ids))
+        added += 1
+
+    return added
 
 
 def fcc_met_item(row):
@@ -1462,9 +1651,10 @@ def command_fcc_summary(_args):
     extra_fail_rows = load_optional_parquet(fcc_extra_fail_source, diagnostics)
     extra_std_rows = load_optional_parquet(fcc_extra_std_source, diagnostics)
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
+    display_met_rows = [row for row in met_rows if not is_fcc_single_draw_row(row)]
 
-    by_main_step, _by_step_desc = met_lookup(met_rows, step_normalizer=fcc_mapping_step_code)
-    fcc_step_met_by_key, _fcc_step_met_by_main_step = fcc_met_mapping_index(met_rows)
+    by_main_step, _by_step_desc = met_lookup(display_met_rows, step_normalizer=fcc_mapping_step_code)
+    fcc_step_met_by_key, _fcc_step_met_by_main_step = fcc_met_mapping_index(display_met_rows)
     fcc_center_eqp_ids = collect_eqp_ids(fail_rows, ("eqpid", "eqpch", "eqp_ch"))
     metrics = {
         **fcc_met_unique_counts(extra_met_rows),
@@ -1473,11 +1663,12 @@ def command_fcc_summary(_args):
     merged = {}
     diagnostics["usedRows"]["fcc_step_met"] = add_fcc_met_rows(
         merged,
-        met_rows,
+        display_met_rows,
         key_prefix="fcc_step",
         chart_root="step",
         source_priority=1,
     )
+    diagnostics["usedRows"]["fcc_step_met_single_excluded"] = len(met_rows) - len(display_met_rows)
     mapped_keys = set(merged)
     diagnostics["usedRows"]["fcc_fail"] = add_fcc_summary_rows(
         merged,
@@ -1510,6 +1701,7 @@ def command_fcc_summary(_args):
     ]
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
+    metrics["centerEqpCount"] = len({eqp_id for row in rows for eqp_id in row.get("centerEqpIds", [])})
 
     if not met_rows and not fail_rows and not extra_met_rows and not extra_fail_rows and not extra_std_rows:
         write_json(

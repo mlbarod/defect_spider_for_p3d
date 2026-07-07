@@ -60,7 +60,7 @@ const FCC_DATA_SOURCES = [
     key: 'fcc_step_met',
     label: 'FCC 스탭 MET 매핑',
     path: `${fccStepPath}/met_fcc.txt`,
-    requiredColumns: ['device', 'main_step', 'met_step', 'step_desc', 'sdwt'],
+    requiredColumns: ['device', 'main_step', 'met_step', 'draw_category', 'step_desc', 'sdwt'],
   },
   {
     key: 'fcc_fail',
