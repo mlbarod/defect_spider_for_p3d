@@ -2256,7 +2256,9 @@ def select_columns(dataframe):
         "ppid",
         "ppid_right",
         "final_decision",
+        "FINAL_DECISION",
         "std_result",
+        "STD_RESULT",
     ]
     return select_frame_columns(dataframe, wanted)
 
@@ -2371,8 +2373,13 @@ def is_ng_decision(value):
 
 
 def final_decision_ng_numeric_values(dataframe, value_column="fab_value"):
+    columns = frame_columns(dataframe)
+    decision_column = "final_decision" if "final_decision" in columns else "FINAL_DECISION" if "FINAL_DECISION" in columns else ""
+    if not decision_column:
+        return []
+
     values = []
-    for decision, value in zip(column_values(dataframe, "final_decision"), column_values(dataframe, value_column)):
+    for decision, value in zip(column_values(dataframe, decision_column), column_values(dataframe, value_column)):
         if not is_ng_decision(decision):
             continue
         try:

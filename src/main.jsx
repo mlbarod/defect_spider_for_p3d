@@ -754,10 +754,12 @@ function isNgDecision(value) {
 
 function hasNgDecision(point) {
   if (point?.management_highlight) return true;
+  const finalDecision = point?.final_decision ?? point?.FINAL_DECISION;
+  const stdResult = point?.std_result ?? point?.STD_RESULT;
   if (point?.anomaly_type === 'std') {
-    return isNgDecision(point.std_result) || isNgDecision(point.final_decision);
+    return isNgDecision(stdResult) || isNgDecision(finalDecision);
   }
-  return isNgDecision(point?.final_decision);
+  return isNgDecision(finalDecision);
 }
 
 function getPointIdentity(point) {
@@ -1543,6 +1545,7 @@ const NG_TABLE_COLUMNS = ['wafer_id', 'tkout_time', 'step_seq', 'eqp_id', 'lot_i
 const PM_TABLE_COLUMNS = ['asset', 'work_type', 'inprg_dt', 'description', 'Link'];
 const ANOMALY_META = {
   center: { label: '중심치 이상', tagClass: 'center' },
+  timefitCenter: { label: 'FCC시점 중심치 이상', tagClass: 'timefitCenter' },
   std: { label: '산포이상', tagClass: 'std' },
 };
 
@@ -1865,8 +1868,9 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
   const resolvedCenterPoints = centerPoints ?? (anomalyType === 'center' ? points : []);
   const resolvedStdPoints = stdPoints ?? (anomalyType === 'std' ? points : []);
   const pmEvents = chartData.pmEvents ?? [];
+  const centerAnomalyType = row?.chartRoot === 'timefit' ? 'timefitCenter' : 'center';
   const anomalyTypes = [
-    resolvedCenterPoints.length > 0 ? 'center' : '',
+    resolvedCenterPoints.length > 0 ? centerAnomalyType : '',
     resolvedStdPoints.length > 0 ? 'std' : '',
   ].filter(Boolean);
   const visibleAnomalyTypes = anomalyTypes.length > 0 ? anomalyTypes : [anomalyType];
@@ -2176,6 +2180,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             chartData={chart}
             anomalyType="std"
             points={chart.stdPoints}
+            highlightRange={extraCenterHighlightRange}
           />
         ) : (
           <ChartFailureCard
@@ -2210,6 +2215,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             chartData={chart}
             anomalyType="center"
             points={chart.failPoints}
+            highlightRange={extraCenterHighlightRange}
           />
         ) : (
           <ChartFailureCard

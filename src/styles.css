@@ -1494,6 +1494,12 @@ tr:last-child td {
   color: var(--destructive);
 }
 
+.anomalyTag.timefitCenter {
+  border-color: color-mix(in srgb, var(--destructive) 34%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 12%, var(--card));
+  color: color-mix(in srgb, var(--destructive) 82%, var(--foreground));
+}
+
 .anomalyTag.std {
   border-color: color-mix(in srgb, var(--chart-2) 28%, var(--border));
   background: var(--chart-2-soft);
