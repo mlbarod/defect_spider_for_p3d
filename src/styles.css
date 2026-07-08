@@ -1061,7 +1061,8 @@ code {
   flex: 0 0 auto;
   color: currentColor;
   font-size: 11px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .detailPanel {

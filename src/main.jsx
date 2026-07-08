@@ -17,6 +17,7 @@ const isMainLine = CONFIG.lineName === CONFIG.lineName;
 const folderPath = `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}`;
 const fccFolderPath = `${CONFIG.eadsRoot}/${CONFIG.selectLine}/${CONFIG.device}_fcc`;
 const fccStepPath = `${fccFolderPath}/fcc_step`;
+const fccTimefitPath = `${fccFolderPath}/fcc_timefit`;
 const HISTORY_LINE_NAMES = {
   main: 'P3D (MAIN)',
   fcc: 'P3D (FCC)',
@@ -86,6 +87,12 @@ const FCC_DATA_SOURCES = [
     path: `${fccFolderPath}/fail_list_std.parquet`,
     requiredColumns: ['main_seq', 'met_seq', 'eqpid/eqpch'],
   },
+  {
+    key: 'fcc_timefit_fail_list',
+    label: 'FCC 이상시점 추가 이상 목록',
+    path: `${fccTimefitPath}/fail_fccdate_list.parquet`,
+    requiredColumns: ['step_seq', 'eqp_ch', 'tkout_time', 'main_step'],
+  },
 ];
 
 const CHAMBER_DATA_SOURCES = [
@@ -119,6 +126,9 @@ const EMPTY_FCC_LOAD_STATE = {
     extraMetMainStepCount: 0,
     extraMetStepCount: 0,
     centerEqpCount: 0,
+    timefitMainStepCount: 0,
+    timefitEqpCount: 0,
+    timefitAnomalyCount: 0,
   },
   sources: FCC_DATA_SOURCES.map((source) => ({ ...source, exists: false, readable: false })),
   diagnostics: {
@@ -562,7 +572,10 @@ function MainStepTree({ groups, selectedMetStepKey, onSelectMetStep, loading, er
                             {metStepNo}
                             {displayMetItem ? ` / ${displayMetItem}` : ''}
                           </span>
-                          <strong>{row.eqpIds?.length ?? 0} eqp</strong>
+                          <strong>
+                            {row.eqpIds?.length ?? 0} eqp
+                            {row.timefitCount ? ` / ${Number(row.timefitCount).toLocaleString()} fccdate` : ''}
+                          </strong>
                         </button>
                       );
                     })}
@@ -865,6 +878,24 @@ function getPrioritizedEqpIds(row) {
   const seen = new Set();
 
   [row?.centerEqpIds, row?.stdEqpIds, row?.eqpIds].forEach((values) => {
+    if (!Array.isArray(values)) return;
+
+    values.forEach((value) => {
+      const eqpId = String(value ?? '').trim();
+      if (!eqpId || seen.has(eqpId)) return;
+      seen.add(eqpId);
+      result.push(eqpId);
+    });
+  });
+
+  return result;
+}
+
+function getPrioritizedFccEqpIds(row) {
+  const result = [];
+  const seen = new Set();
+
+  [row?.centerEqpIds, row?.timefitEqpIds, row?.eqpIds].forEach((values) => {
     if (!Array.isArray(values)) return;
 
     values.forEach((value) => {
@@ -1755,6 +1786,7 @@ function ChartTag({ anomalyType, anomalyTypes }) {
 
 function getChartPathEntries(data) {
   const paths = data?.paths ?? {};
+  const pathLabels = data?.pathLabels ?? {};
   const resolvedPaths = data?.diagnostics?.resolvedPaths ?? {};
   const entries = [
     ['all', paths.all ?? resolvedPaths.allPath],
@@ -1762,7 +1794,7 @@ function getChartPathEntries(data) {
     ['std', paths.std ?? resolvedPaths.stdPath],
   ];
 
-  return entries.filter(([, value]) => value);
+  return entries.filter(([, value]) => value).map(([label, value]) => [pathLabels[label] ?? label, value]);
 }
 
 function ChartFailurePaths({ data }) {
@@ -2039,6 +2071,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const stdPoints = chartState.data?.stdPoints ?? [];
   const extraCenterCharts = suppressExtraCharts ? [] : (chartState.data?.extraCenterCharts ?? []);
   const extraStdCharts = suppressExtraCharts ? [] : (chartState.data?.extraStdCharts ?? []);
+  const timefitCharts = suppressExtraCharts ? [] : (chartState.data?.timefitCharts ?? []);
   const shouldDrawCenter = eqpListIncludes(row.centerEqpIds, eqpId);
   const shouldDrawStd = eqpListIncludes(row.stdEqpIds, eqpId);
   const centerPoints = shouldDrawCenter ? failPoints : [];
@@ -2046,7 +2079,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
   const centerNgIdentitySet = useMemo(() => buildNgIdentitySet(centerPoints), [centerPoints]);
   const centerNgTablePoints = useMemo(() => getNgTablePoints(centerPoints, centerNgIdentitySet, eqpId), [centerPoints, centerNgIdentitySet, eqpId]);
   const extraCenterHighlightRange = useMemo(() => getTkoutTimeRange(centerNgTablePoints), [centerNgTablePoints]);
-  const hasExtraCharts = extraCenterCharts.length > 0 || extraStdCharts.length > 0;
+  const hasExtraCharts = extraCenterCharts.length > 0 || extraStdCharts.length > 0 || timefitCharts.length > 0;
   const hasBaseChart = centerPoints.length > 0 || stdChartPoints.length > 0;
   const isFccRelatedChart = row?.dataKind === 'fcc' && row?.chartRoot === 'step';
   const managementTitleAction = isFccRelatedChart ? (
@@ -2149,6 +2182,40 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             row={chart.row ?? row}
             eqpId={eqpId}
             error={chart.error || 'FCC 추가 산포 chart 데이터를 찾지 못했습니다.'}
+            data={chart}
+          />
+        ),
+    });
+  });
+
+  timefitCharts.forEach((chart, index) => {
+    const key = `${eqpId}-timefit-${chart.row?.key ?? index}`;
+    const chartRow = {
+      ...row,
+      ...(chart.row ?? {}),
+      stepDesc: chart.row?.stepDesc || row.stepDesc,
+      sdwt: chart.row?.sdwt || row.sdwt,
+      metItem2: chart.row?.metItem2 || row.metItem2,
+    };
+
+    chartSections.push({
+      key,
+      label: 'FCC 이상시점 fail 중심치 이상 scatter',
+      tone: 'timefit',
+      element:
+        chart.ok !== false && (chart.failPoints?.length ?? 0) > 0 ? (
+          <AnomalyChartCard
+            row={chartRow}
+            eqpId={eqpId}
+            chartData={chart}
+            anomalyType="center"
+            points={chart.failPoints}
+          />
+        ) : (
+          <ChartFailureCard
+            row={chartRow}
+            eqpId={eqpId}
+            error={chart.error || 'FCC 이상시점 fail 중심치 이상 scatter 데이터를 찾지 못했습니다.'}
             data={chart}
           />
         ),
@@ -2716,7 +2783,7 @@ function App() {
   const activeLoadState = activeChartSource === 'fcc' ? fccLoadState : loadState;
   const activeChartEndpoint = activeChartSource === 'fcc' ? '/api/fcc-chart' : '/api/chart';
   const activeChartEyebrow = activeChartSource === 'fcc' ? 'FCC Equipment Charts' : 'Equipment Charts';
-  const selectedEqpIds = activeChartSource === 'fcc' ? (activeSelectedRow?.centerEqpIds ?? []) : getPrioritizedEqpIds(activeSelectedRow);
+  const selectedEqpIds = activeChartSource === 'fcc' ? getPrioritizedFccEqpIds(activeSelectedRow) : getPrioritizedEqpIds(activeSelectedRow);
 
   const metStepCount = mainStepGroups.reduce((sum, group) => sum + group.metSteps.length, 0);
   const eqpCount = filteredRows.reduce((sum, row) => sum + (row.eqpIds?.length ?? 0), 0);
@@ -2730,6 +2797,7 @@ function App() {
           { label: '메인스탭', value: Number(fccMetrics.extraMetMainStepCount ?? 0).toLocaleString() },
           { label: '계측 스탭', value: Number(fccMetrics.extraMetStepCount ?? 0).toLocaleString() },
           { label: '감지 댓수', value: Number(fccMetrics.centerEqpCount ?? 0).toLocaleString() },
+          { label: 'FCC 이상시점', value: `${Number(fccMetrics.timefitEqpCount ?? 0).toLocaleString()} eqp / ${Number(fccMetrics.timefitAnomalyCount ?? 0).toLocaleString()}건` },
         ]
       : [
           { label: '메인 스탭', value: mainStepGroups.length.toLocaleString() },
@@ -2792,7 +2860,7 @@ function App() {
         latestDate={chartLatestDate}
       />
 
-      <div className={`topMetrics ${activeChartSource === 'fcc' ? 'threeColumns' : ''}`}>
+      <div className="topMetrics">
         {metricCards.map((metric) => (
           <Metric key={metric.label} label={metric.label} value={metric.value} />
         ))}

@@ -19,11 +19,12 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v38"
+LOADER_VERSION = "file-loader-v39"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
 FCC_STEP_PATH = f"{FCC_FOLDER_PATH}/fcc_step"
+FCC_TIMEFIT_PATH = f"{FCC_FOLDER_PATH}/fcc_timefit"
 LINE_MAPPING_PATH = os.environ.get("LINE_MAPPING_PATH") or f"{CONFIG['eadsRoot']}/line_mapping.txt"
 FCC_DRAW_CATEGORY_SINGLE = "single"
 FCC_SINGLE_CHAMBER_LINE_CODE = "PFB3"
@@ -88,6 +89,11 @@ FCC_DATA_SOURCES = [
         "key": "fcc_extra_std",
         "label": "FCC 추가 산포 이상 목록",
         "path": f"{FCC_FOLDER_PATH}/fail_list_std.parquet",
+    },
+    {
+        "key": "fcc_timefit_fail_list",
+        "label": "FCC 이상시점 추가 이상 목록",
+        "path": f"{FCC_TIMEFIT_PATH}/fail_fccdate_list.parquet",
     },
 ]
 
@@ -1487,6 +1493,58 @@ def fcc_met_unique_counts(met_rows):
     }
 
 
+def fcc_timefit_eqp_stats(timefit_rows):
+    by_main_step = {}
+    for row in timefit_rows:
+        main_step = fcc_mapping_step_code(str(get_first(row, ("main_step", "mainStep", "main_seq")) or "").strip())
+        eqp_ch = str(get_first(row, ("eqp_ch", "eqpch")) or "").strip()
+        if not main_step or not eqp_ch:
+            continue
+
+        current = by_main_step.setdefault(
+            main_step,
+            {
+                "eqpCounts": {},
+                "count": 0,
+            },
+        )
+        current["eqpCounts"][eqp_ch] = current["eqpCounts"].get(eqp_ch, 0) + 1
+        current["count"] += 1
+
+    return by_main_step
+
+
+def apply_fcc_timefit_stats(rows, timefit_rows):
+    stats_by_main_step = fcc_timefit_eqp_stats(timefit_rows)
+    matched_rows = 0
+    matched_anomaly_count = 0
+
+    for row in rows:
+        stats = stats_by_main_step.get(row.get("mainStep"))
+        if not stats:
+            row["timefitCount"] = 0
+            row["timefitEqpIds"] = []
+            row["timefitEqpCounts"] = {}
+            continue
+
+        eqp_counts = dict(sorted(stats["eqpCounts"].items()))
+        timefit_eqp_ids = list(eqp_counts)
+        row["timefitCount"] = stats["count"]
+        row["timefitEqpIds"] = timefit_eqp_ids
+        row["timefitEqpCounts"] = eqp_counts
+        row["eqpIds"] = sorted(set(row.get("eqpIds", [])) | set(timefit_eqp_ids))
+        matched_rows += 1
+        matched_anomaly_count += stats["count"]
+
+    return {
+        "mainStepCount": len(stats_by_main_step),
+        "eqpCount": len({eqp_id for stats in stats_by_main_step.values() for eqp_id in stats["eqpCounts"]}),
+        "anomalyCount": sum(stats["count"] for stats in stats_by_main_step.values()),
+        "matchedRows": matched_rows,
+        "matchedAnomalyCount": matched_anomaly_count,
+    }
+
+
 def load_optional_parquet(source, diagnostics):
     try:
         dataframe = read_parquet(source["path"])
@@ -1577,11 +1635,13 @@ def command_fcc_summary(_args):
     fcc_extra_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_met")
     fcc_extra_fail_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_fail")
     fcc_extra_std_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_std")
+    fcc_timefit_fail_list_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_timefit_fail_list")
     fail_rows = load_optional_parquet(fcc_fail_source, diagnostics)
     met_rows = load_optional_met_rows(fcc_step_met_source, diagnostics, device=None)
     extra_fail_rows = load_optional_parquet(fcc_extra_fail_source, diagnostics)
     extra_std_rows = load_optional_parquet(fcc_extra_std_source, diagnostics)
     extra_met_rows = load_optional_met_rows(fcc_extra_met_source, diagnostics, device=None)
+    timefit_rows = load_optional_parquet(fcc_timefit_fail_list_source, diagnostics)
     display_met_rows = [row for row in met_rows if not is_fcc_single_draw_row(row)]
 
     by_main_step, _by_step_desc = met_lookup(display_met_rows, step_normalizer=fcc_mapping_step_code)
@@ -1635,15 +1695,22 @@ def command_fcc_summary(_args):
         for row in merged.values()
         if row["centerCount"] != 0
     ]
+    timefit_stats = apply_fcc_timefit_stats(rows, timefit_rows)
+    diagnostics["usedRows"]["fcc_timefit_fail_list_main_steps"] = timefit_stats["mainStepCount"]
+    diagnostics["usedRows"]["fcc_timefit_fail_list_matched_rows"] = timefit_stats["matchedRows"]
+    diagnostics["usedRows"]["fcc_timefit_fail_list_matched_anomalies"] = timefit_stats["matchedAnomalyCount"]
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
     diagnostics["outputRows"] = len(rows)
     metrics["centerEqpCount"] = len({eqp_id for row in rows for eqp_id in row.get("centerEqpIds", [])})
+    metrics["timefitMainStepCount"] = timefit_stats["mainStepCount"]
+    metrics["timefitEqpCount"] = timefit_stats["eqpCount"]
+    metrics["timefitAnomalyCount"] = timefit_stats["anomalyCount"]
 
-    if not met_rows and not fail_rows and not extra_met_rows and not extra_fail_rows and not extra_std_rows:
+    if not met_rows and not fail_rows and not extra_met_rows and not extra_fail_rows and not extra_std_rows and not timefit_rows:
         write_json(
             {
                 "ok": False,
-                "error": "FCC 스탭 MET/중심치 또는 FCC 추가 파일에서 읽은 행이 없습니다. 파일 경로, 권한, 입력 컬럼을 확인하세요.",
+                "error": "FCC 스탭 MET/중심치, FCC 추가 또는 FCC 이상시점 파일에서 읽은 행이 없습니다. 파일 경로, 권한, 입력 컬럼을 확인하세요.",
                 "config": CONFIG,
                 "sources": source_status(FCC_DATA_SOURCES),
                 "diagnostics": diagnostics,
@@ -2088,6 +2155,60 @@ def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step", requir
             "allFiles": all_attempts,
             "failFiles": fail_attempts,
             "stdFiles": std_attempts,
+        },
+    }
+
+
+def fcc_file_token(value):
+    return str(value or "").strip().replace("/", "_").replace("\\", "_")
+
+
+def resolve_fcc_timefit_chart_paths(main_step, chart_met_step, eqp_ch):
+    main_step_code = fcc_mapping_step_code(main_step)
+    met_step_code = fcc_mapping_step_code(chart_met_step)
+    eqp_ch_token = fcc_file_token(eqp_ch)
+    if not main_step_code or not met_step_code or not eqp_ch_token:
+        raise ValueError(f"FCC 이상시점 chart 경로에 필요한 main_step/met_step/eqp_ch가 없습니다: {main_step}, {chart_met_step}, {eqp_ch}")
+
+    item_id = fcc_item_id_for_met_seq(chart_met_step)
+    main_candidates = unique_nonempty([f"U%{main_step_code}", main_step, main_step_code])
+    main_dir, main_dir_name, main_attempts = resolve_child_dir(FCC_TIMEFIT_PATH, main_candidates, "fcc timefit main_step")
+    met_candidates = unique_nonempty([f"{met_step_code}_{item_id}"])
+    met_dir, met_dir_name, met_attempts = resolve_fcc_met_dir(main_dir, met_candidates, item_id, "root")
+    latest_date = latest_child_dir(met_dir)
+    data_dir = os.path.join(met_dir, latest_date)
+    file_candidates = unique_nonempty([f"U%{main_step_code}", main_dir_name, main_step])
+    all_path, all_attempts = resolve_parquet_file(data_dir, f"all_fccdate_{eqp_ch_token}", file_candidates)
+    fail_path, fail_attempts = resolve_parquet_file(data_dir, f"fail_fccdate_{eqp_ch_token}", file_candidates)
+
+    return {
+        "mainDir": main_dir,
+        "metDir": met_dir,
+        "dataDir": data_dir,
+        "latestDate": latest_date,
+        "allPath": all_path,
+        "failPath": fail_path,
+        "stdPath": None,
+        "requested": {
+            "mainStep": main_step,
+            "chartMetStep": chart_met_step,
+            "chartRoot": "timefit",
+            "eqpCh": eqp_ch,
+        },
+        "resolved": {
+            "mainStep": main_dir_name,
+            "chartMetStep": met_dir_name,
+            "mainStepCode": main_step_code,
+            "metStepCode": met_step_code,
+            "itemId": item_id,
+            "eqpCh": eqp_ch_token,
+        },
+        "attempts": {
+            "mainDirs": main_attempts,
+            "metDirs": met_attempts,
+            "allFiles": all_attempts,
+            "failFiles": fail_attempts,
+            "stdFiles": [],
         },
     }
 
@@ -2755,6 +2876,140 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
     }
 
 
+def filter_frame_eqp_ch_if_present(dataframe, eqp_ch):
+    if any(column in frame_columns(dataframe) for column in ("eqp_ch", "eqpch")):
+        return filter_frame_eqp_ch(dataframe, eqp_ch)
+    return dataframe
+
+
+def fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=0, include_pm=True):
+    all_path = resolved_paths["allPath"]
+    fail_path = resolved_paths["failPath"]
+
+    all_df = sort_frame(split_fcc_drawing_df(read_parquet(all_path)), "tkout_time")
+    fail_df = sort_frame(split_fcc_drawing_df(read_parquet(fail_path)), "tkout_time")
+    fail_for_eqp = filter_frame_eqp_ch_if_present(fail_df, eqp_ch)
+    ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
+    all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
+    all_fab_values = numeric_column_values(all_df, "fab_value")
+    center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
+    chart_fab_values = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
+
+    return {
+        "ok": True,
+        "diagnostics": {
+            "version": LOADER_VERSION,
+            "resolvedPaths": resolved_paths,
+            "inputRows": {
+                "all": frame_height(all_df),
+                "allBackground": frame_height(all_df),
+                "fail": frame_height(fail_df),
+                "failForEqp": frame_height(fail_for_eqp),
+                "timefitListMatches": anomaly_count,
+            },
+        },
+        "paths": {
+            "all": all_path,
+            "fail": fail_path,
+            "std": None,
+            "pm": CONFIG["pmCodePath"] if include_pm else None,
+        },
+        "pathLabels": {
+            "all": "FCC 이상시점 all 배경 scatter",
+            "fail": "FCC 이상시점 fail 중심치 이상 scatter",
+        },
+        "latestDate": resolved_paths["latestDate"],
+        "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),
+        "domains": {
+            "x": time_domain(all_df, "tkout_time"),
+            "yFull": numeric_domain(chart_fab_values),
+            "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
+            "center": {
+                "yFull": numeric_domain(chart_fab_values),
+                "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
+            },
+        },
+        "allPoints": chart_records(all_df, None, ppid_right_from_ppid=ppid_right_from_ppid),
+        "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup, ppid_right_from_ppid, False),
+        "stdPoints": [],
+        "pmEvents": pm_events_for_eqp(eqp_ch) if include_pm else [],
+        "timefitAnomalyCount": anomaly_count,
+    }
+
+
+def fcc_timefit_list_rows_for_eqp(main_step, eqp_ch):
+    timefit_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_timefit_fail_list")
+    try:
+        rows = frame_records(read_parquet(timefit_source["path"]))
+    except Exception:
+        return []
+
+    target_main_step = fcc_mapping_step_code(main_step)
+    target_eqp_ch = str(eqp_ch or "").strip()
+    matches = []
+    for row in rows:
+        row_main_step = fcc_mapping_step_code(str(get_first(row, ("main_step", "mainStep", "main_seq")) or "").strip())
+        row_eqp_ids = parse_eqp_ids(get_first(row, ("eqp_ch", "eqpch")))
+        if target_main_step and row_main_step != target_main_step:
+            continue
+        if target_eqp_ch and target_eqp_ch not in row_eqp_ids:
+            continue
+        matches.append(row)
+    return matches
+
+
+def fcc_timefit_charts(main_step, chart_met_step, eqp_ch):
+    matches = fcc_timefit_list_rows_for_eqp(main_step, eqp_ch)
+    if not matches:
+        return []
+
+    main_step_code = fcc_mapping_step_code(main_step)
+    chart_met_step_text = strip_fcc_prefix(strip_percent_prefix(chart_met_step))
+    spec = {
+        "key": f"fcc_timefit::{main_step_code}::{chart_met_step_text}::{eqp_ch}",
+        "dataKind": "fcc",
+        "chartRoot": "timefit",
+        "sourcePriority": 0,
+        "mainStep": main_step_code,
+        "mainStepPath": f"U%{main_step_code}" if main_step_code else main_step,
+        "stepSeq": main_step_code,
+        "metStep": chart_met_step_text,
+        "metStepPath": chart_met_step_text,
+        "stepDesc": "",
+        "sdwt": "",
+        "centerCount": len(matches),
+        "stdCount": 0,
+        "centerEqpIds": [eqp_ch],
+        "stdEqpIds": [],
+        "eqpIds": [eqp_ch],
+        "timefitCount": len(matches),
+        "timefitEqpIds": [eqp_ch],
+    }
+
+    try:
+        resolved_paths = resolve_fcc_timefit_chart_paths(main_step, chart_met_step, eqp_ch)
+        payload = fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=len(matches), include_pm=True)
+        payload["row"] = spec
+        return [payload]
+    except Exception as exc:
+        return [
+            {
+                "ok": False,
+                "row": spec,
+                "error": str(exc),
+                "paths": {},
+                "pathLabels": {
+                    "all": "FCC 이상시점 all 배경 scatter",
+                    "fail": "FCC 이상시점 fail 중심치 이상 scatter",
+                },
+                "diagnostics": {
+                    "version": LOADER_VERSION,
+                    "inputRows": {"timefitListMatches": len(matches)},
+                },
+            }
+        ]
+
+
 def fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_type="center"):
     extra_met_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_extra_met")
     extra_source = next(source for source in FCC_DATA_SOURCES if source["key"] == source_key)
@@ -2883,6 +3138,7 @@ def command_fcc_chart(args):
     should_load_extra_charts = args.chart_root == "step" and not getattr(args, "suppress_extra_charts", False)
     payload["extraCenterCharts"] = fcc_extra_center_charts(args.eqp_id) if should_load_extra_charts else []
     payload["extraStdCharts"] = fcc_extra_std_charts(args.eqp_id) if should_load_extra_charts else []
+    payload["timefitCharts"] = fcc_timefit_charts(args.main_step, args.chart_met_step, args.eqp_id) if should_load_extra_charts else []
     write_json(payload)
 
 
