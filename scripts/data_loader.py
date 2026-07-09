@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v39"
+LOADER_VERSION = "file-loader-v40"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1494,52 +1494,70 @@ def fcc_met_unique_counts(met_rows):
 
 
 def fcc_timefit_eqp_stats(timefit_rows):
-    by_main_step = {}
+    by_main_step_met_step = {}
     for row in timefit_rows:
         main_step = fcc_mapping_step_code(str(get_first(row, ("main_step", "mainStep", "main_seq")) or "").strip())
-        eqp_ch = str(get_first(row, ("eqp_ch", "eqpch")) or "").strip()
-        if not main_step or not eqp_ch:
+        fcc_step_seq = fcc_timefit_step_seq(row)
+        met_step, item_id = fcc_met_step_match_parts(fcc_step_seq)
+        eqp_ids = parse_eqp_ids(get_first(row, ("eqp_ch", "eqpch")))
+        if not main_step or not met_step or not eqp_ids:
             continue
 
-        current = by_main_step.setdefault(
-            main_step,
+        current = by_main_step_met_step.setdefault(
+            (main_step, met_step, item_id),
             {
                 "eqpCounts": {},
                 "count": 0,
+                "mainStep": main_step,
+                "metStep": met_step,
+                "itemId": item_id,
             },
         )
-        current["eqpCounts"][eqp_ch] = current["eqpCounts"].get(eqp_ch, 0) + 1
+        for eqp_id in eqp_ids:
+            current["eqpCounts"][eqp_id] = current["eqpCounts"].get(eqp_id, 0) + 1
         current["count"] += 1
 
-    return by_main_step
+    return by_main_step_met_step
 
 
 def apply_fcc_timefit_stats(rows, timefit_rows):
-    stats_by_main_step = fcc_timefit_eqp_stats(timefit_rows)
+    stats_by_main_step_met_step = fcc_timefit_eqp_stats(timefit_rows)
     matched_rows = 0
     matched_anomaly_count = 0
 
     for row in rows:
-        stats = stats_by_main_step.get(row.get("mainStep"))
-        if not stats:
+        main_step = row.get("mainStep")
+        met_step, item_id = fcc_met_step_match_parts(row.get("metStep"))
+        stat_keys = [(main_step, met_step, "")]
+        if item_id:
+            stat_keys.append((main_step, met_step, item_id))
+        matched_stats = [stats_by_main_step_met_step[key] for key in stat_keys if key in stats_by_main_step_met_step]
+        if not matched_stats:
             row["timefitCount"] = 0
             row["timefitEqpIds"] = []
             row["timefitEqpCounts"] = {}
             continue
 
-        eqp_counts = dict(sorted(stats["eqpCounts"].items()))
+        eqp_counts = {}
+        timefit_count = 0
+        for stats in matched_stats:
+            timefit_count += stats["count"]
+            for eqp_id, count in stats["eqpCounts"].items():
+                eqp_counts[eqp_id] = eqp_counts.get(eqp_id, 0) + count
+        eqp_counts = dict(sorted(eqp_counts.items()))
         timefit_eqp_ids = list(eqp_counts)
-        row["timefitCount"] = stats["count"]
+        row["timefitCount"] = timefit_count
         row["timefitEqpIds"] = timefit_eqp_ids
         row["timefitEqpCounts"] = eqp_counts
         row["eqpIds"] = sorted(set(row.get("eqpIds", [])) | set(timefit_eqp_ids))
         matched_rows += 1
-        matched_anomaly_count += stats["count"]
+        matched_anomaly_count += timefit_count
 
     return {
-        "mainStepCount": len(stats_by_main_step),
-        "eqpCount": len({eqp_id for stats in stats_by_main_step.values() for eqp_id in stats["eqpCounts"]}),
-        "anomalyCount": sum(stats["count"] for stats in stats_by_main_step.values()),
+        "mainStepCount": len({stats["mainStep"] for stats in stats_by_main_step_met_step.values()}),
+        "metStepCount": len(stats_by_main_step_met_step),
+        "eqpCount": len({eqp_id for stats in stats_by_main_step_met_step.values() for eqp_id in stats["eqpCounts"]}),
+        "anomalyCount": sum(stats["count"] for stats in stats_by_main_step_met_step.values()),
         "matchedRows": matched_rows,
         "matchedAnomalyCount": matched_anomaly_count,
     }
@@ -1697,6 +1715,7 @@ def command_fcc_summary(_args):
     ]
     timefit_stats = apply_fcc_timefit_stats(rows, timefit_rows)
     diagnostics["usedRows"]["fcc_timefit_fail_list_main_steps"] = timefit_stats["mainStepCount"]
+    diagnostics["usedRows"]["fcc_timefit_fail_list_main_met_steps"] = timefit_stats["metStepCount"]
     diagnostics["usedRows"]["fcc_timefit_fail_list_matched_rows"] = timefit_stats["matchedRows"]
     diagnostics["usedRows"]["fcc_timefit_fail_list_matched_anomalies"] = timefit_stats["matchedAnomalyCount"]
     rows.sort(key=lambda row: (row["mainStep"], row["metStep"]))
@@ -2035,6 +2054,24 @@ def normalize_item_id(value):
     text = str(value or "").strip()
     digits = "".join(char for char in text if char.isdigit())
     return digits or text
+
+
+def fcc_met_step_match_parts(value):
+    return fcc_mapping_step_code(value), normalize_item_id(fcc_item_id_from_met_seq(value))
+
+
+def fcc_timefit_step_seq(row):
+    return str(get_first(row, ("fcc_step_seq", "fccStepSeq", "fcc_step", "fccStep")) or "").strip()
+
+
+def fcc_timefit_matches_met_step(row, chart_met_step):
+    timefit_met_step, timefit_item_id = fcc_met_step_match_parts(fcc_timefit_step_seq(row))
+    chart_met_step_code, chart_item_id = fcc_met_step_match_parts(chart_met_step)
+    if not timefit_met_step or not chart_met_step_code or timefit_met_step != chart_met_step_code:
+        return False
+    if timefit_item_id and chart_item_id and timefit_item_id != chart_item_id:
+        return False
+    return True
 
 
 def clean_text(value):
@@ -2944,7 +2981,7 @@ def fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=0, include_p
     }
 
 
-def fcc_timefit_list_rows_for_eqp(main_step, eqp_ch):
+def fcc_timefit_list_rows_for_eqp(main_step, chart_met_step, eqp_ch):
     timefit_source = next(source for source in FCC_DATA_SOURCES if source["key"] == "fcc_timefit_fail_list")
     try:
         rows = frame_records(read_parquet(timefit_source["path"]))
@@ -2959,6 +2996,8 @@ def fcc_timefit_list_rows_for_eqp(main_step, eqp_ch):
         row_eqp_ids = parse_eqp_ids(get_first(row, ("eqp_ch", "eqpch")))
         if target_main_step and row_main_step != target_main_step:
             continue
+        if not fcc_timefit_matches_met_step(row, chart_met_step):
+            continue
         if target_eqp_ch and target_eqp_ch not in row_eqp_ids:
             continue
         matches.append(row)
@@ -2966,12 +3005,13 @@ def fcc_timefit_list_rows_for_eqp(main_step, eqp_ch):
 
 
 def fcc_timefit_charts(main_step, chart_met_step, eqp_ch):
-    matches = fcc_timefit_list_rows_for_eqp(main_step, eqp_ch)
+    matches = fcc_timefit_list_rows_for_eqp(main_step, chart_met_step, eqp_ch)
     if not matches:
         return []
 
     main_step_code = fcc_mapping_step_code(main_step)
     chart_met_step_text = strip_fcc_prefix(strip_percent_prefix(chart_met_step))
+    matched_fcc_step_seq = unique_nonempty(fcc_timefit_step_seq(row) for row in matches)
     spec = {
         "key": f"fcc_timefit::{main_step_code}::{chart_met_step_text}::{eqp_ch}",
         "dataKind": "fcc",
@@ -2991,6 +3031,7 @@ def fcc_timefit_charts(main_step, chart_met_step, eqp_ch):
         "eqpIds": [eqp_ch],
         "timefitCount": len(matches),
         "timefitEqpIds": [eqp_ch],
+        "fccStepSeq": matched_fcc_step_seq[0] if matched_fcc_step_seq else "",
     }
 
     try:

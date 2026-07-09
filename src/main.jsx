@@ -91,7 +91,7 @@ const FCC_DATA_SOURCES = [
     key: 'fcc_timefit_fail_list',
     label: 'FCC 이상시점 추가 이상 목록',
     path: `${fccTimefitPath}/fail_fccdate_list.parquet`,
-    requiredColumns: ['step_seq', 'eqp_ch', 'tkout_time', 'main_step'],
+    requiredColumns: ['step_seq', 'eqp_ch', 'tkout_time', 'main_step', 'fcc_step_seq'],
   },
 ];
 
