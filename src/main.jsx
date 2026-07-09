@@ -2143,7 +2143,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
     const key = `${eqpId}-extra-center-${chart.row?.key ?? index}`;
     chartSections.push({
       key,
-      label: '연관 step 중심치 이상',
+      label: '연관 Step 이상감지',
       tone: 'extraCenter',
       element:
         chart.ok !== false && (chart.failPoints?.length ?? 0) > 0 ? (
@@ -2205,7 +2205,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
 
     chartSections.push({
       key,
-      label: 'FCC 이상시점 fail 중심치 이상 scatter',
+      label: 'FCC 이상시점 연관 Step 이상감지',
       tone: 'timefit',
       element:
         chart.ok !== false && (chart.failPoints?.length ?? 0) > 0 ? (
@@ -2221,7 +2221,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
           <ChartFailureCard
             row={chartRow}
             eqpId={eqpId}
-            error={chart.error || 'FCC 이상시점 fail 중심치 이상 scatter 데이터를 찾지 못했습니다.'}
+            error={chart.error || 'FCC 이상시점 연관 Step 이상감지 데이터를 찾지 못했습니다.'}
             data={chart}
           />
         ),
@@ -2457,7 +2457,7 @@ const MANUAL_APPS = [
       '메인 화면에서 P3D FCC지수 이상감지를 선택합니다.',
       '좌측 FCC지수 연관 이상감지 목록에서 main_step을 펼치고 FCC 중심치 met_step을 선택합니다.',
       '설비별 stack의 첫 chart에서 FCC 중심치 이상을 확인합니다.',
-      '연관 step 중심치 이상, FCC 추가 산포 이상, FCC 이상시점 chart가 있으면 같은 stack 아래에 이어서 확인합니다.',
+      '연관 Step 이상감지, FCC 추가 산포 이상, FCC 이상시점 chart가 있으면 같은 stack 아래에 이어서 확인합니다.',
       '관리STEP CHART 보기 버튼으로 FCC 중심치 이상과 연결된 관리 STEP all scatter를 별도 창에서 확인합니다.',
     ],
     checks: ['FCC 이상시점 chart는 FCC 이상시점 all/fail scatter 파일 row를 추가 설비 필터 없이 그대로 그립니다.', 'FCC 이상시점 경로는 fail_fccdate_list의 main_seq, met_seq, eqpid를 사용합니다.', 'FCC 중심치와 이상시점 chart를 같은 설비 단위로 비교합니다.'],
