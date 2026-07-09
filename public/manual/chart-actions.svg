@@ -1,35 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="520" viewBox="0 0 1040 520" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
   <title id="title">Chart 하단 버튼 사용법</title>
-  <desc id="desc">이상감지 Wafer List, Defect MAP 보기, PM 이력 보기, 관리STEP CHART 보기 버튼의 사용 목적을 설명합니다.</desc>
-  <rect width="1040" height="520" rx="28" fill="#fbfaff"/>
-  <text x="64" y="74" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="28" font-weight="800">Chart 하단에서 추가 확인하기</text>
-  <text x="64" y="106" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="15" font-weight="650">빨간 NG point를 찾은 뒤 표와 링크로 wafer 상세와 정비 이력을 확인합니다.</text>
+  <desc id="desc">이상감지 Wafer List, Defect MAP 보기, PM 이력 보기, 관리STEP CHART 보기 버튼의 사용 목적을 동일한 폭의 카드로 설명합니다.</desc>
+  <defs>
+    <style>
+      text{font-family:Pretendard,Inter,Arial,sans-serif}
+      .h1{fill:#2f204d;font-size:38px;font-weight:800}
+      .h2{fill:#2f204d;font-size:24px;font-weight:800}
+      .body{fill:#6f6382;font-size:17px;font-weight:650}
+    </style>
+  </defs>
+  <rect width="1600" height="760" rx="34" fill="#fbfaff"/>
+  <text class="h1" x="80" y="88">Chart 하단에서 추가 확인하기</text>
+  <text class="body" x="80" y="126">빨간 NG point를 찾은 뒤 표와 링크로 wafer 상세와 정비 이력을 확인합니다.</text>
 
-  <rect x="74" y="150" width="430" height="132" rx="18" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="106" y="188" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="18" font-weight="800">이상감지 Wafer List 보기</text>
-  <rect x="106" y="212" width="160" height="36" rx="9" fill="#765ee6"/>
-  <text x="186" y="235" text-anchor="middle" fill="#ffffff" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">Wafer List 열기</text>
-  <text x="290" y="224" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">wafer_id, lot_id, step_seq,</text>
-  <text x="290" y="246" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">process_id, fab_value 확인</text>
+  <rect x="100" y="190" width="660" height="190" rx="22" fill="#ffffff" stroke="#ded7ef"/>
+  <text class="h2" x="150" y="244">이상감지 Wafer List 보기</text>
+  <rect x="150" y="286" width="210" height="46" rx="12" fill="#765ee6"/>
+  <text x="255" y="316" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="16" font-weight="800">Wafer List 열기</text>
+  <text class="body" x="400" y="300">wafer_id, lot_id, step_seq,</text>
+  <text class="body" x="400" y="328">process_id, fab_value 확인</text>
 
-  <rect x="536" y="150" width="430" height="132" rx="18" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="568" y="188" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="18" font-weight="800">Defect MAP보기</text>
-  <rect x="568" y="212" width="154" height="36" rx="9" fill="#efeafd" stroke="#c9bee8"/>
-  <text x="645" y="235" text-anchor="middle" fill="#6045cf" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">Defect MAP보기</text>
-  <text x="744" y="224" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">lot_id + wafer_id + step_seq로</text>
-  <text x="744" y="246" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">새 탭의 MAP 화면 열기</text>
+  <rect x="840" y="190" width="660" height="190" rx="22" fill="#ffffff" stroke="#ded7ef"/>
+  <text class="h2" x="890" y="244">Defect MAP보기</text>
+  <rect x="890" y="286" width="210" height="46" rx="12" fill="#efeafd" stroke="#c9bee8"/>
+  <text x="995" y="316" text-anchor="middle" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="16" font-weight="800">Defect MAP보기</text>
+  <text class="body" x="1140" y="300">lot_id + wafer_id + step_seq로</text>
+  <text class="body" x="1140" y="328">새 탭의 MAP 화면 열기</text>
 
-  <rect x="74" y="318" width="430" height="132" rx="18" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="106" y="356" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="18" font-weight="800">PM 이력 보기</text>
-  <rect x="106" y="380" width="150" height="36" rx="9" fill="#e8f5f2" stroke="#cde5df"/>
-  <text x="181" y="403" text-anchor="middle" fill="#147b68" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">PM 이력 열기</text>
-  <text x="290" y="392" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">asset, work_type, INPRG_DT,</text>
-  <text x="290" y="414" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">description과 Link 확인</text>
+  <rect x="100" y="430" width="660" height="190" rx="22" fill="#ffffff" stroke="#ded7ef"/>
+  <text class="h2" x="150" y="484">PM 이력 보기</text>
+  <rect x="150" y="526" width="210" height="46" rx="12" fill="#e8f5f2" stroke="#cde5df"/>
+  <text x="255" y="556" text-anchor="middle" fill="#147b68" font-family="Pretendard,Inter,Arial,sans-serif" font-size="16" font-weight="800">PM 이력 열기</text>
+  <text class="body" x="400" y="540">asset, work_type, INPRG_DT,</text>
+  <text class="body" x="400" y="568">description과 Link 확인</text>
 
-  <rect x="536" y="318" width="430" height="132" rx="18" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="568" y="356" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="18" font-weight="800">관리STEP CHART 보기</text>
-  <rect x="568" y="380" width="174" height="36" rx="9" fill="#fff0e5" stroke="#f2d5bf"/>
-  <text x="655" y="403" text-anchor="middle" fill="#b95d1f" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">관리STEP CHART 보기</text>
-  <text x="764" y="392" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">FCC 중심치 이상과 연결된</text>
-  <text x="764" y="414" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">관리 STEP all scatter 확인</text>
+  <rect x="840" y="430" width="660" height="190" rx="22" fill="#ffffff" stroke="#ded7ef"/>
+  <text class="h2" x="890" y="484">관리STEP CHART 보기</text>
+  <rect x="890" y="526" width="238" height="46" rx="12" fill="#fff0e5" stroke="#f2d5bf"/>
+  <text x="1009" y="556" text-anchor="middle" fill="#b95d1f" font-family="Pretendard,Inter,Arial,sans-serif" font-size="16" font-weight="800">관리STEP CHART 보기</text>
+  <text class="body" x="1168" y="540">FCC 중심치 이상과 연결된</text>
+  <text class="body" x="1168" y="568">관리 STEP all scatter 확인</text>
 </svg>

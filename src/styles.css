@@ -483,12 +483,12 @@ code {
   min-height: 100vh;
   background: var(--surface-muted);
   color: var(--foreground);
-  padding: 18px;
+  padding: 18px 24px;
 }
 
 .manualHero,
 .manualContent {
-  width: min(1220px, 100%);
+  width: min(1840px, 100%);
   margin: 0 auto;
 }
 
@@ -503,7 +503,7 @@ code {
 .manualHero div {
   display: grid;
   gap: 8px;
-  max-width: 820px;
+  max-width: 1240px;
 }
 
 .manualHero h1 {
@@ -524,18 +524,18 @@ code {
 
 .manualContent {
   display: grid;
-  gap: 16px;
-  padding: 16px 0 32px;
+  gap: 20px;
+  padding: 20px 0 32px;
 }
 
 .manualSection {
   display: grid;
-  gap: 12px;
+  gap: 16px;
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
-  padding: 18px;
+  padding: 22px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -614,7 +614,7 @@ code {
 .manualFigure img {
   display: block;
   width: 100%;
-  min-width: 720px;
+  min-width: 1280px;
   height: auto;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
@@ -623,7 +623,7 @@ code {
 }
 
 .manualFigure.wide img {
-  min-width: 820px;
+  min-width: 1440px;
 }
 
 .manualFigure figcaption {
