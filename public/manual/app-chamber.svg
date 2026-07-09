@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="620" viewBox="0 0 1040 620" role="img" aria-labelledby="title desc">
+  <title id="title">전라인 챔버별 이상감지 화면 안내</title>
+  <desc id="desc">전라인 챔버별 이상감지 화면에서 라인, 제품, 대상스탭, 챔버별 chart를 선택하는 순서를 설명합니다.</desc>
+  <rect width="1040" height="620" rx="28" fill="#fbfaff"/>
+  <rect x="52" y="50" width="936" height="520" rx="20" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="86" y="96" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="26" font-weight="800">전라인 챔버별 이상감지</text>
+  <text x="86" y="126" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="15" font-weight="650">line_mapping.txt 기준으로 라인과 device를 고른 뒤 개별 챔버 chart를 확인합니다.</text>
+
+  <rect x="86" y="166" width="848" height="112" rx="16" fill="#faf9ff" stroke="#ded7ef"/>
+  <text x="112" y="202" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">1. 라인 선택</text>
+  <rect x="112" y="222" width="118" height="34" rx="9" fill="#765ee6"/>
+  <text x="171" y="244" text-anchor="middle" fill="#ffffff" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">P3D / PFB3</text>
+  <rect x="242" y="222" width="118" height="34" rx="9" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="301" y="244" text-anchor="middle" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="700">LINE B</text>
+  <text x="410" y="202" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">2. 제품 선택</text>
+  <rect x="410" y="222" width="118" height="34" rx="9" fill="#1f9a82"/>
+  <text x="469" y="244" text-anchor="middle" fill="#ffffff" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">D1c</text>
+  <rect x="540" y="222" width="118" height="34" rx="9" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="599" y="244" text-anchor="middle" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="700">Device B</text>
+
+  <rect x="86" y="310" width="250" height="210" rx="16" fill="#faf9ff" stroke="#ded7ef"/>
+  <text x="112" y="346" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">3. 대상스탭 선택</text>
+  <rect x="112" y="370" width="198" height="48" rx="10" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="132" y="400" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">▾ MAIN STEP</text>
+  <rect x="134" y="430" width="156" height="28" rx="9" fill="#765ee6"/>
+  <text x="212" y="449" text-anchor="middle" fill="#ffffff" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">MET STEP</text>
+
+  <rect x="370" y="310" width="564" height="210" rx="16" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="402" y="346" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">4. Chamber Equipment Charts</text>
+  <rect x="402" y="372" width="220" height="108" rx="12" fill="#faf9ff" stroke="#ded7ef"/>
+  <text x="424" y="400" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">CH-01 중심치 이상</text>
+  <line x1="424" y1="452" x2="590" y2="452" stroke="#b9b0c9"/>
+  <circle cx="494" cy="426" r="6" fill="#db2f2f"/>
+  <circle cx="548" cy="440" r="3" fill="#8d7adf" opacity="0.45"/>
+  <rect x="642" y="372" width="220" height="108" rx="12" fill="#faf9ff" stroke="#ded7ef"/>
+  <text x="664" y="400" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">CH-02 산포이상</text>
+  <line x1="664" y1="452" x2="830" y2="452" stroke="#b9b0c9"/>
+  <circle cx="710" cy="438" r="6" fill="#263a72"/>
+  <circle cx="780" cy="426" r="3" fill="#1f9a82" opacity="0.55"/>
+
+  <text x="112" y="558" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="14" font-weight="650">라인 목록이 없으면 line_mapping.txt의 line, line_code, device 헤더와 파일 readable 상태를 먼저 확인합니다.</text>
+</svg>

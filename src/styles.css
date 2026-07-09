@@ -603,6 +603,37 @@ code {
   font-weight: 750;
 }
 
+.manualFigure {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.manualFigure img {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--background);
+  box-shadow: var(--shadow-sm);
+}
+
+.manualFigure.wide img {
+  min-width: 820px;
+}
+
+.manualFigure figcaption {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
 .manualAppList {
   display: grid;
   gap: 14px;

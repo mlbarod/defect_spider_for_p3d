@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="620" viewBox="0 0 1040 620" role="img" aria-labelledby="title desc">
+  <title id="title">Defect SPIDER chart 구성 요소</title>
+  <desc id="desc">차트 제목, 이상 유형 태그, scatter 영역, legend, Wafer List, PM 이력 버튼 등 chart 구성 요소를 설명합니다.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M1 1l8 4-8 4z" fill="#6a52d9"/>
+    </marker>
+  </defs>
+  <rect width="1040" height="620" rx="28" fill="#fbfaff"/>
+  <rect x="56" y="52" width="928" height="512" rx="20" fill="#ffffff" stroke="#ded7ef"/>
+  <rect x="88" y="88" width="864" height="62" rx="12" fill="#faf9ff" stroke="#ded7ef"/>
+  <text x="114" y="126" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="20" font-weight="800">EQP-01 / step_desc / 중심치 이상</text>
+  <rect x="742" y="104" width="86" height="28" rx="14" fill="#feecec"/>
+  <text x="785" y="123" text-anchor="middle" fill="#c82727" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">중심치 이상</text>
+  <rect x="838" y="104" width="80" height="28" rx="14" fill="#eceffd"/>
+  <text x="878" y="123" text-anchor="middle" fill="#263a72" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">산포이상</text>
+
+  <rect x="88" y="178" width="670" height="250" rx="12" fill="#faf9ff" stroke="#ded7ef"/>
+  <line x1="146" y1="374" x2="690" y2="374" stroke="#b9b0c9"/>
+  <line x1="146" y1="220" x2="146" y2="374" stroke="#b9b0c9"/>
+  <text x="152" y="404" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="650">tkout_time</text>
+  <text x="104" y="234" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="650">fab_value</text>
+  <circle cx="210" cy="332" r="3" fill="#8d7adf" opacity="0.45"/>
+  <circle cx="258" cy="306" r="3" fill="#2d8bc7" opacity="0.45"/>
+  <circle cx="314" cy="344" r="3" fill="#8d7adf" opacity="0.45"/>
+  <circle cx="382" cy="292" r="3" fill="#1f9a82" opacity="0.45"/>
+  <circle cx="454" cy="318" r="3" fill="#d89a25" opacity="0.45"/>
+  <circle cx="532" cy="274" r="7" fill="#db2f2f" stroke="#ffffff" stroke-width="2"/>
+  <circle cx="620" cy="318" r="7" fill="#263a72" stroke="#ffffff" stroke-width="2"/>
+  <line x1="496" y1="220" x2="496" y2="374" stroke="#1f9a82" stroke-width="2" stroke-dasharray="5 5"/>
+  <text x="504" y="238" fill="#147b68" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">PM</text>
+
+  <rect x="780" y="178" width="142" height="250" rx="12" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="804" y="210" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="11" font-weight="800">STEP</text>
+  <circle cx="806" cy="232" r="5" fill="#765ee6"/>
+  <text x="822" y="236" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="11" font-weight="700">10</text>
+  <circle cx="806" cy="254" r="5" fill="#2d8bc7"/>
+  <text x="822" y="258" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="11" font-weight="700">12</text>
+  <text x="804" y="294" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="11" font-weight="800">EQP</text>
+  <circle cx="806" cy="316" r="5" fill="#db2f2f"/>
+  <text x="822" y="320" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="11" font-weight="700">선택 설비</text>
+  <circle cx="806" cy="338" r="5" fill="#9aa0aa"/>
+  <text x="822" y="342" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="11" font-weight="700">비교군</text>
+
+  <rect x="88" y="452" width="410" height="52" rx="10" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="112" y="484" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="14" font-weight="800">이상감지 Wafer List 보기</text>
+  <rect x="516" y="452" width="406" height="52" rx="10" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="540" y="484" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="14" font-weight="800">PM 이력 보기</text>
+
+  <path d="M720 118h-92" stroke="#6a52d9" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="608" y="96" fill="#6045cf" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">이상 유형 태그</text>
+  <path d="M532 260l64-60" stroke="#6a52d9" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="604" y="194" fill="#6045cf" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">빨간 point = NG</text>
+  <path d="M792 364h-86" stroke="#6a52d9" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="794" y="390" fill="#6045cf" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">Legend 클릭으로 표시/숨김</text>
+</svg>

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="620" viewBox="0 0 1040 620" role="img" aria-labelledby="title desc">
+  <title id="title">P3D FCC지수 이상감지 화면 안내</title>
+  <desc id="desc">FCC 화면에서 FCC 중심치 chart, 연관 Step chart, FCC 이상시점 chart, 관리 STEP chart 버튼이 한 설비 stack으로 연결되는 구조를 설명합니다.</desc>
+  <rect width="1040" height="620" rx="28" fill="#fbfaff"/>
+  <rect x="52" y="50" width="936" height="520" rx="20" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="86" y="96" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="26" font-weight="800">P3D FCC지수 이상감지</text>
+  <text x="86" y="126" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="15" font-weight="650">FCC 중심치 이상을 기준으로 연관 Step과 이상시점 chart를 같은 설비 단위로 비교합니다.</text>
+
+  <rect x="86" y="166" width="250" height="350" rx="16" fill="#faf9ff" stroke="#ded7ef"/>
+  <text x="112" y="202" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">FCC RELATED DETECTION</text>
+  <rect x="112" y="228" width="198" height="54" rx="10" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="132" y="260" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">▾ FCC MAIN STEP</text>
+  <rect x="134" y="292" width="156" height="28" rx="9" fill="#765ee6"/>
+  <text x="212" y="311" text-anchor="middle" fill="#ffffff" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">FCC MET 선택</text>
+  <rect x="112" y="338" width="198" height="54" rx="10" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="132" y="371" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="700">▸ single 항목</text>
+
+  <rect x="370" y="166" width="562" height="350" rx="16" fill="#fff" stroke="#ded7ef"/>
+  <text x="402" y="202" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="18" font-weight="800">EQP-35 제외 후 설비별 stack</text>
+  <rect x="402" y="230" width="480" height="64" rx="12" fill="#efeafd" stroke="#ded7ef"/>
+  <text x="424" y="256" fill="#6045cf" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">FCC 중심치 이상</text>
+  <line x1="424" y1="276" x2="600" y2="276" stroke="#b9b0c9"/>
+  <circle cx="494" cy="264" r="6" fill="#db2f2f"/>
+  <circle cx="550" cy="272" r="3" fill="#8d7adf" opacity="0.45"/>
+  <rect x="726" y="248" width="132" height="26" rx="8" fill="#ffffff" stroke="#c9bee8"/>
+  <text x="792" y="266" text-anchor="middle" fill="#6045cf" font-family="Pretendard, Inter, Arial, sans-serif" font-size="12" font-weight="800">관리STEP CHART 보기</text>
+
+  <rect x="402" y="314" width="480" height="62" rx="12" fill="#e8f5f2" stroke="#cde5df"/>
+  <text x="424" y="340" fill="#147b68" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">연관 Step 이상감지</text>
+  <line x1="424" y1="360" x2="600" y2="360" stroke="#b9b0c9"/>
+  <circle cx="524" cy="348" r="6" fill="#db2f2f"/>
+  <rect x="402" y="396" width="480" height="62" rx="12" fill="#fff0e5" stroke="#f2d5bf"/>
+  <text x="424" y="422" fill="#b95d1f" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="800">FCC 이상시점 연관 Step 이상감지</text>
+  <line x1="424" y1="442" x2="600" y2="442" stroke="#b9b0c9"/>
+  <rect x="510" y="415" width="58" height="38" rx="6" fill="#db2f2f" opacity="0.16"/>
+  <circle cx="540" cy="432" r="6" fill="#db2f2f"/>
+
+  <path d="M642 294v20" stroke="#6a52d9" stroke-width="3"/>
+  <path d="M642 376v20" stroke="#6a52d9" stroke-width="3"/>
+  <text x="414" y="492" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">같은 eqp_id 기준으로 위에서 아래로 읽으면 FCC 지수 이상과 연관 Step 이상을 한 번에 비교할 수 있습니다.</text>
+</svg>

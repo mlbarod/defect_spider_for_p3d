@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="520" viewBox="0 0 1040 520" role="img" aria-labelledby="title desc">
+  <title id="title">L0, L1 이상감지 App 연결 안내</title>
+  <desc id="desc">Defect SPIDER 홈에서 L0 또는 L1 SPIDER를 새 탭으로 열고 Defect chart와 교차 확인하는 흐름을 설명합니다.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2l8 4-8 4z" fill="#6a52d9"/>
+    </marker>
+  </defs>
+  <rect width="1040" height="520" rx="28" fill="#fbfaff"/>
+  <text x="64" y="72" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="28" font-weight="800">L0 / L1 SPIDER 연계 확인</text>
+  <text x="64" y="104" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="15" font-weight="650">외부 Trend 화면과 Defect SPIDER의 wafer, time, eqp 정보를 맞춰 봅니다.</text>
+
+  <rect x="78" y="154" width="260" height="250" rx="18" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="112" y="194" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="20" font-weight="800">Defect SPIDER 홈</text>
+  <rect x="112" y="228" width="190" height="52" rx="12" fill="#765ee6"/>
+  <text x="207" y="261" text-anchor="middle" fill="#ffffff" font-family="Pretendard, Inter, Arial, sans-serif" font-size="15" font-weight="800">L0 SPIDER</text>
+  <rect x="112" y="296" width="190" height="52" rx="12" fill="#1f9a82"/>
+  <text x="207" y="329" text-anchor="middle" fill="#ffffff" font-family="Pretendard, Inter, Arial, sans-serif" font-size="15" font-weight="800">L1 SPIDER</text>
+
+  <path d="M360 280h128" stroke="#6a52d9" stroke-width="4" marker-end="url(#arrow)" stroke-linecap="round"/>
+
+  <rect x="520" y="154" width="418" height="250" rx="18" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="552" y="194" fill="#2f204d" font-family="Pretendard, Inter, Arial, sans-serif" font-size="20" font-weight="800">외부 Trend 화면</text>
+  <rect x="552" y="222" width="342" height="42" rx="10" fill="#faf9ff" stroke="#ded7ef"/>
+  <text x="574" y="249" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="700">Line / EQP / 기간 조건 선택</text>
+  <polyline points="568,346 610,318 650,330 702,278 756,302 820,250 880,276" fill="none" stroke="#1f9a82" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="702" cy="278" r="7" fill="#db2f2f"/>
+  <text x="552" y="382" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="13" font-weight="650">Trend 이상 시점과 Defect chart의 tkout_time을 맞춥니다.</text>
+
+  <rect x="158" y="438" width="724" height="46" rx="14" fill="#ffffff" stroke="#ded7ef"/>
+  <text x="520" y="468" text-anchor="middle" fill="#6f6382" font-family="Pretendard, Inter, Arial, sans-serif" font-size="14" font-weight="650">팝업 차단 또는 사내 링크 권한 문제로 새 탭이 열리지 않을 수 있습니다.</text>
+</svg>
