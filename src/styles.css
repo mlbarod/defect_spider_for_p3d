@@ -307,7 +307,7 @@ code {
 
 .spiderAppGrid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-rows: 1fr;
   align-items: stretch;
   gap: 16px;
@@ -477,6 +477,243 @@ code {
   background: color-mix(in srgb, var(--accent) 68%, var(--primary));
   color: var(--accent-foreground);
   transform: translateY(-1px);
+}
+
+.manualPage {
+  min-height: 100vh;
+  background: var(--surface-muted);
+  color: var(--foreground);
+  padding: 18px;
+}
+
+.manualHero,
+.manualContent {
+  width: min(1220px, 100%);
+  margin: 0 auto;
+}
+
+.manualHero {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.manualHero div {
+  display: grid;
+  gap: 8px;
+  max-width: 820px;
+}
+
+.manualHero h1 {
+  color: var(--foreground);
+  font-size: clamp(26px, 3.4vw, 42px);
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.08;
+}
+
+.manualHero p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.manualContent {
+  display: grid;
+  gap: 16px;
+  padding: 16px 0 32px;
+}
+
+.manualSection {
+  display: grid;
+  gap: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.manualSectionHeader {
+  display: grid;
+  gap: 4px;
+}
+
+.manualSectionHeader h2 {
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.manualSectionHeader p,
+.manualAppBlock p,
+.manualReferenceGrid span {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.manualFlow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+}
+
+.manualFlow div,
+.manualReferenceGrid div {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--background);
+  padding: 12px;
+}
+
+.manualFlow strong,
+.manualReferenceGrid strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.manualFlow span:not(.manualFlowArrow) {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.manualFlowArrow {
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.manualAppList {
+  display: grid;
+  gap: 14px;
+}
+
+.manualAppBlock {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--background);
+  padding: 16px;
+}
+
+.manualAppTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.manualAppTitle span {
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 9%, var(--background));
+  color: color-mix(in srgb, var(--primary) 78%, var(--foreground));
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.manualAppTitle h3 {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.manualAppBlock dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.manualAppBlock dl div {
+  display: grid;
+  gap: 4px;
+}
+
+.manualAppBlock dt {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.manualAppBlock dd {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.manualColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.manualColumns div {
+  min-width: 0;
+}
+
+.manualColumns h4 {
+  margin: 0 0 8px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.manualColumns ol,
+.manualColumns ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.manualColumns li {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.manualReferenceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manualTable {
+  min-width: 900px;
+}
+
+.manualTable td {
+  line-height: 1.5;
 }
 
 .constructionPanel {
@@ -2064,6 +2301,19 @@ tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .manualFlow,
+  .manualReferenceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .manualFlowArrow {
+    display: none;
+  }
+
+  .manualColumns {
+    grid-template-columns: 1fr;
+  }
+
   .topBar {
     align-items: stretch;
     flex-direction: column;
@@ -2137,6 +2387,23 @@ tr:last-child td {
   }
 
   .spiderAppGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .manualPage {
+    padding: 14px;
+  }
+
+  .manualHero {
+    padding: 20px 16px;
+  }
+
+  .manualSection {
+    padding: 14px;
+  }
+
+  .manualFlow,
+  .manualReferenceGrid {
     grid-template-columns: 1fr;
   }
 

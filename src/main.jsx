@@ -2288,6 +2288,14 @@ const HOME_CARDS = [
     icon: 'chart',
     badge: 'Open',
   },
+  {
+    key: 'manual',
+    title: 'Defect SPIDER 사용자 메뉴얼',
+    subtitle: 'App별 화면 구성, 조회 절차, chart 해석 기준을 확인합니다.',
+    category: 'Manual',
+    icon: 'manual',
+    badge: 'Guide',
+  },
 ];
 
 const SPIDER_SUITE_CARDS = [
@@ -2329,6 +2337,17 @@ function HomeIcon({ type }) {
         <path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.708 0L2 15" />
         <path d="M4 18v3" />
         <path d="M8 14v7" />
+      </svg>
+    );
+  }
+
+  if (type === 'manual') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" />
+        <path d="M8 7h8" />
+        <path d="M8 11h6" />
       </svg>
     );
   }
@@ -2406,6 +2425,221 @@ function HomePage({ onSelect }) {
               <HomeCategoryCard key={card.key} card={card} onSelect={onSelect} />
             ))}
           </div>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+const MANUAL_APPS = [
+  {
+    id: 'manual-main',
+    title: 'P3D MAIN 설비별 이상감지',
+    badge: 'Main',
+    summary: '대상스탭과 MET 스탭을 기준으로 중심치/산포 이상 설비를 찾고, 설비별 chart와 Wafer List, PM 이력을 함께 확인하는 화면입니다.',
+    source: '중심치 이상 목록, 산포 이상 목록, MET 매핑, Measure SPEC, PM 이력',
+    steps: [
+      '메인 화면에서 P3D MAIN 설비별 이상감지를 선택합니다.',
+      '상단 SDWT 필터를 필요한 담당/조직 기준으로 조정합니다.',
+      '좌측 대상스탭을 펼친 뒤 MET 스탭 버튼을 선택합니다.',
+      '우측 eqp별 chart에서 중심치/산포 이상 point, 배경 scatter, PM 이력을 확인합니다.',
+      '이상감지 Wafer List에서 wafer_id, lot_id, step_seq를 확인하고 필요 시 Defect MAP을 엽니다.',
+    ],
+    checks: ['빨간 point는 중심치 또는 산포 이상 판단 row입니다.', '배경 scatter는 현재 chart 설비를 제외한 비교군입니다.', '관리 대상 확인은 Wafer List와 PM 이력을 같이 봅니다.'],
+  },
+  {
+    id: 'manual-fcc',
+    title: 'P3D FCC지수 이상감지',
+    badge: 'FCC',
+    summary: 'FCC 중심치 이상 목록을 기준으로 FCC 지수 chart를 그리고, 연관 step 중심치/산포 및 FCC 이상시점 chart를 같은 설비 stack에 붙여 비교하는 화면입니다.',
+    source: 'FCC 스탭 MET 매핑, FCC 중심치 이상 목록, FCC 추가 중심치/산포 이상 목록, FCC 이상시점 추가 이상 목록',
+    steps: [
+      '메인 화면에서 P3D FCC지수 이상감지를 선택합니다.',
+      '좌측 FCC지수 연관 이상감지 목록에서 main_step을 펼치고 FCC 중심치 met_step을 선택합니다.',
+      '설비별 stack의 첫 chart에서 FCC 중심치 이상을 확인합니다.',
+      '연관 step 중심치 이상, FCC 추가 산포 이상, FCC 이상시점 chart가 있으면 같은 stack 아래에 이어서 확인합니다.',
+      '관리STEP CHART 보기 버튼으로 FCC 중심치 이상과 연결된 관리 STEP all scatter를 별도 창에서 확인합니다.',
+    ],
+    checks: ['FCC 이상시점 chart는 FCC 이상시점 all/fail scatter 파일 row를 추가 설비 필터 없이 그대로 그립니다.', 'FCC 이상시점 경로는 fail_fccdate_list의 main_seq, met_seq, eqpid를 사용합니다.', 'FCC 중심치와 이상시점 chart를 같은 설비 단위로 비교합니다.'],
+  },
+  {
+    id: 'manual-chamber',
+    title: '전라인 챔버별 이상감지',
+    badge: 'Chamber',
+    summary: '라인과 device를 선택한 뒤 개별 챔버의 중심치/산포 이상 chart를 확인하는 화면입니다. P3D/PFB3 single FCC 항목도 이 화면에 표시됩니다.',
+    source: 'line_mapping.txt, 라인별 MET 매핑, 개별챔버 중심치/산포 이상 목록, PM 이력',
+    steps: [
+      '메인 화면에서 전라인 챔버별 이상감지를 선택합니다.',
+      '라인 버튼과 제품 선택 버튼을 차례로 선택합니다.',
+      '좌측 대상스탭과 MET 스탭을 선택합니다.',
+      '우측 chart에서 챔버별 이상 point와 PM 이력을 확인합니다.',
+      'P3D/PFB3 single FCC 항목은 선택한 met_step chart만 표시되는지 확인합니다.',
+    ],
+    checks: ['라인 목록이 비어 있으면 line_mapping.txt의 line, line_code, device 헤더를 확인합니다.', '제품 선택 후 File Loader 상태에서 원본 파일 읽기 실패 여부를 먼저 확인합니다.', '동일 설비 반복 이상은 Wafer List와 PM 이력을 함께 봅니다.'],
+  },
+  {
+    id: 'manual-l0l1',
+    title: 'L0, L1 이상감지 App',
+    badge: 'External',
+    summary: 'Defect SPIDER 홈에서 외부 L0/L1 SPIDER로 이동해 FDC 및 L1 Trend 기반 이상 패턴을 탐색합니다.',
+    source: '외부 SPIDER 링크',
+    steps: [
+      '메인 화면의 L0 SPIDER 또는 L1 SPIDER 버튼을 선택합니다.',
+      '새 탭에서 열린 외부 SPIDER 화면에서 라인, 설비, 기간 조건을 선택합니다.',
+      'Trend와 이상 패턴을 확인한 뒤 Defect SPIDER의 Wafer List, PM 이력과 교차 확인합니다.',
+    ],
+    checks: ['외부 링크가 열리지 않으면 브라우저 팝업 차단 또는 사내 링크 접근 권한을 확인합니다.', 'Defect SPIDER chart와 시간대, 설비명 표기 방식이 다를 수 있으므로 lot/wafer/time 기준으로 맞춰 봅니다.'],
+  },
+];
+
+function ManualFlowDiagram() {
+  return (
+    <div className="manualFlow" aria-label="Defect SPIDER 사용 흐름">
+      <div>
+        <strong>1. App 선택</strong>
+        <span>Main, FCC, Chamber, L0/L1</span>
+      </div>
+      <span className="manualFlowArrow">→</span>
+      <div>
+        <strong>2. 조건 선택</strong>
+        <span>SDWT, Line, main_step, met_step</span>
+      </div>
+      <span className="manualFlowArrow">→</span>
+      <div>
+        <strong>3. Chart 확인</strong>
+        <span>all/fail scatter, PM, Wafer List</span>
+      </div>
+      <span className="manualFlowArrow">→</span>
+      <div>
+        <strong>4. 원인 추적</strong>
+        <span>Defect MAP, 관리 STEP, 외부 Trend</span>
+      </div>
+    </div>
+  );
+}
+
+function ManualView({ onBack }) {
+  return (
+    <main className="manualPage hasFloatingHomeButton">
+      <button className="homeBackButton" type="button" onClick={onBack}>
+        메인 메뉴
+      </button>
+
+      <header className="manualHero">
+        <div>
+          <p className="eyebrow">User Manual</p>
+          <h1>Defect SPIDER 사용자 메뉴얼</h1>
+          <p>각 App의 진입 경로, 조회 절차, chart 해석 기준, 데이터 확인 포인트를 정리했습니다.</p>
+        </div>
+      </header>
+
+      <section className="manualContent">
+        <section className="manualSection">
+          <div className="manualSectionHeader">
+            <h2>전체 사용 흐름</h2>
+            <p>대부분의 화면은 App 선택, 조건 선택, chart 확인, 원인 추적 순서로 사용합니다.</p>
+          </div>
+          <ManualFlowDiagram />
+        </section>
+
+        <section className="manualSection">
+          <div className="manualSectionHeader">
+            <h2>App별 메뉴얼</h2>
+            <p>화면별 목적과 기본 조작 순서입니다.</p>
+          </div>
+          <div className="manualAppList">
+            {MANUAL_APPS.map((app) => (
+              <article className="manualAppBlock" id={app.id} key={app.id}>
+                <div className="manualAppTitle">
+                  <span>{app.badge}</span>
+                  <h3>{app.title}</h3>
+                </div>
+                <p>{app.summary}</p>
+                <dl>
+                  <div>
+                    <dt>참조 데이터</dt>
+                    <dd>{app.source}</dd>
+                  </div>
+                </dl>
+                <div className="manualColumns">
+                  <div>
+                    <h4>사용 절차</h4>
+                    <ol>
+                      {app.steps.map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div>
+                    <h4>확인 포인트</h4>
+                    <ul>
+                      {app.checks.map((check) => (
+                        <li key={check}>{check}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="manualSection">
+          <div className="manualSectionHeader">
+            <h2>Chart 구성</h2>
+            <p>chart 화면에서 반복적으로 사용하는 버튼과 표의 의미입니다.</p>
+          </div>
+          <div className="manualReferenceGrid">
+            <div>
+              <strong>이상감지 Wafer List</strong>
+              <span>NG point 기준으로 wafer_id, tkout_time, step_seq, lot_id, process_id, item_id, fab_value를 확인합니다.</span>
+            </div>
+            <div>
+              <strong>Defect MAP보기</strong>
+              <span>config.json URL 템플릿에 lot_id, wafer_id, step_seq를 넣어 새 탭으로 엽니다.</span>
+            </div>
+            <div>
+              <strong>PM 이력 보기</strong>
+              <span>선택 설비의 PM 이력을 INPRG_DT 최신순으로 확인합니다.</span>
+            </div>
+            <div>
+              <strong>관리STEP CHART 보기</strong>
+              <span>FCC 중심치 이상에서 연결된 관리 STEP all scatter를 별도 모달로 확인합니다.</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="manualSection">
+          <div className="manualSectionHeader">
+            <h2>문제 확인</h2>
+            <p>데이터가 비어 있거나 chart가 예상과 다를 때 우선 확인할 항목입니다.</p>
+          </div>
+          <table className="manualTable">
+            <thead>
+              <tr>
+                <th>증상</th>
+                <th>확인할 항목</th>
+                <th>조치</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>좌측 목록이 비어 있음</td>
+                <td>File Loader 입력 행, 원본 파일 readable 상태, 필수 컬럼</td>
+                <td>상단 File Loader 배너의 경고와 Data Source 경로를 확인합니다.</td>
+              </tr>
+              <tr>
+                <td>chart가 read failed</td>
+                <td>main_step, met_step, latestDate 디렉터리, all/fail parquet 파일명</td>
+                <td>read failed 카드의 경로 후보와 실제 파일명을 비교합니다.</td>
+              </tr>
+              <tr>
+                <td>FCC 이상시점 point 누락</td>
+                <td>FCC 이상시점 all/fail scatter 파일 row 수</td>
+                <td>해당 chart는 all/fail 파일 row를 추가 설비 필터 없이 drawing합니다.</td>
+              </tr>
+            </tbody>
+          </table>
         </section>
       </section>
     </main>
@@ -2815,6 +3049,11 @@ function App() {
   const handleHomeSelect = (key) => {
     setChartLatestDate('');
 
+    if (key === 'manual') {
+      setCurrentView('manual');
+      return;
+    }
+
     if (key === 'chamber') {
       setCurrentView('chamber');
       return;
@@ -2835,6 +3074,10 @@ function App() {
 
   if (currentView === 'chamber') {
     return <ConstructionView onBack={handleBackHome} onClickHistory={handleClickHistory} />;
+  }
+
+  if (currentView === 'manual') {
+    return <ManualView onBack={handleBackHome} />;
   }
 
   return (
