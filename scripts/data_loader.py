@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v41"
+LOADER_VERSION = "file-loader-v42"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1496,10 +1496,9 @@ def fcc_met_unique_counts(met_rows):
 def fcc_timefit_eqp_stats(timefit_rows):
     by_main_step_met_step = {}
     for row in timefit_rows:
-        main_step = fcc_mapping_step_code(str(get_first(row, ("main_step", "mainStep", "main_seq")) or "").strip())
-        fcc_step_seq = fcc_timefit_step_seq(row)
-        met_step = fcc_mapping_step_code(fcc_step_seq)
-        eqp_ids = parse_eqp_ids(get_first(row, ("eqp_ch", "eqpch")))
+        main_step = fcc_mapping_step_code(fcc_timefit_main_seq(row))
+        met_step = fcc_mapping_step_code(fcc_timefit_step_seq(row))
+        eqp_ids = fcc_timefit_eqp_ids(row)
         if not main_step or not met_step or not eqp_ids:
             continue
 
@@ -2054,8 +2053,16 @@ def fcc_timefit_step_seq(row):
     return str(get_first(row, ("fcc_step_seq", "fccStepSeq", "fcc_step", "fccStep")) or "").strip()
 
 
-def fcc_timefit_chart_step_seq(row):
-    return str(get_first(row, ("step_seq", "stepSeq")) or "").strip()
+def fcc_timefit_main_seq(row):
+    return str(get_first(row, ("main_seq", "mainStep", "main_step")) or "").strip()
+
+
+def fcc_timefit_met_seq(row):
+    return str(get_first(row, ("met_seq", "metStep", "met_step")) or "").strip()
+
+
+def fcc_timefit_eqp_ids(row):
+    return parse_eqp_ids(get_first(row, ("eqpid", "eqpch", "eqp_ch", "eqp_id")))
 
 
 def fcc_timefit_matches_met_step(row, chart_met_step):
@@ -2982,8 +2989,8 @@ def fcc_timefit_list_rows_for_eqp(main_step, chart_met_step, eqp_ch):
     target_eqp_ch = str(eqp_ch or "").strip()
     matches = []
     for row in rows:
-        row_main_step = fcc_mapping_step_code(str(get_first(row, ("main_step", "mainStep", "main_seq")) or "").strip())
-        row_eqp_ids = parse_eqp_ids(get_first(row, ("eqp_ch", "eqpch")))
+        row_main_step = fcc_mapping_step_code(fcc_timefit_main_seq(row))
+        row_eqp_ids = fcc_timefit_eqp_ids(row)
         if target_main_step and row_main_step != target_main_step:
             continue
         if not fcc_timefit_matches_met_step(row, chart_met_step):
@@ -3001,43 +3008,48 @@ def fcc_timefit_charts(main_step, chart_met_step, eqp_ch):
 
     source_main_step_code = fcc_mapping_step_code(main_step)
     chart_met_step_text = strip_fcc_prefix(strip_percent_prefix(chart_met_step))
-    matches_by_chart_step = {}
+    matches_by_path = {}
     for row in matches:
-        chart_step_raw = fcc_timefit_chart_step_seq(row)
-        chart_step_code = fcc_mapping_step_code(chart_step_raw)
-        if not chart_step_code:
+        path_main_seq = fcc_timefit_main_seq(row)
+        path_met_seq = fcc_timefit_met_seq(row)
+        path_eqp_ids = fcc_timefit_eqp_ids(row)
+        path_eqp_id = eqp_ch if eqp_ch in path_eqp_ids else (path_eqp_ids[0] if path_eqp_ids else "")
+        if not path_main_seq or not path_met_seq or not path_eqp_id:
             continue
-        matches_by_chart_step.setdefault(chart_step_code, []).append(row)
+        path_key = (path_main_seq, path_met_seq, path_eqp_id)
+        matches_by_path.setdefault(path_key, []).append(row)
 
     charts = []
-    for chart_step_code, chart_step_matches in sorted(matches_by_chart_step.items()):
-        matched_fcc_step_seq = unique_nonempty(fcc_timefit_step_seq(row) for row in chart_step_matches)
+    for (path_main_seq, path_met_seq, path_eqp_id), path_matches in sorted(matches_by_path.items()):
+        path_main_step_code = fcc_mapping_step_code(path_main_seq)
+        path_met_step_text = strip_fcc_prefix(strip_percent_prefix(path_met_seq))
+        matched_fcc_step_seq = unique_nonempty(fcc_timefit_step_seq(row) for row in path_matches)
         spec = {
-            "key": f"fcc_timefit::{source_main_step_code}::{chart_step_code}::{chart_met_step_text}::{eqp_ch}",
+            "key": f"fcc_timefit::{source_main_step_code}::{path_main_step_code}::{path_met_step_text}::{path_eqp_id}",
             "dataKind": "fcc",
             "chartRoot": "timefit",
             "sourcePriority": 0,
-            "mainStep": chart_step_code,
-            "mainStepPath": f"U%{chart_step_code}",
-            "stepSeq": chart_step_code,
-            "metStep": chart_met_step_text,
-            "metStepPath": chart_met_step_text,
+            "mainStep": path_main_step_code,
+            "mainStepPath": path_main_seq,
+            "stepSeq": path_main_step_code,
+            "metStep": path_met_step_text,
+            "metStepPath": path_met_seq,
             "stepDesc": "",
             "sdwt": "",
-            "centerCount": len(chart_step_matches),
+            "centerCount": len(path_matches),
             "stdCount": 0,
-            "centerEqpIds": [eqp_ch],
+            "centerEqpIds": [path_eqp_id],
             "stdEqpIds": [],
-            "eqpIds": [eqp_ch],
-            "timefitCount": len(chart_step_matches),
-            "timefitEqpIds": [eqp_ch],
+            "eqpIds": [path_eqp_id],
+            "timefitCount": len(path_matches),
+            "timefitEqpIds": [path_eqp_id],
             "fccSourceMainStep": source_main_step_code,
             "fccStepSeq": matched_fcc_step_seq[0] if matched_fcc_step_seq else "",
         }
 
         try:
-            resolved_paths = resolve_fcc_timefit_chart_paths(chart_step_code, chart_met_step, eqp_ch)
-            payload = fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=len(chart_step_matches), include_pm=True)
+            resolved_paths = resolve_fcc_timefit_chart_paths(path_main_seq, path_met_seq, path_eqp_id)
+            payload = fcc_timefit_chart_payload(resolved_paths, path_eqp_id, anomaly_count=len(path_matches), include_pm=True)
             payload["row"] = spec
             charts.append(payload)
         except Exception as exc:
@@ -3053,7 +3065,7 @@ def fcc_timefit_charts(main_step, chart_met_step, eqp_ch):
                     },
                     "diagnostics": {
                         "version": LOADER_VERSION,
-                        "inputRows": {"timefitListMatches": len(chart_step_matches)},
+                        "inputRows": {"timefitListMatches": len(path_matches)},
                     },
                 }
             )
