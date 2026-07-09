@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v43"
+LOADER_VERSION = "file-loader-v44"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -2469,11 +2469,17 @@ def outlier_display_domain(values, protected_values=None):
     return {"min": min(filtered) - 2, "max": max(filtered) * 1.2}
 
 
-def time_domain(dataframe, column):
-    values = [value for value in (time_ms(value) for value in column_values(dataframe, column)) if value is not None]
+def time_domain_for_frames(dataframes, column):
+    values = []
+    for dataframe in dataframes:
+        values.extend(value for value in (time_ms(value) for value in column_values(dataframe, column)) if value is not None)
     if not values:
         return None
     return {"min": min(values), "max": max(values)}
+
+
+def time_domain(dataframe, column):
+    return time_domain_for_frames((dataframe,), column)
 
 
 def command_chart(args):
@@ -2527,7 +2533,7 @@ def command_chart(args):
             },
             "latestDate": resolved_paths["latestDate"],
             "domains": {
-                "x": time_domain(all_df, "tkout_time"),
+                "x": time_domain_for_frames((all_df, fail_for_eqp, std_for_eqp), "tkout_time"),
                 "yFull": numeric_domain(chart_fab_values),
                 "yInitial": outlier_display_domain(main_all_fab_values, ng_fab_values),
                 "center": {
@@ -2600,7 +2606,7 @@ def generic_chart_payload(resolved_paths, eqp_id, include_pm=True, filter_p3d_dr
         "latestDate": resolved_paths["latestDate"],
         "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),
         "domains": {
-            "x": time_domain(all_df, "tkout_time"),
+            "x": time_domain_for_frames((all_df, fail_for_eqp, std_for_eqp), "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
             "yInitial": outlier_display_domain(all_fab_values, ng_fab_values),
             "center": {
@@ -2902,7 +2908,7 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
         "latestDate": resolved_paths["latestDate"],
         "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),
         "domains": {
-            "x": time_domain(all_df, "tkout_time"),
+            "x": time_domain_for_frames((all_df, fail_for_eqp, std_for_eqp), "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
             "yInitial": outlier_display_domain(all_fab_values, ng_fab_values),
             "center": {
@@ -2966,7 +2972,7 @@ def fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=0, include_p
         "latestDate": resolved_paths["latestDate"],
         "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),
         "domains": {
-            "x": time_domain(all_df, "tkout_time"),
+            "x": time_domain_for_frames((all_df, fail_for_eqp), "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
             "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
             "center": {
