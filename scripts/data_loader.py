@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v42"
+LOADER_VERSION = "file-loader-v43"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -1055,6 +1055,10 @@ def split_p3d_drawing_df(dataframe):
 
 def split_fcc_drawing_df(dataframe):
     return filter_frame_p3d_drawing(normalize_fcc_chart_frame(dataframe))
+
+
+def timefit_fcc_drawing_df(dataframe):
+    return normalize_fcc_chart_frame(dataframe)
 
 
 def records(dataframe):
@@ -2927,9 +2931,9 @@ def fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=0, include_p
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
 
-    all_df = sort_frame(split_fcc_drawing_df(read_parquet(all_path)), "tkout_time")
-    fail_df = sort_frame(split_fcc_drawing_df(read_parquet(fail_path)), "tkout_time")
-    fail_for_eqp = filter_frame_eqp_ch_if_present(fail_df, eqp_ch)
+    all_df = sort_frame(timefit_fcc_drawing_df(read_parquet(all_path)), "tkout_time")
+    fail_df = sort_frame(timefit_fcc_drawing_df(read_parquet(fail_path)), "tkout_time")
+    fail_for_eqp = fail_df
     ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
     all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
     all_fab_values = numeric_column_values(all_df, "fab_value")
