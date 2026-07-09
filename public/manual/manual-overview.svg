@@ -10,11 +10,12 @@
     </marker>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .title{fill:#2f204d;font-size:40px;font-weight:800}
-      .subtitle{fill:#6f6382;font-size:20px;font-weight:650}
-      .cardTitle{fill:#2f204d;font-size:26px;font-weight:800}
-      .cardText{fill:#6f6382;font-size:17px;font-weight:650}
-      .small{fill:#6f6382;font-size:16px;font-weight:650}
+      .title{fill:#2f204d;font-size:30px;font-weight:800}
+      .subtitle{fill:#6f6382;font-size:14px;font-weight:650}
+      .stepBox{fill:#ffffff;stroke:#ded7ef;stroke-width:1.5}
+      .cardTitle{fill:#2f204d;font-size:19px;font-weight:800}
+      .cardText{fill:#6f6382;font-size:14px;font-weight:650}
+      .small{fill:#6f6382;font-size:13px;font-weight:650}
     </style>
   </defs>
   <rect width="1600" height="760" rx="34" fill="#fbfaff"/>
@@ -22,55 +23,55 @@
   <text class="subtitle" x="80" y="126">처음 보는 사용자는 왼쪽에서 오른쪽 순서로 App을 열고, 조건을 고른 뒤 chart와 상세 표를 확인하면 됩니다.</text>
 
   <g filter="url(#shadow)">
-    <rect x="80" y="200" width="300" height="300" rx="22" fill="#ffffff" stroke="#ded7ef"/>
-    <rect x="460" y="200" width="300" height="300" rx="22" fill="#ffffff" stroke="#ded7ef"/>
-    <rect x="840" y="200" width="300" height="300" rx="22" fill="#ffffff" stroke="#ded7ef"/>
-    <rect x="1220" y="200" width="300" height="300" rx="22" fill="#ffffff" stroke="#ded7ef"/>
+    <rect class="stepBox" x="100" y="200" width="320" height="300" rx="22"/>
+    <rect class="stepBox" x="460" y="200" width="320" height="300" rx="22"/>
+    <rect class="stepBox" x="820" y="200" width="320" height="300" rx="22"/>
+    <rect class="stepBox" x="1180" y="200" width="320" height="300" rx="22"/>
   </g>
 
-  <g transform="translate(80 200)">
-    <circle cx="150" cy="82" r="48" fill="#efeafd"/>
-    <rect x="114" y="58" width="72" height="50" rx="12" fill="#765ee6"/>
-    <rect x="128" y="72" width="44" height="7" rx="3.5" fill="#ffffff" opacity="0.86"/>
-    <rect x="128" y="88" width="32" height="7" rx="3.5" fill="#ffffff" opacity="0.72"/>
-    <text class="cardTitle" x="150" y="176" text-anchor="middle">1. App 선택</text>
-    <text class="cardText" x="150" y="216" text-anchor="middle">Main / FCC / Chamber</text>
-    <text class="cardText" x="150" y="244" text-anchor="middle">L0 / L1 메뉴 진입</text>
+  <g transform="translate(100 200)">
+    <circle cx="160" cy="82" r="44" fill="#efeafd"/>
+    <rect x="126" y="59" width="68" height="46" rx="11" fill="#765ee6"/>
+    <rect x="139" y="72" width="42" height="6" rx="3" fill="#ffffff" opacity="0.86"/>
+    <rect x="139" y="87" width="30" height="6" rx="3" fill="#ffffff" opacity="0.72"/>
+    <text class="cardTitle" x="160" y="176" text-anchor="middle">1. App 선택</text>
+    <text class="cardText" x="160" y="216" text-anchor="middle">Main / FCC / Chamber</text>
+    <text class="cardText" x="160" y="244" text-anchor="middle">L0 / L1 메뉴 진입</text>
   </g>
 
   <g transform="translate(460 200)">
-    <circle cx="150" cy="82" r="48" fill="#e8f5f2"/>
-    <rect x="104" y="52" width="92" height="14" rx="7" fill="#1f9a82"/>
-    <rect x="104" y="78" width="92" height="14" rx="7" fill="#cadbd8"/>
-    <rect x="104" y="104" width="68" height="14" rx="7" fill="#cadbd8"/>
-    <text class="cardTitle" x="150" y="176" text-anchor="middle">2. 조건 선택</text>
-    <text class="cardText" x="150" y="216" text-anchor="middle">SDWT / Line / Device</text>
-    <text class="cardText" x="150" y="244" text-anchor="middle">main_step / met_step</text>
+    <circle cx="160" cy="82" r="44" fill="#e8f5f2"/>
+    <rect x="116" y="54" width="88" height="13" rx="6.5" fill="#1f9a82"/>
+    <rect x="116" y="78" width="88" height="13" rx="6.5" fill="#cadbd8"/>
+    <rect x="116" y="102" width="64" height="13" rx="6.5" fill="#cadbd8"/>
+    <text class="cardTitle" x="160" y="176" text-anchor="middle">2. 조건 선택</text>
+    <text class="cardText" x="160" y="216" text-anchor="middle">SDWT / Line / Device</text>
+    <text class="cardText" x="160" y="244" text-anchor="middle">main_step / met_step</text>
   </g>
 
-  <g transform="translate(840 200)">
-    <circle cx="150" cy="82" r="48" fill="#fff0e5"/>
-    <polyline points="104,98 126,78 150,88 176,56 204,70" fill="none" stroke="#e86f2f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="176" cy="56" r="7" fill="#db2f2f"/>
-    <circle cx="204" cy="70" r="6" fill="#1f9a82"/>
-    <text class="cardTitle" x="150" y="176" text-anchor="middle">3. Chart 확인</text>
-    <text class="cardText" x="150" y="216" text-anchor="middle">scatter / legend / tooltip</text>
-    <text class="cardText" x="150" y="244" text-anchor="middle">Wafer List / PM 이력</text>
+  <g transform="translate(820 200)">
+    <circle cx="160" cy="82" r="44" fill="#fff0e5"/>
+    <polyline points="116,98 138,78 160,88 186,56 214,70" fill="none" stroke="#e86f2f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="186" cy="56" r="6.5" fill="#db2f2f"/>
+    <circle cx="214" cy="70" r="5.5" fill="#1f9a82"/>
+    <text class="cardTitle" x="160" y="176" text-anchor="middle">3. Chart 확인</text>
+    <text class="cardText" x="160" y="216" text-anchor="middle">scatter / legend / tooltip</text>
+    <text class="cardText" x="160" y="244" text-anchor="middle">Wafer List / PM 이력</text>
   </g>
 
-  <g transform="translate(1220 200)">
-    <circle cx="150" cy="82" r="48" fill="#feecec"/>
-    <path d="M132 82h36M150 64v36" stroke="#d92d2d" stroke-width="8" stroke-linecap="round"/>
-    <text class="cardTitle" x="150" y="176" text-anchor="middle">4. 원인 추적</text>
-    <text class="cardText" x="150" y="216" text-anchor="middle">Defect MAP</text>
-    <text class="cardText" x="150" y="244" text-anchor="middle">관리 STEP / 외부 Trend</text>
+  <g transform="translate(1180 200)">
+    <circle cx="160" cy="82" r="44" fill="#feecec"/>
+    <path d="M144 82h32M160 66v32" stroke="#d92d2d" stroke-width="7" stroke-linecap="round"/>
+    <text class="cardTitle" x="160" y="176" text-anchor="middle">4. 원인 추적</text>
+    <text class="cardText" x="160" y="216" text-anchor="middle">Defect MAP</text>
+    <text class="cardText" x="160" y="244" text-anchor="middle">관리 STEP / 외부 Trend</text>
   </g>
 
-  <path d="M404 350h32" stroke="#6a52d9" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
-  <path d="M784 350h32" stroke="#6a52d9" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
-  <path d="M1164 350h32" stroke="#6a52d9" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M430 350h20" stroke="#6a52d9" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M790 350h20" stroke="#6a52d9" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M1150 350h20" stroke="#6a52d9" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
 
   <rect x="160" y="580" width="1280" height="92" rx="20" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="200" y="620" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="22" font-weight="800">핵심 원칙</text>
+  <text x="200" y="620" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">핵심 원칙</text>
   <text class="small" x="200" y="652">빨간 point를 기준으로 lot / wafer / 시간 / 설비를 맞추고, Wafer List와 PM 이력으로 원인을 좁혀갑니다.</text>
 </svg>

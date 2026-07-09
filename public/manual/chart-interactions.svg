@@ -10,10 +10,10 @@
     </marker>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .h1{fill:#2f204d;font-size:38px;font-weight:800}
-      .h2{fill:#2f204d;font-size:24px;font-weight:800}
-      .body{fill:#6f6382;font-size:17px;font-weight:650}
-      .small{fill:#6f6382;font-size:15px;font-weight:650}
+      .h1{fill:#2f204d;font-size:28px;font-weight:800}
+      .h2{fill:#2f204d;font-size:18px;font-weight:800}
+      .body{fill:#6f6382;font-size:14px;font-weight:650}
+      .small{fill:#6f6382;font-size:13px;font-weight:650}
     </style>
   </defs>
   <rect width="1600" height="860" rx="34" fill="#fbfaff"/>
@@ -29,7 +29,7 @@
     <circle cx="188" cy="134" r="9" fill="#db2f2f"/>
     <path d="M210 136h78" stroke="#6a52d9" stroke-width="4" marker-end="url(#arrowPurple)"/>
     <rect x="392" y="82" width="220" height="130" rx="12" fill="#ffffff" stroke="#ded7ef"/>
-    <text x="420" y="116" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="16" font-weight="800">tooltip</text>
+    <text x="420" y="116" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">tooltip</text>
     <text class="small" x="420" y="144">lot_wf / tkout_time</text>
     <text class="small" x="420" y="170">eqp_ch / fab_value</text>
     <text class="body" x="36" y="238">point 상세값을 빠르게 확인합니다.</text>
@@ -45,8 +45,8 @@
     <path d="M140 102l132 68" stroke="#6a52d9" stroke-width="5" marker-end="url(#arrowPurple)" stroke-linecap="round"/>
     <circle cx="184" cy="142" r="7" fill="#db2f2f"/>
     <circle cx="244" cy="124" r="5" fill="#2d8bc7"/>
-    <text x="410" y="120" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="18" font-weight="800">선택 영역만</text>
-    <text x="410" y="150" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="18" font-weight="800">확대 표시</text>
+    <text x="410" y="120" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">선택 영역만</text>
+    <text x="410" y="150" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">확대 표시</text>
     <text class="body" x="36" y="238">왼쪽 위에서 오른쪽 아래로 끌어 선택합니다.</text>
   </g>
 
@@ -58,8 +58,8 @@
     <line x1="82" y1="104" x2="82" y2="180" stroke="#b9b0c9" stroke-width="2"/>
     <rect x="142" y="104" width="130" height="64" rx="5" fill="#db2f2f" opacity="0.12" stroke="#db2f2f" stroke-width="2.5" stroke-dasharray="7 5"/>
     <path d="M274 170l-132-68" stroke="#db2f2f" stroke-width="5" marker-end="url(#arrowRed)" stroke-linecap="round"/>
-    <text x="410" y="120" fill="#c82727" font-family="Pretendard,Inter,Arial,sans-serif" font-size="18" font-weight="800">현재 view보다</text>
-    <text x="410" y="150" fill="#c82727" font-family="Pretendard,Inter,Arial,sans-serif" font-size="18" font-weight="800">넓게 보기</text>
+    <text x="410" y="120" fill="#c82727" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">현재 view보다</text>
+    <text x="410" y="150" fill="#c82727" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">넓게 보기</text>
     <text class="body" x="36" y="238">오른쪽 아래에서 왼쪽 위로 끌면 범위가 넓어집니다.</text>
   </g>
 
@@ -67,14 +67,14 @@
     <rect width="660" height="260" rx="22" fill="#ffffff" stroke="#ded7ef"/>
     <text class="h2" x="36" y="54">4. 초기화와 Legend</text>
     <rect x="36" y="82" width="260" height="130" rx="12" fill="#faf9ff" stroke="#ded7ef"/>
-    <text x="92" y="140" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="26" font-weight="900">Double Click</text>
+    <text x="92" y="140" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="900">Double Click</text>
     <text class="small" x="106" y="172">확대/축소 초기화</text>
     <rect x="340" y="82" width="230" height="130" rx="12" fill="#ffffff" stroke="#ded7ef"/>
     <text x="376" y="116" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14" font-weight="800">Legend</text>
     <circle cx="380" cy="148" r="6" fill="#db2f2f"/>
     <text class="small" x="402" y="154" fill="#2f204d">EQP-01</text>
     <circle cx="380" cy="178" r="6" fill="#9aa0aa" opacity="0.38"/>
-    <text x="402" y="184" fill="#9aa0aa" font-family="Pretendard,Inter,Arial,sans-serif" font-size="15" font-weight="650">비교군 숨김</text>
+    <text x="402" y="184" fill="#9aa0aa" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="650">비교군 숨김</text>
     <text class="body" x="36" y="238">Legend 항목 클릭으로 STEP/EQP point 표시를 전환합니다.</text>
   </g>
 </svg>

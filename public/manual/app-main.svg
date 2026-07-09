@@ -7,11 +7,11 @@
     </marker>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .h1{fill:#2f204d;font-size:34px;font-weight:800}
-      .h2{fill:#2f204d;font-size:24px;font-weight:800}
-      .label{fill:#6f6382;font-size:15px;font-weight:800}
-      .body{fill:#6f6382;font-size:17px;font-weight:650}
-      .small{fill:#6f6382;font-size:14px;font-weight:700}
+      .h1{fill:#2f204d;font-size:28px;font-weight:800}
+      .h2{fill:#2f204d;font-size:18px;font-weight:800}
+      .label{fill:#6f6382;font-size:13px;font-weight:800}
+      .body{fill:#6f6382;font-size:14px;font-weight:650}
+      .small{fill:#6f6382;font-size:13px;font-weight:700}
     </style>
   </defs>
   <rect width="1600" height="820" rx="34" fill="#fbfaff"/>
@@ -20,20 +20,20 @@
   <rect x="110" y="98" width="1380" height="88" rx="16" fill="#f7f3ff" stroke="#ded7ef"/>
   <text class="h1" x="150" y="148">P3D MAIN 설비별 이상감지</text>
   <rect x="1124" y="124" width="120" height="34" rx="17" fill="#e8f5f2"/>
-  <text x="1184" y="146" text-anchor="middle" fill="#147b68" font-family="Pretendard,Inter,Arial,sans-serif" font-size="15" font-weight="800">SDWT ALL</text>
+  <text x="1184" y="146" text-anchor="middle" fill="#147b68" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">SDWT ALL</text>
   <rect x="1264" y="124" width="170" height="34" rx="17" fill="#efeafd"/>
-  <text x="1349" y="146" text-anchor="middle" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="15" font-weight="800">실제 파일 기반</text>
+  <text x="1349" y="146" text-anchor="middle" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">실제 파일 기반</text>
 
   <rect x="110" y="226" width="360" height="448" rx="18" fill="#faf9ff" stroke="#ded7ef"/>
   <text class="label" x="150" y="270">1. SDWT와 대상스탭</text>
   <rect x="150" y="300" width="280" height="58" rx="12" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="176" y="335" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="17" font-weight="800">▾ STEP A</text>
+  <text x="176" y="335" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14" font-weight="800">▾ STEP A</text>
   <rect x="178" y="374" width="224" height="38" rx="10" fill="#765ee6"/>
-  <text x="290" y="399" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="15" font-weight="800">MET 010203 / ITEM</text>
+  <text x="290" y="399" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">MET 010203 / ITEM</text>
   <rect x="150" y="432" width="280" height="58" rx="12" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="176" y="467" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="17" font-weight="700">▸ STEP B</text>
+  <text x="176" y="467" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14" font-weight="700">▸ STEP B</text>
   <rect x="150" y="508" width="280" height="58" rx="12" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="176" y="543" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="17" font-weight="700">▸ STEP C</text>
+  <text x="176" y="543" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14" font-weight="700">▸ STEP C</text>
   <text class="body" x="150" y="626">main_step을 펼치고</text>
   <text class="body" x="150" y="654">MET 스탭을 선택합니다.</text>
 

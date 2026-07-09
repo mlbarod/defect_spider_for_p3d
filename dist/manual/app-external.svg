@@ -7,10 +7,10 @@
     </marker>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .h1{fill:#2f204d;font-size:38px;font-weight:800}
-      .h2{fill:#2f204d;font-size:26px;font-weight:800}
-      .body{fill:#6f6382;font-size:18px;font-weight:650}
-      .small{fill:#6f6382;font-size:16px;font-weight:700}
+      .h1{fill:#2f204d;font-size:28px;font-weight:800}
+      .h2{fill:#2f204d;font-size:18px;font-weight:800}
+      .body{fill:#6f6382;font-size:14px;font-weight:650}
+      .small{fill:#6f6382;font-size:13px;font-weight:700}
     </style>
   </defs>
   <rect width="1600" height="700" rx="34" fill="#fbfaff"/>
@@ -20,9 +20,9 @@
   <rect x="160" y="190" width="520" height="330" rx="22" fill="#ffffff" stroke="#ded7ef"/>
   <text class="h2" x="210" y="248">Defect SPIDER 홈</text>
   <rect x="210" y="292" width="270" height="64" rx="14" fill="#765ee6"/>
-  <text x="345" y="332" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="20" font-weight="800">L0 SPIDER</text>
+  <text x="345" y="332" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">L0 SPIDER</text>
   <rect x="210" y="382" width="270" height="64" rx="14" fill="#1f9a82"/>
-  <text x="345" y="422" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="20" font-weight="800">L1 SPIDER</text>
+  <text x="345" y="422" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">L1 SPIDER</text>
   <text class="small" x="210" y="486">홈 화면에서 외부 App 버튼을 선택합니다.</text>
 
   <path d="M720 355h160" stroke="#6a52d9" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>

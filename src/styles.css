@@ -613,8 +613,9 @@ code {
 
 .manualFigure img {
   display: block;
-  width: 100%;
-  min-width: 1280px;
+  justify-self: center;
+  width: min(100%, 1480px);
+  max-width: 100%;
   height: auto;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
@@ -623,7 +624,7 @@ code {
 }
 
 .manualFigure.wide img {
-  min-width: 1440px;
+  width: min(100%, 1580px);
 }
 
 .manualFigure figcaption {

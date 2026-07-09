@@ -4,11 +4,11 @@
   <defs>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .h1{fill:#2f204d;font-size:34px;font-weight:800}
-      .h2{fill:#2f204d;font-size:24px;font-weight:800}
-      .label{fill:#6f6382;font-size:15px;font-weight:800}
-      .body{fill:#6f6382;font-size:17px;font-weight:650}
-      .tag{font-size:16px;font-weight:800}
+      .h1{fill:#2f204d;font-size:28px;font-weight:800}
+      .h2{fill:#2f204d;font-size:18px;font-weight:800}
+      .label{fill:#6f6382;font-size:13px;font-weight:800}
+      .body{fill:#6f6382;font-size:14px;font-weight:650}
+      .tag{font-size:14px;font-weight:800}
     </style>
   </defs>
   <rect width="1600" height="820" rx="34" fill="#fbfaff"/>
@@ -19,11 +19,11 @@
   <rect x="110" y="206" width="360" height="468" rx="18" fill="#faf9ff" stroke="#ded7ef"/>
   <text class="label" x="150" y="250">1. FCC지수 연관 이상감지</text>
   <rect x="150" y="284" width="280" height="62" rx="12" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="176" y="322" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="17" font-weight="800">▾ FCC MAIN STEP</text>
+  <text x="176" y="322" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14" font-weight="800">▾ FCC MAIN STEP</text>
   <rect x="178" y="364" width="224" height="40" rx="10" fill="#765ee6"/>
-  <text x="290" y="390" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="15" font-weight="800">FCC MET 선택</text>
+  <text x="290" y="390" text-anchor="middle" fill="#ffffff" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">FCC MET 선택</text>
   <rect x="150" y="430" width="280" height="62" rx="12" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="176" y="468" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="17" font-weight="700">▸ single 항목</text>
+  <text x="176" y="468" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14" font-weight="700">▸ single 항목</text>
   <text class="body" x="150" y="580">main_step을 펼친 뒤</text>
   <text class="body" x="150" y="608">FCC 중심치 met_step을</text>
   <text class="body" x="150" y="636">선택합니다.</text>
@@ -37,7 +37,7 @@
   <circle cx="700" cy="360" r="8" fill="#db2f2f"/>
   <circle cx="780" cy="372" r="4" fill="#8d7adf" opacity="0.48"/>
   <rect x="1176" y="342" width="210" height="34" rx="10" fill="#ffffff" stroke="#c9bee8"/>
-  <text x="1281" y="364" text-anchor="middle" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="15" font-weight="800">관리STEP CHART 보기</text>
+  <text x="1281" y="364" text-anchor="middle" fill="#6045cf" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">관리STEP CHART 보기</text>
 
   <rect x="550" y="424" width="880" height="84" rx="14" fill="#e8f5f2" stroke="#cde5df"/>
   <text class="tag" x="586" y="456" fill="#147b68">연관 Step 이상감지</text>
