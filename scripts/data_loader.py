@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v44"
+LOADER_VERSION = "file-loader-v45"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -2850,37 +2850,48 @@ def management_all_chart_payload(resolved_paths, eqp_id):
     }
 
 
-def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=True, include_pm=True, require_std=False):
+def fcc_chart_payload(
+    resolved_paths,
+    eqp_id,
+    include_center=True,
+    include_std=True,
+    include_pm=True,
+    require_std=False,
+    include_current_eqp_in_all=False,
+):
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
 
-    all_df = split_fcc_drawing_df(read_parquet(all_path))
+    all_raw_df = read_parquet(all_path)
+    all_df = split_fcc_drawing_df(all_raw_df)
     if include_center:
         if not fail_path:
             raise FileNotFoundError(f"FCC fail parquet 파일을 찾지 못했습니다: {resolved_paths.get('dataDir', '')}")
-        fail_df = split_fcc_drawing_df(read_parquet(fail_path))
+        fail_raw_df = read_parquet(fail_path)
+        fail_df = split_fcc_drawing_df(fail_raw_df)
     else:
+        fail_raw_df = all_raw_df.head(0)
         fail_df = all_df.head(0)
     if include_std and std_path:
-        std_df = split_fcc_drawing_df(read_parquet(std_path))
+        std_raw_df = read_parquet(std_path)
+        std_df = split_fcc_drawing_df(std_raw_df)
     elif include_std and require_std:
         raise FileNotFoundError(f"FCC fail_std parquet 파일을 찾지 못했습니다: {resolved_paths.get('dataDir', '')}")
     else:
+        std_raw_df = all_raw_df.head(0)
         std_df = all_df.head(0)
 
     all_df = sort_frame(all_df, "tkout_time")
     fail_df = sort_frame(fail_df, "tkout_time")
     std_df = sort_frame(std_df, "tkout_time")
     all_background = exclude_frame_eqp(all_df, eqp_id)
+    all_points_df = all_df if include_current_eqp_in_all else all_background
     fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
     ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
     all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
     all_fab_values = numeric_column_values(all_df, "fab_value")
-    center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
-    std_ng_fab_values = final_decision_ng_numeric_values(std_for_eqp)
-    ng_fab_values = center_ng_fab_values + std_ng_fab_values
     chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
     chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
     chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
@@ -2893,10 +2904,17 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
             "inputRows": {
                 "all": frame_height(all_df),
                 "allBackground": frame_height(all_background),
+                "allPoints": frame_height(all_points_df),
+                "allRaw": frame_height(all_raw_df),
+                "allP3dFilteredOut": max(0, frame_height(all_raw_df) - frame_height(all_df)),
                 "fail": frame_height(fail_df),
                 "failForEqp": frame_height(fail_for_eqp),
+                "failRaw": frame_height(fail_raw_df),
+                "failP3dFilteredOut": max(0, frame_height(fail_raw_df) - frame_height(fail_df)),
                 "std": frame_height(std_df),
                 "stdForEqp": frame_height(std_for_eqp),
+                "stdRaw": frame_height(std_raw_df),
+                "stdP3dFilteredOut": max(0, frame_height(std_raw_df) - frame_height(std_df)),
             },
         },
         "paths": {
@@ -2910,17 +2928,17 @@ def fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=T
         "domains": {
             "x": time_domain_for_frames((all_df, fail_for_eqp, std_for_eqp), "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
-            "yInitial": outlier_display_domain(all_fab_values, ng_fab_values),
+            "yInitial": numeric_domain(chart_fab_values),
             "center": {
                 "yFull": numeric_domain(chart_fab_values_center),
-                "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
+                "yInitial": numeric_domain(chart_fab_values_center),
             },
             "std": {
                 "yFull": numeric_domain(chart_fab_values_std),
-                "yInitial": outlier_display_domain(all_fab_values, std_ng_fab_values),
+                "yInitial": numeric_domain(chart_fab_values_std),
             },
         },
-        "allPoints": chart_records(all_background, None, ppid_right_from_ppid=ppid_right_from_ppid),
+        "allPoints": chart_records(all_points_df, None, ppid_right_from_ppid=ppid_right_from_ppid),
         "failPoints": chart_records(fail_for_eqp, None, "center", all_ppid_lookup, ppid_right_from_ppid, False),
         "stdPoints": chart_records(std_for_eqp, None, "std", all_ppid_lookup, ppid_right_from_ppid, False),
         "pmEvents": pm_events_for_eqp(eqp_id) if include_pm else [],
@@ -2943,7 +2961,6 @@ def fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=0, include_p
     ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
     all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
     all_fab_values = numeric_column_values(all_df, "fab_value")
-    center_ng_fab_values = final_decision_ng_numeric_values(fail_for_eqp)
     chart_fab_values = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
 
     return {
@@ -2974,10 +2991,10 @@ def fcc_timefit_chart_payload(resolved_paths, eqp_ch, anomaly_count=0, include_p
         "domains": {
             "x": time_domain_for_frames((all_df, fail_for_eqp), "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
-            "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
+            "yInitial": numeric_domain(chart_fab_values),
             "center": {
                 "yFull": numeric_domain(chart_fab_values),
-                "yInitial": outlier_display_domain(all_fab_values, center_ng_fab_values),
+                "yInitial": numeric_domain(chart_fab_values),
             },
         },
         "allPoints": chart_records(all_df, None, ppid_right_from_ppid=ppid_right_from_ppid),
@@ -3154,7 +3171,14 @@ def fcc_extra_center_charts(eqp_id):
     for spec in fcc_extra_chart_specs_for_eqp(eqp_id, source_key="fcc_extra_fail", anomaly_type="center"):
         try:
             resolved_paths = resolve_fcc_chart_paths(spec["mainStepPath"], spec["metStepPath"], "root", resolve_std=False)
-            payload = fcc_chart_payload(resolved_paths, eqp_id, include_center=True, include_std=False, include_pm=True)
+            payload = fcc_chart_payload(
+                resolved_paths,
+                eqp_id,
+                include_center=True,
+                include_std=False,
+                include_pm=True,
+                include_current_eqp_in_all=True,
+            )
             payload["row"] = spec
             charts.append(payload)
         except Exception as exc:
@@ -3189,6 +3213,7 @@ def fcc_extra_std_charts(eqp_id):
                 include_std=True,
                 include_pm=True,
                 require_std=True,
+                include_current_eqp_in_all=True,
             )
             payload["row"] = spec
             charts.append(payload)

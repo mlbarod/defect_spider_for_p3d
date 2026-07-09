@@ -1113,7 +1113,8 @@ const ScatterChart = React.memo(function ScatterChart({ allPoints, failPoints, s
     return { min: 0, max: 1 };
   };
   const getYDomain = (range, shouldPad = true) => {
-    const minY = 0;
+    const rangeMin = toNumber(range?.min);
+    const minY = Math.min(0, rangeMin ?? 0);
     const maxRangeValue = Math.max(minY + 1, range.max);
     const roundMaxY = (value) => roundUpToTickInterval(value, getNiceYAxisInterval(minY, value));
 
