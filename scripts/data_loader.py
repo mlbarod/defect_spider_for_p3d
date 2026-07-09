@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v45"
+LOADER_VERSION = "file-loader-v46"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -2858,6 +2858,7 @@ def fcc_chart_payload(
     include_pm=True,
     require_std=False,
     include_current_eqp_in_all=False,
+    use_outlier_initial_y=False,
 ):
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
@@ -2892,9 +2893,19 @@ def fcc_chart_payload(
     ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
     all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
     all_fab_values = numeric_column_values(all_df, "fab_value")
-    chart_fab_values_center = all_fab_values + numeric_column_values(fail_for_eqp, "fab_value")
-    chart_fab_values_std = all_fab_values + numeric_column_values(std_for_eqp, "fab_value")
-    chart_fab_values = chart_fab_values_center + numeric_column_values(std_for_eqp, "fab_value")
+    center_fab_values = numeric_column_values(fail_for_eqp, "fab_value")
+    std_fab_values = numeric_column_values(std_for_eqp, "fab_value")
+    chart_fab_values_center = all_fab_values + center_fab_values
+    chart_fab_values_std = all_fab_values + std_fab_values
+    chart_fab_values = chart_fab_values_center + std_fab_values
+    if use_outlier_initial_y:
+        y_initial = outlier_display_domain(all_fab_values, center_fab_values + std_fab_values)
+        center_y_initial = outlier_display_domain(all_fab_values, center_fab_values)
+        std_y_initial = outlier_display_domain(all_fab_values, std_fab_values)
+    else:
+        y_initial = numeric_domain(chart_fab_values)
+        center_y_initial = numeric_domain(chart_fab_values_center)
+        std_y_initial = numeric_domain(chart_fab_values_std)
 
     return {
         "ok": True,
@@ -2928,14 +2939,14 @@ def fcc_chart_payload(
         "domains": {
             "x": time_domain_for_frames((all_df, fail_for_eqp, std_for_eqp), "tkout_time"),
             "yFull": numeric_domain(chart_fab_values),
-            "yInitial": numeric_domain(chart_fab_values),
+            "yInitial": y_initial,
             "center": {
                 "yFull": numeric_domain(chart_fab_values_center),
-                "yInitial": numeric_domain(chart_fab_values_center),
+                "yInitial": center_y_initial,
             },
             "std": {
                 "yFull": numeric_domain(chart_fab_values_std),
-                "yInitial": numeric_domain(chart_fab_values_std),
+                "yInitial": std_y_initial,
             },
         },
         "allPoints": chart_records(all_points_df, None, ppid_right_from_ppid=ppid_right_from_ppid),
@@ -3178,6 +3189,7 @@ def fcc_extra_center_charts(eqp_id):
                 include_std=False,
                 include_pm=True,
                 include_current_eqp_in_all=True,
+                use_outlier_initial_y=True,
             )
             payload["row"] = spec
             charts.append(payload)
@@ -3214,6 +3226,7 @@ def fcc_extra_std_charts(eqp_id):
                 include_pm=True,
                 require_std=True,
                 include_current_eqp_in_all=True,
+                use_outlier_initial_y=True,
             )
             payload["row"] = spec
             charts.append(payload)
