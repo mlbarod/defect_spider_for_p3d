@@ -1790,31 +1790,43 @@ function ChartTag({ anomalyType, anomalyTypes }) {
 
 function getChartPathEntries(data) {
   const paths = data?.paths ?? {};
+  const pathLists = data?.pathLists ?? {};
   const pathLabels = data?.pathLabels ?? {};
   const resolvedPaths = data?.diagnostics?.resolvedPaths ?? {};
   const entries = [
-    ['all', paths.all ?? resolvedPaths.allPath],
-    ['fail', paths.fail ?? resolvedPaths.failPath],
-    ['std', paths.std ?? resolvedPaths.stdPath],
+    ['all', pathLists.all ?? resolvedPaths.allPaths ?? paths.all ?? resolvedPaths.allPath],
+    ['fail', pathLists.fail ?? resolvedPaths.failPaths ?? paths.fail ?? resolvedPaths.failPath],
+    ['std', pathLists.std ?? resolvedPaths.stdPaths ?? paths.std ?? resolvedPaths.stdPath],
   ];
 
-  return entries.filter(([, value]) => value).map(([label, value]) => [pathLabels[label] ?? label, value]);
+  return entries
+    .map(([label, value]) => [
+      pathLabels[label] ?? label,
+      (Array.isArray(value) ? value : [value]).filter(Boolean),
+    ])
+    .filter(([, values]) => values.length > 0);
 }
 
-function ChartFailurePaths({ data }) {
+function ChartPathDetails({ data, variant = '' }) {
   const entries = getChartPathEntries(data);
   if (entries.length === 0) return null;
 
   return (
-    <div className="chartFailurePaths">
-      {entries.map(([label, path]) => (
+    <div className={`chartFailurePaths ${variant ? `chartFailurePaths--${variant}` : ''}`}>
+      {entries.map(([label, values]) => (
         <div key={label}>
           <strong>{label}</strong>
-          <code>{path}</code>
+          {values.map((path, index) => (
+            <code key={`${path}-${index}`}>{path}</code>
+          ))}
         </div>
       ))}
     </div>
   );
+}
+
+function ChartFailurePaths({ data }) {
+  return <ChartPathDetails data={data} />;
 }
 
 function ChartFailureCard({ row, eqpId, error, data }) {
@@ -1863,7 +1875,7 @@ function FccRelatedChartGroup({ row, eqpId, sections }) {
   );
 }
 
-function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null, titleAction = null }) {
+function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null, titleAction = null, showPathDetails = false }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const [isPmTableOpen, setIsPmTableOpen] = useState(false);
   const resolvedCenterPoints = centerPoints ?? (anomalyType === 'center' ? points : []);
@@ -1910,6 +1922,7 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
         anomalyType={chartAnomalyType}
         highlightRange={highlightRange}
       />
+      {showPathDetails && <ChartPathDetails data={chartData} variant="inline" />}
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
           ▸
@@ -2155,6 +2168,7 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             anomalyType="center"
             points={chart.failPoints}
             highlightRange={extraCenterHighlightRange}
+            showPathDetails
           />
         ) : (
           <ChartFailureCard

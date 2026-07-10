@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v49"
+LOADER_VERSION = "file-loader-v50"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -2936,6 +2936,8 @@ def fcc_chart_payload(
     include_pm=True,
     require_std=False,
     include_current_eqp_in_all=False,
+    center_eqp_filter="any",
+    preserve_center_fail_rows=False,
 ):
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
@@ -2950,7 +2952,7 @@ def fcc_chart_payload(
         if not fail_paths:
             raise FileNotFoundError(f"FCC fail parquet 파일을 찾지 못했습니다: {resolved_paths.get('dataDir', '')}")
         fail_raw_df = read_parquets(fail_paths)
-        fail_df = split_fcc_drawing_df(fail_raw_df)
+        fail_df = normalize_fcc_chart_frame(fail_raw_df) if preserve_center_fail_rows else split_fcc_drawing_df(fail_raw_df)
     else:
         fail_raw_df = all_raw_df.head(0)
         fail_df = all_df.head(0)
@@ -2968,7 +2970,7 @@ def fcc_chart_payload(
     std_df = sort_frame(std_df, "tkout_time")
     all_background = exclude_frame_eqp(all_df, eqp_id)
     all_points_df = all_df if include_current_eqp_in_all else all_background
-    fail_for_eqp = filter_frame_eqp(fail_df, eqp_id)
+    fail_for_eqp = filter_frame_eqp_ch(fail_df, eqp_id) if center_eqp_filter == "eqp_ch" else filter_frame_eqp(fail_df, eqp_id)
     std_for_eqp = filter_frame_eqp(std_df, eqp_id)
     ppid_right_from_ppid = use_ppid_as_ppid_right(all_df)
     all_ppid_lookup = ppid_lookup_from_all(all_df, ppid_right_from_ppid)
@@ -2995,6 +2997,10 @@ def fcc_chart_payload(
                 "fail": len(fail_paths) if include_center else 0,
                 "std": len(std_paths) if include_std else 0,
             },
+            "filters": {
+                "centerEqp": center_eqp_filter,
+                "centerRows": "raw_fail_scatter" if preserve_center_fail_rows else "p3d_filtered",
+            },
             "inputRows": {
                 "all": frame_height(all_df),
                 "allBackground": frame_height(all_background),
@@ -3016,6 +3022,11 @@ def fcc_chart_payload(
             "fail": fail_path if include_center else None,
             "std": std_path if include_std else None,
             "pm": CONFIG["pmCodePath"] if include_pm else None,
+        },
+        "pathLabels": {
+            "all": "FCC 추가 all 배경 scatter" if resolved_paths.get("requested", {}).get("chartRoot") == "root" else "FCC all 배경 scatter",
+            "fail": "FCC 추가 fail 중심치 이상 scatter" if resolved_paths.get("requested", {}).get("chartRoot") == "root" else "FCC fail 중심치 이상 scatter",
+            "std": "FCC 추가 fail_std 산포 이상 scatter" if resolved_paths.get("requested", {}).get("chartRoot") == "root" else "FCC fail_std 산포 이상 scatter",
         },
         "pathLists": {
             "all": all_paths,
@@ -3282,7 +3293,9 @@ def fcc_extra_center_charts(eqp_id):
                 include_center=True,
                 include_std=False,
                 include_pm=True,
-                include_current_eqp_in_all=True,
+                include_current_eqp_in_all=False,
+                center_eqp_filter="eqp_ch",
+                preserve_center_fail_rows=True,
             )
             payload["row"] = spec
             charts.append(payload)

@@ -1667,6 +1667,10 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.chartFailurePaths--inline {
+  margin-top: 10px;
+}
+
 .chartTitle {
   display: flex;
   align-items: flex-start;
