@@ -19,7 +19,7 @@ CONFIG = {
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_INFO_PATH = os.path.join(ROOT_DIR, "db_info.pkl")
-LOADER_VERSION = "file-loader-v48"
+LOADER_VERSION = "file-loader-v49"
 IS_MAIN_LINE = True
 FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}"
 FCC_FOLDER_PATH = f"{CONFIG['eadsRoot']}/{CONFIG['selectLine']}/{CONFIG['device']}_fcc"
@@ -565,6 +565,31 @@ def read_parquet(path):
             return pd.read_parquet(path)
         except ImportError as exc:
             raise RuntimeError("parquet 파일을 읽으려면 Python 패키지 polars 또는 pandas+pyarrow가 필요합니다.") from exc
+
+
+def read_parquets(paths):
+    if isinstance(paths, str):
+        return read_parquet(paths)
+
+    clean_paths = [path for path in paths if path]
+    if not clean_paths:
+        raise FileNotFoundError("parquet 파일 경로가 없습니다.")
+    if len(clean_paths) == 1:
+        return read_parquet(clean_paths[0])
+
+    frames = [read_parquet(path) for path in clean_paths]
+    if all(is_polars_frame(frame) for frame in frames):
+        pl = load_polars()
+        try:
+            return pl.concat(frames, how="diagonal_relaxed")
+        except (TypeError, ValueError):
+            return pl.concat(frames, how="diagonal")
+
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise RuntimeError("여러 parquet 파일을 병합하려면 Python 패키지 polars 또는 pandas가 필요합니다.") from exc
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 def read_met_rows(path, device=CONFIG["device"]):
@@ -1854,6 +1879,50 @@ def resolve_parquet_file(data_dir, prefix, main_candidates):
     )
 
 
+def matching_parquet_names(data_dir, prefix, candidate):
+    base_name = f"{prefix}_{candidate}"
+    exact_name = f"{base_name}.parquet"
+    shard_prefix = f"{base_name}_"
+    return sorted(
+        name
+        for name in os.listdir(data_dir)
+        if (name == exact_name or (name.startswith(shard_prefix) and name.endswith(".parquet")))
+        and os.path.isfile(os.path.join(data_dir, name))
+    )
+
+
+def resolve_parquet_files(data_dir, prefix, main_candidates):
+    exact_names = [f"{prefix}_{candidate}.parquet" for candidate in main_candidates]
+    if not os.path.isdir(data_dir):
+        raise FileNotFoundError(f"날짜 데이터 디렉터리가 없습니다: {data_dir}")
+
+    for candidate in main_candidates:
+        exact_name = f"{prefix}_{candidate}.parquet"
+        if os.path.isfile(os.path.join(data_dir, exact_name)):
+            matches = matching_parquet_names(data_dir, prefix, candidate)
+            return [os.path.join(data_dir, name) for name in matches], exact_names
+
+    for candidate in main_candidates:
+        matches = matching_parquet_names(data_dir, prefix, candidate)
+        if matches:
+            return [os.path.join(data_dir, name) for name in matches], exact_names
+
+    parquet_files = sorted(
+        name
+        for name in os.listdir(data_dir)
+        if name.startswith(f"{prefix}_")
+        and name.endswith(".parquet")
+        and os.path.isfile(os.path.join(data_dir, name))
+    )
+    if parquet_files:
+        return [os.path.join(data_dir, name) for name in parquet_files], exact_names
+
+    raise FileNotFoundError(
+        f"{prefix} parquet 파일을 찾지 못했습니다: {data_dir}. "
+        f"시도: {', '.join(exact_names[:5])}. 사용 가능 파일 예: {', '.join(sorted(os.listdir(data_dir))[:8])}"
+    )
+
+
 def resolve_chart_paths(main_step, chart_met_step):
     main_candidates = unique_nonempty([main_step, normalize_step(main_step)])
     main_dir, main_dir_name, main_attempts = resolve_child_dir(FOLDER_PATH, main_candidates, "main_step")
@@ -2147,24 +2216,30 @@ def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step", requir
     latest_date = latest_child_dir(met_dir)
     data_dir = os.path.join(met_dir, latest_date)
     file_candidates = unique_nonempty([f"U%{main_step_code}", main_dir_name, main_step])
-    all_path, all_attempts = resolve_parquet_file(data_dir, "all", file_candidates)
+    all_paths, all_attempts = resolve_parquet_files(data_dir, "all", file_candidates)
+    all_path = all_paths[0] if all_paths else None
     try:
-        fail_path, fail_attempts = resolve_parquet_file(data_dir, "fail", file_candidates)
+        fail_paths, fail_attempts = resolve_parquet_files(data_dir, "fail", file_candidates)
+        fail_path = fail_paths[0] if fail_paths else None
     except FileNotFoundError:
         if require_fail:
             raise
         fail_path = None
+        fail_paths = []
         fail_attempts = [f"fail_{candidate}.parquet" for candidate in file_candidates]
     if resolve_std:
         try:
-            std_path, std_attempts = resolve_parquet_file(data_dir, "fail_std", file_candidates)
+            std_paths, std_attempts = resolve_parquet_files(data_dir, "fail_std", file_candidates)
+            std_path = std_paths[0] if std_paths else None
         except FileNotFoundError:
             if require_std:
                 raise
             std_path = None
+            std_paths = []
             std_attempts = [f"fail_std_{candidate}.parquet" for candidate in file_candidates]
     else:
         std_path = None
+        std_paths = []
         std_attempts = []
 
     return {
@@ -2175,6 +2250,9 @@ def resolve_fcc_chart_paths(main_step, chart_met_step, chart_root="step", requir
         "allPath": all_path,
         "failPath": fail_path,
         "stdPath": std_path,
+        "allPaths": all_paths,
+        "failPaths": fail_paths,
+        "stdPaths": std_paths,
         "requested": {
             "mainStep": main_step,
             "chartMetStep": chart_met_step,
@@ -2862,19 +2940,22 @@ def fcc_chart_payload(
     all_path = resolved_paths["allPath"]
     fail_path = resolved_paths["failPath"]
     std_path = resolved_paths["stdPath"]
+    all_paths = resolved_paths.get("allPaths") or ([all_path] if all_path else [])
+    fail_paths = resolved_paths.get("failPaths") or ([fail_path] if fail_path else [])
+    std_paths = resolved_paths.get("stdPaths") or ([std_path] if std_path else [])
 
-    all_raw_df = read_parquet(all_path)
+    all_raw_df = read_parquets(all_paths)
     all_df = split_fcc_drawing_df(all_raw_df)
     if include_center:
-        if not fail_path:
+        if not fail_paths:
             raise FileNotFoundError(f"FCC fail parquet 파일을 찾지 못했습니다: {resolved_paths.get('dataDir', '')}")
-        fail_raw_df = read_parquet(fail_path)
+        fail_raw_df = read_parquets(fail_paths)
         fail_df = split_fcc_drawing_df(fail_raw_df)
     else:
         fail_raw_df = all_raw_df.head(0)
         fail_df = all_df.head(0)
-    if include_std and std_path:
-        std_raw_df = read_parquet(std_path)
+    if include_std and std_paths:
+        std_raw_df = read_parquets(std_paths)
         std_df = split_fcc_drawing_df(std_raw_df)
     elif include_std and require_std:
         raise FileNotFoundError(f"FCC fail_std parquet 파일을 찾지 못했습니다: {resolved_paths.get('dataDir', '')}")
@@ -2909,6 +2990,11 @@ def fcc_chart_payload(
         "diagnostics": {
             "version": LOADER_VERSION,
             "resolvedPaths": resolved_paths,
+            "inputFiles": {
+                "all": len(all_paths),
+                "fail": len(fail_paths) if include_center else 0,
+                "std": len(std_paths) if include_std else 0,
+            },
             "inputRows": {
                 "all": frame_height(all_df),
                 "allBackground": frame_height(all_background),
@@ -2930,6 +3016,11 @@ def fcc_chart_payload(
             "fail": fail_path if include_center else None,
             "std": std_path if include_std else None,
             "pm": CONFIG["pmCodePath"] if include_pm else None,
+        },
+        "pathLists": {
+            "all": all_paths,
+            "fail": fail_paths if include_center else [],
+            "std": std_paths if include_std else [],
         },
         "latestDate": resolved_paths["latestDate"],
         "itemDesc": item_desc_for_item_id(all_df, resolved_paths.get("resolved", {}).get("itemId", "")),

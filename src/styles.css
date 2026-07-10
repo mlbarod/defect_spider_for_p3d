@@ -614,7 +614,7 @@ code {
 .manualFigure img {
   display: block;
   justify-self: center;
-  width: min(100%, 1040px);
+  width: min(100%, 1144px);
   max-width: 100%;
   height: auto;
   border: 1px solid var(--border);
@@ -624,7 +624,7 @@ code {
 }
 
 .manualFigure.wide img {
-  width: min(100%, 1120px);
+  width: min(100%, 1232px);
 }
 
 .manualFigure figcaption {
