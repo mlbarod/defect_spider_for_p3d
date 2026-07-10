@@ -614,7 +614,7 @@ code {
 .manualFigure img {
   display: block;
   justify-self: center;
-  width: min(100%, 1144px);
+  width: min(100%, 1258px);
   max-width: 100%;
   height: auto;
   border: 1px solid var(--border);
@@ -624,7 +624,7 @@ code {
 }
 
 .manualFigure.wide img {
-  width: min(100%, 1232px);
+  width: min(100%, 1355px);
 }
 
 .manualFigure figcaption {
@@ -1665,10 +1665,6 @@ tr:last-child td {
   font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-
-.chartFailurePaths--inline {
-  margin-top: 10px;
 }
 
 .chartTitle {

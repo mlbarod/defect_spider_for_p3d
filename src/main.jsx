@@ -1875,7 +1875,7 @@ function FccRelatedChartGroup({ row, eqpId, sections }) {
   );
 }
 
-function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null, titleAction = null, showPathDetails = false }) {
+function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', points = [], centerPoints = null, stdPoints = null, highlightRange = null, titleAction = null }) {
   const [isTableOpen, setIsTableOpen] = useState(false);
   const [isPmTableOpen, setIsPmTableOpen] = useState(false);
   const resolvedCenterPoints = centerPoints ?? (anomalyType === 'center' ? points : []);
@@ -1922,7 +1922,6 @@ function AnomalyChartCard({ row, eqpId, chartData, anomalyType = 'center', point
         anomalyType={chartAnomalyType}
         highlightRange={highlightRange}
       />
-      {showPathDetails && <ChartPathDetails data={chartData} variant="inline" />}
       <button className="ngTableToggle" type="button" onClick={() => setIsTableOpen((current) => !current)} aria-expanded={isTableOpen} aria-controls={tableId}>
         <span className={`chevron ${isTableOpen ? 'open' : ''}`} aria-hidden="true">
           ▸
@@ -2168,7 +2167,6 @@ function EquipmentChart({ row, eqpId, onLatestDate, chartEndpoint = '/api/chart'
             anomalyType="center"
             points={chart.failPoints}
             highlightRange={extraCenterHighlightRange}
-            showPathDetails
           />
         ) : (
           <ChartFailureCard
@@ -2452,7 +2450,7 @@ const MANUAL_APPS = [
     title: 'P3D MAIN 설비별 이상감지',
     badge: 'Main',
     image: {
-      src: '/manual/app-main.svg?v=20260710-compact',
+      src: '/manual/app-main.svg?v=20260710-readable',
       alt: 'P3D MAIN 화면에서 좌측 대상스탭과 우측 eqp별 chart를 확인하는 위치',
       caption: '좌측 대상스탭에서 MET 스탭을 선택하면 우측에 eqp별 chart, Wafer List, PM 이력이 표시됩니다.',
     },
@@ -2472,7 +2470,7 @@ const MANUAL_APPS = [
     title: 'P3D FCC지수 이상감지',
     badge: 'FCC',
     image: {
-      src: '/manual/app-fcc.svg?v=20260710-compact',
+      src: '/manual/app-fcc.svg?v=20260710-readable',
       alt: 'P3D FCC 화면에서 FCC 중심치 chart와 연관 Step chart가 같은 설비 stack에 표시되는 구조',
       caption: 'FCC 화면은 FCC 중심치 이상을 기준으로 연관 Step, FCC 이상시점, 관리 STEP chart를 같은 설비 단위로 이어서 확인합니다.',
     },
@@ -2492,7 +2490,7 @@ const MANUAL_APPS = [
     title: '전라인 챔버별 이상감지',
     badge: 'Chamber',
     image: {
-      src: '/manual/app-chamber.svg?v=20260710-compact',
+      src: '/manual/app-chamber.svg?v=20260710-readable',
       alt: '전라인 챔버별 이상감지 화면에서 라인, 제품, 대상스탭, 챔버별 chart를 선택하는 순서',
       caption: '라인과 제품을 먼저 선택한 뒤 대상스탭과 MET 스탭을 고르면 챔버별 chart가 표시됩니다.',
     },
@@ -2512,7 +2510,7 @@ const MANUAL_APPS = [
     title: 'L0, L1 이상감지 App',
     badge: 'External',
     image: {
-      src: '/manual/app-external.svg?v=20260710-compact',
+      src: '/manual/app-external.svg?v=20260710-readable',
       alt: 'Defect SPIDER 홈에서 L0 또는 L1 SPIDER를 새 탭으로 열어 Trend와 교차 확인하는 흐름',
       caption: '외부 SPIDER 화면과 Defect SPIDER chart는 lot, wafer, 시간, 설비 기준으로 맞춰 봅니다.',
     },
@@ -2639,7 +2637,7 @@ function ManualView({ onBack }) {
             <p>대부분의 화면은 App 선택, 조건 선택, chart 확인, 원인 추적 순서로 사용합니다.</p>
           </div>
           <ManualFigure
-            src="/manual/manual-overview.svg?v=20260710-compact"
+            src="/manual/manual-overview.svg?v=20260710-readable"
             alt="Defect SPIDER 전체 사용 흐름을 App 선택, 조건 선택, chart 확인, 원인 추적으로 설명한 이미지"
             caption="처음 사용할 때는 App 선택 → 조건 선택 → chart 확인 → 원인 추적 순서로 진행합니다."
             variant="wide"
@@ -2696,13 +2694,13 @@ function ManualView({ onBack }) {
             <p>chart 화면에서 반복적으로 보는 영역과 하단 버튼의 의미입니다.</p>
           </div>
           <ManualFigure
-            src="/manual/chart-anatomy.svg?v=20260710-compact"
+            src="/manual/chart-anatomy.svg?v=20260710-readable"
             alt="차트 제목, 이상 유형 태그, scatter 영역, legend, Wafer List와 PM 이력 버튼의 위치"
             caption="빨간 point는 NG 판단 row이고, 배경 scatter는 비교군 분포입니다. 우측 Legend와 하단 표 버튼을 함께 사용합니다."
             variant="wide"
           />
           <ManualFigure
-            src="/manual/chart-actions.svg?v=20260710-compact"
+            src="/manual/chart-actions.svg?v=20260710-readable"
             alt="이상감지 Wafer List, Defect MAP보기, PM 이력 보기, 관리STEP CHART 보기 버튼 설명"
             caption="Wafer List에서 이상 wafer를 확인하고 Defect MAP, PM 이력, 관리 STEP chart로 원인을 좁혀갑니다."
             variant="wide"
@@ -2716,7 +2714,7 @@ function ManualView({ onBack }) {
             <p>chart는 마우스 hover, 드래그 방향, 더블클릭, Legend 클릭으로 탐색합니다.</p>
           </div>
           <ManualFigure
-            src="/manual/chart-interactions.svg?v=20260710-compact"
+            src="/manual/chart-interactions.svg?v=20260710-readable"
             alt="점 hover tooltip, 우하향 드래그 확대, 좌상향 드래그 축소, 더블클릭 초기화, Legend 클릭 표시 전환 방법"
             caption="마우스 휠 확대/축소와 pan 이동은 사용하지 않습니다. 필요한 구간은 드래그 방향으로 확대 또는 축소합니다."
             variant="wide"
@@ -2730,7 +2728,7 @@ function ManualView({ onBack }) {
             <p>데이터가 비어 있거나 chart가 예상과 다를 때 우선 확인할 항목입니다.</p>
           </div>
           <ManualFigure
-            src="/manual/file-check.svg?v=20260710-compact"
+            src="/manual/file-check.svg?v=20260710-readable"
             alt="File Loader 배너와 read failed 카드에서 원본 파일 상태와 chart 경로를 확인하는 위치"
             caption="좌측 목록이 비어 있으면 File Loader와 Data Source 상태를 먼저 보고, chart read failed는 실패 카드의 경로 후보를 실제 파일명과 비교합니다."
             variant="wide"

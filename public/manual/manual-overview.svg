@@ -10,12 +10,12 @@
     </marker>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .title{fill:#2f204d;font-size:30px;font-weight:800}
-      .subtitle{fill:#6f6382;font-size:14px;font-weight:650}
+      .title{fill:#2f204d;font-size:33.0px;font-weight:800}
+      .subtitle{fill:#6f6382;font-size:15.4px;font-weight:650}
       .stepBox{fill:#ffffff;stroke:#ded7ef;stroke-width:1.5}
-      .cardTitle{fill:#2f204d;font-size:19px;font-weight:800}
-      .cardText{fill:#6f6382;font-size:14px;font-weight:650}
-      .small{fill:#6f6382;font-size:13px;font-weight:650}
+      .cardTitle{fill:#2f204d;font-size:20.9px;font-weight:800}
+      .cardText{fill:#6f6382;font-size:15.4px;font-weight:650}
+      .small{fill:#6f6382;font-size:14.3px;font-weight:650}
     </style>
   </defs>
   <rect width="1600" height="760" rx="34" fill="#fbfaff"/>
@@ -72,6 +72,6 @@
   <path d="M1150 350h20" stroke="#6a52d9" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
 
   <rect x="160" y="580" width="1280" height="92" rx="20" fill="#ffffff" stroke="#ded7ef"/>
-  <text x="200" y="620" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">핵심 원칙</text>
+  <text x="200" y="620" fill="#2f204d" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14.3" font-weight="800">핵심 원칙</text>
   <text class="small" x="200" y="652">빨간 point를 기준으로 lot / wafer / 시간 / 설비를 맞추고, Wafer List와 PM 이력으로 원인을 좁혀갑니다.</text>
 </svg>

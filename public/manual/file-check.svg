@@ -4,11 +4,11 @@
   <defs>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .h1{fill:#2f204d;font-size:28px;font-weight:800}
-      .h2{fill:#2f204d;font-size:18px;font-weight:800}
-      .label{fill:#6f6382;font-size:13px;font-weight:800}
-      .body{fill:#6f6382;font-size:14px;font-weight:650}
-      .warn{fill:#c82727;font-size:14px;font-weight:800}
+      .h1{fill:#2f204d;font-size:30.8px;font-weight:800}
+      .h2{fill:#2f204d;font-size:19.8px;font-weight:800}
+      .label{fill:#6f6382;font-size:14.3px;font-weight:800}
+      .body{fill:#6f6382;font-size:15.4px;font-weight:650}
+      .warn{fill:#c82727;font-size:15.4px;font-weight:800}
     </style>
   </defs>
   <rect width="1600" height="740" rx="34" fill="#fbfaff"/>
@@ -26,7 +26,7 @@
   <text class="body" x="150" y="448">입력 행이 0인지, 필수 컬럼이 누락됐는지,</text>
   <text class="body" x="150" y="478">원본 파일이 readable인지 확인합니다.</text>
   <rect x="150" y="510" width="430" height="38" rx="10" fill="#faf9ff" stroke="#ded7ef"/>
-  <text x="174" y="535" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="700">Data Source: missing / not readable</text>
+  <text x="174" y="535" fill="#6f6382" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14.3" font-weight="700">Data Source: missing / not readable</text>
 
   <rect x="840" y="350" width="660" height="220" rx="22" fill="#ffffff" stroke="#ded7ef"/>
   <text class="h2" x="890" y="404">chart가 read failed</text>

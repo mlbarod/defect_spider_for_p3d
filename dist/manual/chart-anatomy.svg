@@ -7,11 +7,11 @@
     </marker>
     <style>
       text{font-family:Pretendard,Inter,Arial,sans-serif}
-      .h1{fill:#2f204d;font-size:28px;font-weight:800}
-      .h2{fill:#2f204d;font-size:18px;font-weight:800}
-      .label{fill:#6f6382;font-size:13px;font-weight:800}
-      .body{fill:#6f6382;font-size:14px;font-weight:650}
-      .call{fill:#6045cf;font-size:13px;font-weight:800}
+      .h1{fill:#2f204d;font-size:30.8px;font-weight:800}
+      .h2{fill:#2f204d;font-size:19.8px;font-weight:800}
+      .label{fill:#6f6382;font-size:14.3px;font-weight:800}
+      .body{fill:#6f6382;font-size:15.4px;font-weight:650}
+      .call{fill:#6045cf;font-size:14.3px;font-weight:800}
     </style>
   </defs>
   <rect width="1600" height="820" rx="34" fill="#fbfaff"/>
@@ -20,9 +20,9 @@
   <rect x="110" y="98" width="1380" height="78" rx="16" fill="#faf9ff" stroke="#ded7ef"/>
   <text class="h1" x="150" y="146">EQP-01 / step_desc / 중심치 이상</text>
   <rect x="1180" y="122" width="128" height="34" rx="17" fill="#feecec"/>
-  <text x="1244" y="144" text-anchor="middle" fill="#c82727" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">중심치 이상</text>
+  <text x="1244" y="144" text-anchor="middle" fill="#c82727" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14.3" font-weight="800">중심치 이상</text>
   <rect x="1324" y="122" width="116" height="34" rx="17" fill="#eceffd"/>
-  <text x="1382" y="144" text-anchor="middle" fill="#263a72" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">산포이상</text>
+  <text x="1382" y="144" text-anchor="middle" fill="#263a72" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14.3" font-weight="800">산포이상</text>
 
   <rect x="110" y="216" width="1040" height="330" rx="16" fill="#faf9ff" stroke="#ded7ef"/>
   <line x1="190" y1="484" x2="1086" y2="484" stroke="#b9b0c9" stroke-width="2"/>
@@ -37,7 +37,7 @@
   <circle cx="900" cy="332" r="10" fill="#db2f2f" stroke="#ffffff" stroke-width="3"/>
   <circle cx="1024" cy="408" r="10" fill="#263a72" stroke="#ffffff" stroke-width="3"/>
   <line x1="822" y1="274" x2="822" y2="484" stroke="#1f9a82" stroke-width="3" stroke-dasharray="7 7"/>
-  <text x="834" y="300" fill="#147b68" font-family="Pretendard,Inter,Arial,sans-serif" font-size="13" font-weight="800">PM</text>
+  <text x="834" y="300" fill="#147b68" font-family="Pretendard,Inter,Arial,sans-serif" font-size="14.3" font-weight="800">PM</text>
 
   <rect x="1190" y="216" width="260" height="330" rx="16" fill="#ffffff" stroke="#ded7ef"/>
   <text class="label" x="1230" y="258">STEP</text>
